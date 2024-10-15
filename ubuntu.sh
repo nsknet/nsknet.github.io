@@ -534,6 +534,51 @@ END
 
 }
 
+function install_nginx_domain_point_internal_port(){
+    echo "========================================================================="
+    echo "Install new nginx domain pointing to internal port"
+    
+    printf "\nEnter your external domain name [ENTER]: " 
+    read server_name
+    
+    printf "\nEnter internal address and port (e.g., http://localhost:5555 or http://192.168.1.2:6666): " 
+    read internal_address
+    
+    # Create nginx configuration directory if it doesn't exist
+    mkdir -p /var/www/nginx/conf.d
+    
+    # Create the nginx configuration file
+    cat > "/var/www/nginx/conf.d/$server_name.conf" <<END
+server {
+    listen 80;
+    server_name $server_name;
+    
+    location / {
+        proxy_pass $internal_address;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+    
+    access_log /var/log/nginx/$server_name.access.log;
+    error_log /var/log/nginx/$server_name.error.log;
+}
+END
+
+    # Reload nginx to apply the new configuration
+    systemctl reload nginx
+
+    echo "========================================================="
+    echo "Nginx proxy configuration complete"
+    echo "External domain: $server_name"
+    echo "Internal address: $internal_address"
+    echo "Configuration file: /var/www/nginx/conf.d/$server_name.conf"
+    echo "Access log: /var/log/nginx/$server_name.access.log"
+    echo "Error log: /var/log/nginx/$server_name.error.log"
+    echo "========================================================="
+}
+
 
 function install_nginx_php_domain(){
 	echo "========================================================================="
@@ -760,110 +805,73 @@ function common_configs(){
 	echo "========================================================================="
 }
 
-function show_menu(){
-	echo "Select function to execute or press CRTL+C to exit:"
-	echo "    0) Setup: Common config for all VPS (time zone, firewall, ultils)"
-	echo "    1) Setup: Virtual RAM 4GB"
-	echo "    2) Install: NetCore 6.0 & 7.0"
-	echo "    3) Install: NGINX"
-	echo "    4) Install: PostgreSql 12"
-	echo "    5) Install: MongoDB"
-	echo "    6) Install: Elasticsearch & Kibana"
+# Define an associative array for menu options
+declare -A menu_options
+menu_options=(
+    [0]="Setup: Common config for all VPS (time zone, firewall, utils)"
+    [1]="Setup: Virtual RAM 4GB"
+    [2]="Install: NetCore 6.0 & 7.0"
+    [3]="Install: NGINX"
+    [4]="Install: PostgreSql 12"
+    [5]="Install: MongoDB"
+    [6]="Install: Elasticsearch & Kibana"
+    [7]="Add: Domain with NGINX and NetCore"
+    [8]="Add: Nginx proxy for internal port"
+    [9]="Deploy: Wordpress & phpMyAdmin"
+)
 
-	# echo "    5) Install: MariaDb"
-	# echo "    6) Install: PHP 7.4"
-	# echo "    7) Add: Domain with NGINX and PHP"
-	echo "    8) Add: Domain with NGINX and NetCore"
-	# echo "    9) Deploy: Wordpress & phpMyAdmin"
-	#echo "    9) Install: Open VPN"
-	# echo "    10) Install: Cerbot Let's Encrypt to NGINX"
-	# echo "    11) Add: Cerbot config to domain via direct DNS"
-	# echo "    12) Add: Cerbot config to domain via Cloudflare"
-	# echo "    10) Install: FTP"
-	# echo "    11) Add: FTP Account"
-
-
-	read -p "Enter your choices (eg: 1, 2, 3): " str
-	arr=($(echo "$str" | tr ',' '\n'))
-	for i in "${!arr[@]}"
-	do
-		
-		echo "#$i, you select '${arr[i]}'"
-		select=${arr[i]}
-		case $select in
-			0) 
-				common_configs
-				#install_fail2ban
-				;;		  
-			1) 
-				install_virtual_ram_4g
-				;;		  
-			2) 
-				install_netcore
-				;;	  
-			3) 
-				install_nginx
-				;;	  
-			4) 
-				install_postgres_remote
-				;;
-			5) 
-				install_mongodb
-				;;
-			6) 
-				install_elastic_kibana
-				;;
-			#   5) 
-			# 	  install_mariadb
-			# 	  ;;
-			#   6) 
-			# 	  install_php
-			# 	  ;;		  
-			#   7) 
-			# 	  install_nginx_php_domain
-			# 	  ;;	  
-			8) 
-				install_nginx_netcore_domain
-				;;  
-				
-			# 9) 
-				# install_open_vpn
-				# ;;	  
-			9) 
-				install_wordpress_phpmyadmin
-				;;
-			
-			#   10) 
-			# 	  install_nginx_certbot
-			# 	  ;;	  
-			#   11) 
-			# 	  install_nginx_certbot_add_domain_direct_dns
-			# 	  ;;	  
-			12) 
-				install_nginx_certbot_add_domain_cloudflare
-				;;	  			
-			*) echo "Invalid option";;
-		esac
-		echo "=================================================================="
-	done
-	
+# Function to display menu
+function display_menu() {
+    echo "Select function to execute or press CTRL+C to exit:"
+    for i in "${!menu_options[@]}"; do
+        printf "%3d) %s\n" $i "${menu_options[$i]}"
+    done
 }
 
+# Function to execute selected option
+function execute_option() {
+    case $1 in
+        0) common_configs ;;
+        1) install_virtual_ram_4g ;;
+        2) install_netcore ;;
+        3) install_nginx ;;
+        4) install_postgres_remote ;;
+        5) install_mongodb ;;
+        6) install_elastic_kibana ;;
+        7) install_nginx_netcore_domain ;;
+        8) install_nginx_domain_point_internal_port ;;
+        9) install_wordpress_phpmyadmin ;;
+        *) echo "Invalid option" ;;
+    esac
+}
 
-while :
-do
-	# clear
-	echo ""
-	echo "========================================================================="
-	show_menu
-	echo ""
-	read -rsn1 -p"Press any key to continue  ";echo
-	echo ""
-	echo ""
-	echo ""
-	echo ""
-done
+# Main menu loop
+function main_menu() {
+    while true; do
+        echo "========================================================================="
+        display_menu
+        echo "========================================================================="
+        read -p "Enter your choices (comma-separated, e.g., 1,2,3): " choices
+        
+        IFS=',' read -ra selected_options <<< "$choices"
+        for option in "${selected_options[@]}"; do
+            option=$(echo $option | tr -d ' ')  # Remove any whitespace
+            if [[ -v menu_options[$option] ]]; then
+                echo "Executing: ${menu_options[$option]}"
+                execute_option $option
+                echo "========================================================================="
+            else
+                echo "Invalid option: $option"
+            fi
+        done
+        
+        read -p "Press Enter to continue or type 'q' to quit: " quit
+        [[ $quit == "q" ]] && break
+    done
+}
 
+# Call the main menu function
+main_menu
 
 
 #FAQ:
