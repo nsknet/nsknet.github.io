@@ -819,10 +819,10 @@ menu_options=(
     "Deploy: Wordpress & phpMyAdmin"
 )
 
-# Function to display menu in reverse order
+# Function to display menu
 function display_menu() {
     echo "Select function to execute or press CTRL+C to exit:"
-    for ((i=${#menu_options[@]}-1; i>=0; i--)); do
+    for i in "${!menu_options[@]}"; do
         printf "%3d) %s\n" $i "${menu_options[$i]}"
     done
 }
