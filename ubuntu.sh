@@ -805,30 +805,29 @@ function common_configs(){
 	echo "========================================================================="
 }
 
-# Define an associative array for menu options
-declare -A menu_options
+# Define an array for menu options
 menu_options=(
-    [0]="Setup: Common config for all VPS (time zone, firewall, utils)"
-    [1]="Setup: Virtual RAM 4GB"
-    [2]="Install: NetCore 6.0 & 7.0"
-    [3]="Install: NGINX"
-    [4]="Install: PostgreSql 12"
-    [5]="Install: MongoDB"
-    [6]="Install: Elasticsearch & Kibana"
-    [7]="Add: Domain with NGINX and NetCore"
-    [8]="Add: Nginx proxy for internal port"
-    [9]="Deploy: Wordpress & phpMyAdmin"
+    "Setup: Common config for all VPS (time zone, firewall, utils)"
+    "Setup: Virtual RAM 4GB"
+    "Install: NetCore 6.0 & 7.0"
+    "Install: NGINX"
+    "Install: PostgreSql 12"
+    "Install: MongoDB"
+    "Install: Elasticsearch & Kibana"
+    "Add: Domain with NGINX and NetCore"
+    "Add: Nginx proxy for internal port"
+    "Deploy: Wordpress & phpMyAdmin"
 )
 
-# Function to display menu
+# Function to display menu in reverse order
 function display_menu() {
     echo "Select function to execute or press CTRL+C to exit:"
-    for i in "${!menu_options[@]}"; do
+    for ((i=${#menu_options[@]}-1; i>=0; i--)); do
         printf "%3d) %s\n" $i "${menu_options[$i]}"
     done
 }
 
-# Function to execute selected option
+# Function to execute selected option (remains unchanged)
 function execute_option() {
     case $1 in
         0) common_configs ;;
@@ -845,18 +844,18 @@ function execute_option() {
     esac
 }
 
-# Main menu loop
+# Main menu loop (remains unchanged)
 function main_menu() {
     while true; do
         echo "========================================================================="
         display_menu
         echo "========================================================================="
-        read -p "Enter your choices (comma-separated, e.g., 1,2,3): " choices
+        read -p "Enter your choices (comma-separated, e.g., 9,8,7): " choices
         
         IFS=',' read -ra selected_options <<< "$choices"
         for option in "${selected_options[@]}"; do
             option=$(echo $option | tr -d ' ')  # Remove any whitespace
-            if [[ -v menu_options[$option] ]]; then
+            if [[ $option =~ ^[0-9]+$ ]] && [ $option -ge 0 ] && [ $option -lt ${#menu_options[@]} ]; then
                 echo "Executing: ${menu_options[$option]}"
                 execute_option $option
                 echo "========================================================================="
