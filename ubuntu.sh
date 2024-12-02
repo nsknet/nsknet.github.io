@@ -534,6 +534,143 @@ END
 
 }
 
+function install_nginx_static_domain(){
+    echo "========================================================================="
+    echo "Install new nginx domain for static HTML site"
+    printf "\nEnter your main domain [ENTER]: " 
+    read server_name
+    server_name_alias="www.$server_name"
+    if [[ $server_name == *www* ]]; then
+        server_name_alias=${server_name/www./''}
+    fi
+
+    # Create directory structure
+    mkdir -p /var/www/nginx/sites/$server_name/public
+    mkdir -p /var/www/nginx/sites/$server_name/logs
+    mkdir -p /var/www/nginx/sites/$server_name/data
+    
+    chmod 777 /var/www/nginx/sites/$server_name
+    chown -R www-data:www-data /var/www/nginx/sites/$server_name
+
+    # Create nginx configuration
+    cat > "/var/www/nginx/conf.d/$server_name.conf" <<END
+server {
+        client_max_body_size 200M;
+        listen       80;
+        server_name $server_name;
+        root /var/www/nginx/sites/$server_name/public;
+        
+        error_log /var/www/nginx/log/$server_name-error.log warn;
+        access_log /var/www/nginx/log/$server_name-access.log main;
+
+        # Index files
+        index index.html;
+
+        # Handle both /page and /page.html
+        location / {
+            try_files \$uri \$uri.html \$uri/ \$uri/index.html =404;
+        }
+
+        # Custom error pages
+        error_page 404 /404.html;
+        location = /404.html {
+            internal;
+        }
+
+        error_page 500 502 503 504 /50x.html;
+        location = /50x.html {
+            internal;
+        }
+
+        # Deny access to hidden files
+        location ~ /\. {
+            deny all;
+        }
+
+        # Enable gzip compression
+        gzip on;
+        gzip_vary on;
+        gzip_min_length 10240;
+        gzip_proxied expired no-cache no-store private auth;
+        gzip_types text/plain text/css text/xml text/javascript application/javascript application/x-javascript application/xml;
+        gzip_disable "MSIE [1-6]\.";
+}
+
+# Redirect www to non-www
+server {
+    server_name www.$server_name;
+    return 301 \$scheme://$server_name\$request_uri;
+}
+END
+
+    # Create sample index.html
+    cat > "/var/www/nginx/sites/$server_name/public/index.html" <<END
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Welcome to $server_name</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 40px auto;
+            max-width: 650px;
+            padding: 0 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Welcome to $server_name</h1>
+    <p>This is a sample static page. Replace this content with your own HTML files.</p>
+    <p>You can create:</p>
+    <ul>
+        <li>Direct HTML files (example.html)</li>
+        <li>Folders with index.html files (example/index.html)</li>
+    </ul>
+</body>
+</html>
+END
+
+    # Create sample 404 page
+    cat > "/var/www/nginx/sites/$server_name/public/404.html" <<END
+<!DOCTYPE html>
+<html>
+<head>
+    <title>404 - Page Not Found</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 40px auto;
+            max-width: 650px;
+            padding: 0 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>404 - Page Not Found</h1>
+    <p>The page you are looking for does not exist.</p>
+</body>
+</html>
+END
+
+    # Restart nginx
+    systemctl restart nginx
+
+    echo "========================================================="
+    echo "Static HTML site has been configured:"
+    echo "- Domain: $server_name"
+    echo "- Root directory: /var/www/nginx/sites/$server_name/public"
+    echo "- Nginx config: /var/www/nginx/conf.d/$server_name.conf"
+    echo ""
+    echo "You can now:"
+    echo "1. Upload .html files directly (they'll be accessible as domain.com/page.html)"
+    echo "2. Create folders with index.html files (they'll be accessible as domain.com/page/)"
+    echo "3. Both domain.com/page and domain.com/page.html will work"
+    echo "========================================================="
+}
+
 function install_nginx_domain_point_internal_port(){
     echo "========================================================================="
     echo "Install new nginx domain pointing to internal port"
@@ -817,6 +954,7 @@ menu_options=(
     "Add: Domain with NGINX and NetCore"
     "Add: Nginx proxy for internal port"
     "Deploy: Wordpress & phpMyAdmin"
+    "Add: Domain with Static HTML Pages"
 )
 
 # Function to display menu
@@ -840,6 +978,7 @@ function execute_option() {
         7) install_nginx_netcore_domain ;;
         8) install_nginx_domain_point_internal_port ;;
         9) install_wordpress_phpmyadmin ;;
+	10) install_nginx_static_domain ;;
         *) echo "Invalid option" ;;
     esac
 }
