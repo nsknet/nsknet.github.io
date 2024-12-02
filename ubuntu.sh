@@ -544,6 +544,9 @@ function install_nginx_static_domain(){
         server_name_alias=${server_name/www./''}
     fi
 
+    # Create nginx configuration directory if it doesn't exist
+    mkdir -p /var/www/nginx/conf.d
+    
     # Create directory structure
     mkdir -p /var/www/nginx/sites/$server_name/public
     mkdir -p /var/www/nginx/sites/$server_name/logs
