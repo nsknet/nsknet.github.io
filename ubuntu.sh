@@ -196,14 +196,12 @@ END
 
 function install_netcore(){
 	#install netcore
-	#https://docs.microsoft.com/en-us/dotnet/core/install/linux-package-manager-centos7
+	#https://learn.microsoft.com/en-us/dotnet/core/install/linux-ubuntu-install?tabs=dotnet9&pivots=os-linux-ubuntu-2404
 	echo "========================================================================="
 	echo "Install Netcore"
-	# wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
-	# dpkg -i packages-microsoft-prod.deb
+	add-apt-repository ppa:dotnet/backports -y
 	apt update
-	apt install -y  apt-transport-https dotnet-sdk-6.0   dotnet-sdk-7.0    dotnet-sdk-8.0
-	# rm packages-microsoft-prod.deb
+	apt install -y  dotnet-sdk-6.0   dotnet-sdk-7.0    dotnet-sdk-8.0 dotnet-sdk-8.0 dotnet-sdk-9.0
 	echo ""
 	echo "Done"
 	echo "========================================================================="
@@ -949,7 +947,7 @@ function common_configs(){
 menu_options=(
     "Setup: Common config for all VPS (time zone, firewall, utils)"
     "Setup: Virtual RAM 4GB"
-    "Install: NetCore 6.0 & 7.0"
+    "Install: .NET SDK 6, 7, 8, 9"
     "Install: NGINX"
     "Install: PostgreSql 12"
     "Install: MongoDB"
