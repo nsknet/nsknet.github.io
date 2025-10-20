@@ -402,7 +402,128 @@ function install_nginx_certbot(){
 	#certbot --nginx certonly --noninteractive --webroot --agree-tos --register-unsafely-without-email -d ${SITE_DOMAIN} 
 }
 
+function install_nginx_netcore_port(){
+	echo "========================================================================="
+	echo "Install nginx port proxy for netcore service"
+	
+	printf "\nEnter your service name/domain name (without spaces): " 
+	read service_name
+	
+	printf "\nEnter your executedll [example.dll]: " 
+	read dll_full_name
+	
+	dll_name="$dll_full_name"
+	if [[ $dll_full_name == *dll* ]]; then
+		dll_name=${dll_full_name/.dll/''}
+	fi
+	
+	# Generate random internal port
+	DIFF=$((50000-5000+1))
+	internal_port_number=$(($(($RANDOM%$DIFF))+5000))
+	external_port_number=$((internal_port_number+1))
 
+	echo "Internal port (dotnet): $internal_port_number"
+	echo "External port (nginx): $external_port_number"
+
+	# Create directory structure
+	mkdir -p /var/www/nginx/sites/$service_name/public
+	mkdir -p /var/www/nginx/sites/$service_name/logs
+	mkdir -p /var/www/nginx/sites/$service_name/data
+	
+	chmod 777 /var/www/nginx/sites/$service_name
+	mkdir -p /var/www/services
+	chmod 777 /var/www/services
+
+	# Create nginx configuration for port-based access
+	cat > "/var/www/nginx/conf.d/$service_name-port.conf" <<END
+server {
+	client_max_body_size 200M;
+	listen $external_port_number;
+	server_name _;
+	
+	error_log /var/www/nginx/log/$service_name-error.log warn;
+	access_log /var/www/nginx/log/$service_name-access.log main;
+
+	location / {
+		proxy_pass http://127.0.0.1:$internal_port_number;
+		proxy_redirect off;
+		proxy_set_header Host \$host;
+		proxy_set_header X-Real-IP \$remote_addr;
+		proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+		proxy_set_header X-Forwarded-Proto \$scheme;
+		proxy_http_version 1.1;
+		proxy_set_header Upgrade \$http_upgrade;
+		proxy_set_header Connection "upgrade";
+	}
+
+	error_page 404 /404.html;
+	location = /40x.html {
+	}
+	error_page 500 502 503 504 /50x.html;
+	location = /50x.html {
+	}
+}
+END
+
+	# Create systemd service
+	cat > "/var/www/services/$service_name.service" <<END
+[Unit]
+Description=$service_name
+
+[Service]
+WorkingDirectory=/var/www/nginx/sites/$service_name/public
+ExecStart=/usr/bin/dotnet /var/www/nginx/sites/$service_name/public/$dll_name.dll
+Restart=always
+# Restart service after 10 seconds if the dotnet service crashes:
+RestartSec=10
+KillSignal=SIGINT
+SyslogIdentifier=$service_name
+User=root
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
+Environment=ASPNETCORE_HTTP_PORT=$internal_port_number
+Environment=ASPNETCORE_URLS=http://localhost:$internal_port_number
+
+[Install]
+WantedBy=multi-user.target
+END
+
+	echo "========================================================================="
+	echo "Download sample site"
+	wget nsknet.github.io/SampleBlankSite.tar -P /var/www/nginx/sites/$service_name/public/
+	tar -xvf /var/www/nginx/sites/$service_name/public/SampleBlankSite.tar -C /var/www/nginx/sites/$service_name/public
+	rm -fv /var/www/nginx/sites/$service_name/public/SampleBlankSite.tar
+	mv /var/www/nginx/sites/$service_name/public/SampleBlankSite.deps.json /var/www/nginx/sites/$service_name/public/$dll_name.deps.json
+	mv /var/www/nginx/sites/$service_name/public/SampleBlankSite /var/www/nginx/sites/$service_name/public/$dll_name
+	mv /var/www/nginx/sites/$service_name/public/SampleBlankSite.pdb /var/www/nginx/sites/$service_name/public/$dll_name.pdb
+	mv /var/www/nginx/sites/$service_name/public/SampleBlankSite.dll /var/www/nginx/sites/$service_name/public/$dll_name.dll
+	mv /var/www/nginx/sites/$service_name/public/SampleBlankSite.runtimeconfig.json /var/www/nginx/sites/$service_name/public/$dll_name.runtimeconfig.json
+	sed -i.bak s/SampleBlankSite/$dll_name/g /var/www/nginx/sites/$service_name/public/$dll_name.deps.json
+
+	# Open firewall port for external nginx port
+	ufw allow $external_port_number/tcp
+
+	# Enable and start service
+	systemctl daemon-reload
+	systemctl restart nginx
+	systemctl enable /var/www/services/$service_name.service
+	service $service_name start
+
+	echo "========================================================="
+	echo "Installation complete!"
+	echo "Service name: $service_name"
+	echo "Upload your code to: /var/www/nginx/sites/$service_name/public"
+	echo "Main dll name: $dll_name"
+	echo "Service config: /var/www/services/$service_name.service"
+	echo "Nginx config: /var/www/nginx/conf.d/$service_name-port.conf"
+	echo ""
+	echo "Internal port (dotnet): $internal_port_number"
+	echo "External port (nginx): $external_port_number"
+	echo ""
+	echo "You can now use cloudflared or similar tools to tunnel to port $external_port_number"
+	echo "Example: cloudflared tunnel --url http://localhost:$external_port_number"
+	echo "========================================================="
+}
 
 function install_nginx_netcore_domain(){
 	echo "========================================================================="
@@ -954,6 +1075,7 @@ menu_options=(
     "Install: Elasticsearch & Kibana"
     "Add: Domain with NGINX and NetCore"
     "Add: Nginx proxy for internal port"
+	"Add: Nginx external port proxy"
     "Deploy: Wordpress & phpMyAdmin"
     "Add: Domain with Static HTML Pages"
 )
@@ -978,8 +1100,9 @@ function execute_option() {
         6) install_elastic_kibana ;;
         7) install_nginx_netcore_domain ;;
         8) install_nginx_domain_point_internal_port ;;
-        9) install_wordpress_phpmyadmin ;;
-	10) install_nginx_static_domain ;;
+		9) install_nginx_netcore_port ;;
+        10) install_wordpress_phpmyadmin ;;
+		11) install_nginx_static_domain ;;
         *) echo "Invalid option" ;;
     esac
 }
