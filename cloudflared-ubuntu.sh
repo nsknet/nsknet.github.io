@@ -1,7 +1,7 @@
 #!/bin/bash
 #Installs cloudflared, creates and configures a Cloudflare tunnel (DNS route + YAML using latest credentials), tests and runs it forwarding a hostname to a local port, and installs a systemd service for automatic startup.
 
-
+# If you are installed cloudflared on a server, you can skip the first 30 lines of this script.
 # Download and install Cloudflared
 wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
 sudo dpkg -i cloudflared-linux-amd64.deb
@@ -18,6 +18,16 @@ echo "Installation file cleaned up"
 echo "Copy the link and paste it into your browser to authenticate"
 cloudflared login
 # Copy the link and paste it into your browser to authenticate
+
+
+
+
+
+
+
+
+
+##############################
 
 
 # Prompt for tunnel name
@@ -49,9 +59,6 @@ if [ -z "$CREDENTIALS_FILE" ]; then
 fi
 
 echo "Using credentials file: $CREDENTIALS_FILE"
-
-
-
 
 
 # Create tunnel configuration file
