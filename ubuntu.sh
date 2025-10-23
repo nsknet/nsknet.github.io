@@ -210,23 +210,56 @@ function install_netcore(){
 function install_mongodb(){
 	#install mongodb
 	#https://www.mongodb.com/docs/manual/tutorial/install-mongodb-on-ubuntu/
+	#https://www.mongodb.com/docs/manual/administration/install-community/?linux-distribution=ubuntu&linux-package=default&operating-system=linux&search-linux=with-search-linux
 	echo "========================================================================="
-	apt install  -y  gnupg curl
+	echo "Install MongoDB"
+	
+	# Install prerequisites
+	apt install -y gnupg curl
+	
+	# Import MongoDB public GPG key
 	curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | \
 	   sudo gpg -o /usr/share/keyrings/mongodb-server-8.0.gpg \
 	   --dearmor
-	echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/8.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-8.0.list
-
+	
+	# Detect Ubuntu version
+	UBUNTU_CODENAME=$(lsb_release -cs)
+	
+	# Set repository based on Ubuntu version
+	case "$UBUNTU_CODENAME" in
+		noble)
+			echo "Detected Ubuntu 24.04 (Noble)"
+			echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu noble/mongodb-org/8.2 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-8.2.list
+			;;
+		jammy)
+			echo "Detected Ubuntu 22.04 (Jammy)"
+			echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/8.2 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-8.2.list
+			;;
+		focal)
+			echo "Detected Ubuntu 20.04 (Focal)"
+			echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/8.2 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-8.2.list
+			;;
+		*)
+			echo "Unknown Ubuntu version: $UBUNTU_CODENAME, using Noble repository"
+			echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu noble/mongodb-org/8.2 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-8.2.list
+			;;
+	esac
+	
+	# Update package database
 	apt update
+	
+	# Install MongoDB
 	apt install -y mongodb-org
-
+	
+	# Enable and start MongoDB service
 	systemctl enable mongod.service
-	service mongod start
+	systemctl start mongod
+	
+	# Check MongoDB status
 	systemctl status mongod --no-pager
-
-
+	
 	echo ""
-	echo "Done"
+	echo "MongoDB installation completed"
 	echo "========================================================================="
 }
 
