@@ -92,55 +92,77 @@ END
 }
 
 function install_fail2ban(){
-	#https://hocvps.com/cai-dat-fail2ban-tren-centos/
 	echo "========================================================================="
-	echo "Config fail2ban"
-	yum install epel-release -y
-	yum install fail2ban -y
-
-	cat > "/etc/fail2ban/jail.conf" <<END
-[DEFAULT]
-
-# "ignoreip" can be an IP address, a CIDR mask or a DNS host. Fail2ban will not
-# ban a host which matches an address in this list. Several addresses can be
-# defined using space separator.
-ignoreip = 127.0.0.1 
-
-# "bantime" is the number of seconds that a host is banned.
-bantime = 600
-
-# A host is banned if it has generated "maxretry" during the last "findtime"
-# seconds.
-findtime = 600
-
-# "maxretry" is the number of failures before a host get banned.
-maxretry = 3
-END
-
-
+	echo "Installing Fail2ban - SSH brute force protection..."
+	
+	# Install fail2ban
+	apt update
+	apt install -y fail2ban
+	
+	# Backup original config if exists
+	if [ -f /etc/fail2ban/jail.conf ]; then
+		cp /etc/fail2ban/jail.conf /etc/fail2ban/jail.conf.bak
+		echo "Original jail.conf backed up"
+	fi
+	
+	# Create jail.local configuration (this overrides jail.conf)
 	cat > "/etc/fail2ban/jail.local" <<END
 [DEFAULT]
-[sshd]
+# Ban IP for 1 hour (3600 seconds)
+bantime = 3600
 
-enabled  = true
-filter   = sshd
-action   = iptables[name=SSH, port=ssh, protocol=tcp]
-logpath  = /var/log/secure
+# An IP will be banned if it has generated maxretry failures in last 10 minutes
+findtime = 600
+
+# Number of failures before a host gets banned
+maxretry = 3
+
+# Whitelist your own IP (localhost)
+ignoreip = 127.0.0.1/8 ::1
+
+# Email notifications (optional - leave empty to disable)
+destemail = 
+sendername = Fail2Ban
+mta = sendmail
+
+[sshd]
+enabled = true
+port = ssh
+filter = sshd
+logpath = /var/log/auth.log
 maxretry = 3
 bantime = 3600
+findtime = 600
 END
 
-	chkconfig --level 23 fail2ban on
-	service fail2ban start
-
+	# Enable and start fail2ban service
+	systemctl enable fail2ban
+	systemctl start fail2ban
 	
-	echo "Enable firewall"
-	systemctl enable firewalld
-	systemctl restart firewalld
-
-
+	# Check status
 	echo ""
-	echo "Done"
+	echo "Checking Fail2ban status..."
+	systemctl status fail2ban --no-pager
+	
+	echo ""
+	echo "========================================================================="
+	echo "Fail2ban Installation Complete!"
+	echo "========================================================================="
+	echo "Configuration:"
+	echo "  - Config file: /etc/fail2ban/jail.local"
+	echo "  - Log file: /var/log/fail2ban.log"
+	echo "  - SSH log: /var/log/auth.log"
+	echo ""
+	echo "Protection settings:"
+	echo "  - Max retry: 3 attempts"
+	echo "  - Find time: 10 minutes"
+	echo "  - Ban time: 1 hour"
+	echo ""
+	echo "Useful commands:"
+	echo "  - Check status: fail2ban-client status"
+	echo "  - Check SSH jail: fail2ban-client status sshd"
+	echo "  - Unban IP: fail2ban-client set sshd unbanip <IP>"
+	echo "  - View banned IPs: fail2ban-client status sshd"
 	echo "========================================================================="
 }
 
@@ -201,7 +223,7 @@ function install_netcore(){
 	echo "Install Netcore"
 	add-apt-repository ppa:dotnet/backports -y
 	apt update
-	apt install -y  dotnet-sdk-6.0   dotnet-sdk-7.0    dotnet-sdk-8.0 dotnet-sdk-8.0 dotnet-sdk-9.0
+	apt install -y dotnet-sdk-6.0 dotnet-sdk-7.0 dotnet-sdk-8.0 dotnet-sdk-8.0 dotnet-sdk-9.0
 	echo ""
 	echo "Done"
 	echo "========================================================================="
@@ -317,20 +339,26 @@ END
 
 function install_nginx(){
 	echo "========================================================================="
-	echo "Install NGINX"
+	echo "Installing NGINX web server..."
 
-	#nginx
-	apt-get -y install nginx
+	# Install nginx
+	apt install -y nginx
 
-	systemctl start nginx
+	# Enable and start nginx service
 	systemctl enable nginx
-	systemctl status nginx  --no-pager
+	systemctl start nginx
+	systemctl status nginx --no-pager
 
-	#preconfig for nginx
-	sudo cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak
+	# Create directory structure for nginx configurations
+	echo "Creating directory structure..."
 	mkdir -p /var/www/nginx/log
 	mkdir -p /var/www/nginx/conf.d
+	
+	# Backup original configuration
+	cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak
+	echo "Original nginx.conf backed up to nginx.conf.bak"
 
+	# Create optimized nginx.conf
 	cat > "/etc/nginx/nginx.conf" <<END
 user www-data;
 worker_processes auto;
@@ -339,36 +367,48 @@ pid /run/nginx.pid;
 include /usr/share/nginx/modules/*.conf;
 
 events {
-	worker_connections 1024;
+	worker_connections 2048;
+	multi_accept on;
 }
 
-
 http {
-	log_format  main  '\$remote_addr - \$remote_user [\$time_local] "\$request" '
-						  '\$status \$body_bytes_sent "\$http_referer" '
-						  '"\$http_user_agent" "\$http_x_forwarded_for" '
-						  '"\$host" sn="\$server_name" '
-						  'rt=\$request_time '
-						  'ua="\$upstream_addr" us="\$upstream_status" '
-						  'ut="\$upstream_response_time" ul="\$upstream_response_length" '
-						  'cs=\$upstream_cache_status' ;
+	# Basic Settings
+	sendfile on;
+	tcp_nopush on;
+	tcp_nodelay on;
+	keepalive_timeout 65;
+	types_hash_max_size 2048;
+	server_tokens off;
+	
+	# Timeout settings
+	client_body_timeout 12;
+	client_header_timeout 12;
+	send_timeout 10;
+	
+	# Buffer settings
+	client_body_buffer_size 10K;
+	client_header_buffer_size 1k;
+	client_max_body_size 8m;
+	large_client_header_buffers 2 1k;
 
-	access_log  /var/www/nginx/log/global-access.log  main;
+	# MIME types
+	include /etc/nginx/mime.types;
+	default_type application/octet-stream;
+
+	# Logging Configuration
+	log_format main '\$remote_addr - \$remote_user [\$time_local] "\$request" '
+	                '\$status \$body_bytes_sent "\$http_referer" '
+	                '"\$http_user_agent" "\$http_x_forwarded_for" '
+	                '"\$host" sn="\$server_name" '
+	                'rt=\$request_time '
+	                'ua="\$upstream_addr" us="\$upstream_status" '
+	                'ut="\$upstream_response_time" ul="\$upstream_response_length" '
+	                'cs=\$upstream_cache_status';
+
+	access_log /var/www/nginx/log/global-access.log main;
 	error_log /var/www/nginx/log/global-error.log warn;
 
-
-	sendfile            on;
-	tcp_nopush          on;
-	tcp_nodelay         on;
-	keepalive_timeout   65;
-	types_hash_max_size 2048;
-
-	include             /etc/nginx/mime.types;
-	default_type        application/octet-stream;
-
-	include /var/www/nginx/conf.d/*.conf;
-	include /etc/nginx/conf.d/*.conf;
-	
+	# Gzip Compression
 	gzip on;
 	gzip_static on;
 	gzip_disable "msie6";
@@ -377,48 +417,103 @@ http {
 	gzip_comp_level 6;
 	gzip_buffers 16 8k;
 	gzip_http_version 1.1;
-	gzip_types text/plain text/css application/json text/javascript application/javascript text/xml application/xml application/xml+rss;
+	gzip_min_length 256;
+	gzip_types text/plain text/css application/json application/javascript 
+	           text/xml application/xml application/xml+rss text/javascript
+	           application/vnd.ms-fontobject application/x-font-ttf 
+	           font/opentype image/svg+xml;
 
+	# Include virtual host configs
+	include /var/www/nginx/conf.d/*.conf;
+	include /etc/nginx/conf.d/*.conf;
+
+	# Default server block - reject undefined hosts
 	server {
-		listen      80 default_server;
-		server_name "";
-		return      444;
+		listen 80 default_server;
+		server_name _;
+		return 444;
 	}
-
 }
 END
 
+	# Create custom error pages
+	echo "Creating custom error pages..."
 	cat > "/usr/share/nginx/html/403.html" <<END
+<!DOCTYPE html>
 <html>
-<head><title>403 Forbidden</title></head>
-<body bgcolor="white">
-<center><h1>403 Forbidden</h1></center>
+<head>
+	<title>403 Forbidden</title>
+	<style>
+		body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+		h1 { color: #d9534f; }
+	</style>
+</head>
+<body>
+	<h1>403 Forbidden</h1>
+	<p>You don't have permission to access this resource.</p>
 </body>
 </html>
 END
 
 	cat > "/usr/share/nginx/html/404.html" <<END
+<!DOCTYPE html>
 <html>
-<head><title>404 Not Found</title></head>
-<body bgcolor="white">
-<center><h1>404 Not Found</h1></center>
+<head>
+	<title>404 Not Found</title>
+	<style>
+		body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+		h1 { color: #f0ad4e; }
+	</style>
+</head>
+<body>
+	<h1>404 Not Found</h1>
+	<p>The page you are looking for does not exist.</p>
 </body>
 </html>
 END
-	service  nginx reload
-	service  nginx restart
-	
-	#fix Permission denied by default, digital ocean
-	sudo setsebool -P httpd_can_network_connect on 
 
-	
-	ufw allow http
-	ufw allow https
-	ufw --force enable
-	
+	# Test nginx configuration
+	echo "Testing nginx configuration..."
+	if nginx -t; then
+		echo "Nginx configuration is valid"
+		systemctl reload nginx
+		systemctl restart nginx
+	else
+		echo "ERROR: Nginx configuration has errors! Please check manually."
+		return 1
+	fi
+
+	# Configure SELinux for nginx (if SELinux is active)
+	if command -v setsebool &> /dev/null; then
+		echo "Configuring SELinux for nginx..."
+		setsebool -P httpd_can_network_connect on
+	fi
+
+	# Configure UFW firewall
+	echo "Configuring firewall rules..."
+	if command -v ufw &> /dev/null; then
+		ufw allow http
+		ufw allow https
+		ufw --force enable
+		echo "Firewall rules added for HTTP and HTTPS"
+	else
+		echo "UFW not found, skipping firewall configuration"
+	fi
+
+	# Set proper permissions
+	chown -R www-data:www-data /var/www/nginx
+	chmod -R 755 /var/www/nginx
 
 	echo ""
-	echo "Done"
+	echo "========================================================================="
+	echo "NGINX Installation Complete!"
+	echo "========================================================================="
+	echo "Directory structure:"
+	echo "  - Config files: /var/www/nginx/conf.d/"
+	echo "  - Log files: /var/www/nginx/log/"
+	echo "  - Main config: /etc/nginx/nginx.conf"
+	echo "  - Backup: /etc/nginx/nginx.conf.bak"
+	echo ""
 	echo "========================================================================="
 }
 
