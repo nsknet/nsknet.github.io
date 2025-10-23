@@ -530,50 +530,313 @@ function install_nginx_certbot(){
 	#certbot --nginx certonly --noninteractive --webroot --agree-tos --register-unsafely-without-email -d ${SITE_DOMAIN} 
 }
 
-function install_nginx_netcore_port(){
+function add_nginx_site(){
 	echo "========================================================================="
-	echo "Install nginx port proxy for netcore service"
+	echo "Add New Nginx Site"
+	echo "========================================================================="
 	
-	printf "\nEnter your service name/domain name (without spaces): " 
-	read service_name
+	# Step 1: Choose external access method
+	echo "How will users access this site from outside?"
+	echo "1) To a port without domain name (random port will be assigned)"
+	echo "2) To a domain name (you provide the domain)"
+	read -p "Enter your choice [1 or 2]: " access_choice
 	
-	printf "\nEnter your executedll [example.dll]: " 
-	read dll_full_name
+	service_name=""
+	server_name=""
+	external_port=""
+	use_domain=false
 	
-	dll_name="$dll_full_name"
-	if [[ $dll_full_name == *dll* ]]; then
-		dll_name=${dll_full_name/.dll/''}
+	if [ "$access_choice" == "2" ]; then
+		use_domain=true
+		printf "\nEnter your domain name (e.g., example.com): "
+		read server_name
+		service_name="$server_name"
+		
+		# Handle www subdomain
+		server_name_alias="www.$server_name"
+		if [[ $server_name == *www* ]]; then
+			server_name_alias=${server_name/www./''}
+		fi
+	else
+		printf "\nEnter service name (without spaces, e.g., myapp): "
+		read service_name
+		server_name="_"
+		
+		# Generate random external port
+		DIFF=$((50000-5000+1))
+		external_port=$(($(($RANDOM%$DIFF))+5000))
+		echo "External port assigned: $external_port"
 	fi
 	
-	# Generate random internal port
-	DIFF=$((50000-5000+1))
-	internal_port_number=$(($(($RANDOM%$DIFF))+5000))
-	external_port_number=$((internal_port_number+1))
-
-	echo "Internal port (dotnet): $internal_port_number"
-	echo "External port (nginx): $external_port_number"
-
+	# Step 2: Choose backend type
+	echo ""
+	echo "What is the backend for this site?"
+	echo "1) Already running on local port (you provide the running port)"
+	echo "2) Static HTML files"
+	echo "3) New .NET Core service"
+	read -p "Enter your choice [1, 2, or 3]: " backend_choice
+	
+	internal_port=""
+	internal_address=""
+	dll_name=""
+	create_dotnet_service=false
+	is_static=false
+	
+	case $backend_choice in
+		1)
+			printf "\nEnter existing local port or full address (e.g., 5555 or http://192.168.1.2:6666): "
+			read internal_input
+			
+			# Check if it's just a port number or full address
+			if [[ $internal_input =~ ^[0-9]+$ ]]; then
+				internal_port=$internal_input
+				internal_address="http://127.0.0.1:$internal_port"
+			else
+				internal_address=$internal_input
+			fi
+			;;
+		2)
+			is_static=true
+			;;
+		3)
+			create_dotnet_service=true
+			printf "\nEnter your .dll file name (e.g., example.dll): "
+			read dll_full_name
+			
+			dll_name="$dll_full_name"
+			if [[ $dll_full_name == *dll* ]]; then
+				dll_name=${dll_full_name/.dll/''}
+			fi
+			
+			# Generate random internal port
+			DIFF=$((50000-5000+1))
+			internal_port=$(($(($RANDOM%$DIFF))+5000))
+			
+			# If using external port, make internal port = external - 1 for easy memory
+			if [ "$access_choice" == "1" ]; then
+				internal_port=$((external_port-1))
+			fi
+			
+			echo "Internal .NET port: $internal_port"
+			;;
+	esac
+	
 	# Create directory structure
 	mkdir -p /var/www/nginx/sites/$service_name/public
 	mkdir -p /var/www/nginx/sites/$service_name/logs
 	mkdir -p /var/www/nginx/sites/$service_name/data
-	
 	chmod 777 /var/www/nginx/sites/$service_name
-	mkdir -p /var/www/services
-	chmod 777 /var/www/services
-
-	# Create nginx configuration for port-based access
-	cat > "/var/www/nginx/conf.d/$service_name-port.conf" <<END
+	chown -R www-data:www-data /var/www/nginx/sites/$service_name
+	
+	# Create nginx configuration
+	echo ""
+	echo "Creating nginx configuration..."
+	
+	if [ "$use_domain" = true ]; then
+		# Domain-based configuration
+		if [ "$is_static" = true ]; then
+			# Static HTML site
+			cat > "/var/www/nginx/conf.d/$service_name.conf" <<END
 server {
 	client_max_body_size 200M;
-	listen $external_port_number;
+	listen 80;
+	server_name $server_name;
+	root /var/www/nginx/sites/$service_name/public;
+	
+	error_log /var/www/nginx/log/$service_name-error.log warn;
+	access_log /var/www/nginx/log/$service_name-access.log main;
+
+	index index.html;
+
+	location / {
+		try_files \$uri \$uri.html \$uri/ \$uri/index.html =404;
+	}
+
+	error_page 404 /404.html;
+	location = /404.html {
+		internal;
+	}
+
+	error_page 500 502 503 504 /50x.html;
+	location = /50x.html {
+		internal;
+	}
+
+	location ~ /\. {
+		deny all;
+	}
+}
+
+server {
+	server_name www.$server_name;
+	return 301 \$scheme://$server_name\$request_uri;
+}
+END
+			# Create sample HTML files
+			cat > "/var/www/nginx/sites/$service_name/public/index.html" <<END
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Welcome to $server_name</title>
+	<style>
+		body { font-family: Arial, sans-serif; line-height: 1.6; margin: 40px auto; max-width: 650px; padding: 0 10px; }
+	</style>
+</head>
+<body>
+	<h1>Welcome to $server_name</h1>
+	<p>This is a sample static page. Replace this content with your own HTML files.</p>
+</body>
+</html>
+END
+
+			cat > "/var/www/nginx/sites/$service_name/public/404.html" <<END
+<!DOCTYPE html>
+<html>
+<head>
+	<title>404 - Page Not Found</title>
+	<style>
+		body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+		h1 { color: #f0ad4e; }
+	</style>
+</head>
+<body>
+	<h1>404 - Page Not Found</h1>
+	<p>The page you are looking for does not exist.</p>
+</body>
+</html>
+END
+		else
+			# Proxy to backend (existing port or dotnet)
+			proxy_target=""
+			if [ "$create_dotnet_service" = true ]; then
+				proxy_target="http://127.0.0.1:$internal_port"
+			else
+				proxy_target="$internal_address"
+			fi
+			
+			cat > "/var/www/nginx/conf.d/$service_name.conf" <<END
+server {
+	client_max_body_size 200M;
+	listen 80;
+	server_name $server_name;
+	root /usr/share/nginx/html;
+	error_log /var/www/nginx/log/$service_name-error.log warn;
+	access_log /var/www/nginx/log/$service_name-access.log main;
+
+	location / {
+		proxy_pass $proxy_target;
+		proxy_redirect off;
+		proxy_set_header Host \$host;
+		proxy_set_header X-Real-IP \$remote_addr;
+		proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+		proxy_set_header X-Forwarded-Proto \$scheme;
+		proxy_http_version 1.1;
+		proxy_set_header Upgrade \$http_upgrade;
+		proxy_set_header Connection "upgrade";
+	}
+
+	error_page 404 /404.html;
+	location = /40x.html {
+	}
+	error_page 500 502 503 504 /50x.html;
+	location = /50x.html {
+	}
+}
+
+server {
+	server_name www.$server_name;
+	return 301 \$scheme://$server_name\$request_uri;
+}
+END
+		fi
+	else
+	# Port-based configuration (no domain)
+	if [ "$is_static" = true ]; then
+		# Static HTML site with port
+		cat > "/var/www/nginx/conf.d/$service_name-port.conf" <<END
+server {
+	client_max_body_size 200M;
+	listen $external_port;
+	server_name _;
+	root /var/www/nginx/sites/$service_name/public;
+	
+	error_log /var/www/nginx/log/$service_name-error.log warn;
+	access_log /var/www/nginx/log/$service_name-access.log main;
+
+	index index.html;
+
+	location / {
+		try_files \$uri \$uri.html \$uri/ \$uri/index.html =404;
+	}
+
+	error_page 404 /404.html;
+	location = /404.html {
+		internal;
+	}
+
+	error_page 500 502 503 504 /50x.html;
+	location = /50x.html {
+		internal;
+	}
+
+	location ~ /\. {
+		deny all;
+	}
+}
+END
+		# Create sample HTML files
+		cat > "/var/www/nginx/sites/$service_name/public/index.html" <<END
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Welcome to $service_name</title>
+	<style>
+		body { font-family: Arial, sans-serif; line-height: 1.6; margin: 40px auto; max-width: 650px; padding: 0 10px; }
+	</style>
+</head>
+<body>
+	<h1>Welcome to $service_name</h1>
+	<p>This is a sample static page on port $external_port. Replace this content with your own HTML files.</p>
+</body>
+</html>
+END
+
+		cat > "/var/www/nginx/sites/$service_name/public/404.html" <<END
+<!DOCTYPE html>
+<html>
+<head>
+	<title>404 - Page Not Found</title>
+	<style>
+		body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+		h1 { color: #f0ad4e; }
+	</style>
+</head>
+<body>
+	<h1>404 - Page Not Found</h1>
+	<p>The page you are looking for does not exist.</p>
+</body>
+</html>
+END
+	else
+		# Proxy to backend (existing port or dotnet)
+		proxy_target=""
+		if [ "$create_dotnet_service" = true ]; then
+			proxy_target="http://127.0.0.1:$internal_port"
+		else
+			proxy_target="$internal_address"
+		fi
+		
+		cat > "/var/www/nginx/conf.d/$service_name-port.conf" <<END
+server {
+	client_max_body_size 200M;
+	listen $external_port;
 	server_name _;
 	
 	error_log /var/www/nginx/log/$service_name-error.log warn;
 	access_log /var/www/nginx/log/$service_name-access.log main;
 
 	location / {
-		proxy_pass http://127.0.0.1:$internal_port_number;
+		proxy_pass $proxy_target;
 		proxy_redirect off;
 		proxy_set_header Host \$host;
 		proxy_set_header X-Real-IP \$remote_addr;
@@ -592,9 +855,18 @@ server {
 	}
 }
 END
-
-	# Create systemd service
-	cat > "/var/www/services/$service_name.service" <<END
+	fi
+	# Open firewall port
+	ufw allow $external_port/tcp
+fi
+	
+	# Create dotnet service if needed
+	if [ "$create_dotnet_service" = true ]; then
+		echo "Creating .NET Core service..."
+		mkdir -p /var/www/services
+		chmod 777 /var/www/services
+		
+		cat > "/var/www/services/$service_name.service" <<END
 [Unit]
 Description=$service_name
 
@@ -602,368 +874,84 @@ Description=$service_name
 WorkingDirectory=/var/www/nginx/sites/$service_name/public
 ExecStart=/usr/bin/dotnet /var/www/nginx/sites/$service_name/public/$dll_name.dll
 Restart=always
-# Restart service after 10 seconds if the dotnet service crashes:
 RestartSec=10
 KillSignal=SIGINT
 SyslogIdentifier=$service_name
 User=root
 Environment=ASPNETCORE_ENVIRONMENT=Production
 Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
-Environment=ASPNETCORE_HTTP_PORT=$internal_port_number
-Environment=ASPNETCORE_URLS=http://localhost:$internal_port_number
+Environment=ASPNETCORE_HTTP_PORT=$internal_port
+Environment=ASPNETCORE_URLS=http://localhost:$internal_port
 
 [Install]
 WantedBy=multi-user.target
 END
 
-	echo "========================================================================="
-	echo "Download sample site"
-	wget nsknet.github.io/SampleBlankSite.tar -P /var/www/nginx/sites/$service_name/public/
-	tar -xvf /var/www/nginx/sites/$service_name/public/SampleBlankSite.tar -C /var/www/nginx/sites/$service_name/public
-	rm -fv /var/www/nginx/sites/$service_name/public/SampleBlankSite.tar
-	mv /var/www/nginx/sites/$service_name/public/SampleBlankSite.deps.json /var/www/nginx/sites/$service_name/public/$dll_name.deps.json
-	mv /var/www/nginx/sites/$service_name/public/SampleBlankSite /var/www/nginx/sites/$service_name/public/$dll_name
-	mv /var/www/nginx/sites/$service_name/public/SampleBlankSite.pdb /var/www/nginx/sites/$service_name/public/$dll_name.pdb
-	mv /var/www/nginx/sites/$service_name/public/SampleBlankSite.dll /var/www/nginx/sites/$service_name/public/$dll_name.dll
-	mv /var/www/nginx/sites/$service_name/public/SampleBlankSite.runtimeconfig.json /var/www/nginx/sites/$service_name/public/$dll_name.runtimeconfig.json
-	sed -i.bak s/SampleBlankSite/$dll_name/g /var/www/nginx/sites/$service_name/public/$dll_name.deps.json
-
-	# Open firewall port for external nginx port
-	ufw allow $external_port_number/tcp
-
-	# Enable and start service
-	systemctl daemon-reload
+		# Download sample site
+		echo "Downloading sample .NET site..."
+		wget nsknet.github.io/SampleBlankSite.tar -P /var/www/nginx/sites/$service_name/public/
+		tar -xvf /var/www/nginx/sites/$service_name/public/SampleBlankSite.tar -C /var/www/nginx/sites/$service_name/public
+		rm -fv /var/www/nginx/sites/$service_name/public/SampleBlankSite.tar
+		
+		# Rename sample files to match dll name
+		mv /var/www/nginx/sites/$service_name/public/SampleBlankSite.deps.json /var/www/nginx/sites/$service_name/public/$dll_name.deps.json
+		mv /var/www/nginx/sites/$service_name/public/SampleBlankSite /var/www/nginx/sites/$service_name/public/$dll_name
+		mv /var/www/nginx/sites/$service_name/public/SampleBlankSite.pdb /var/www/nginx/sites/$service_name/public/$dll_name.pdb
+		mv /var/www/nginx/sites/$service_name/public/SampleBlankSite.dll /var/www/nginx/sites/$service_name/public/$dll_name.dll
+		mv /var/www/nginx/sites/$service_name/public/SampleBlankSite.runtimeconfig.json /var/www/nginx/sites/$service_name/public/$dll_name.runtimeconfig.json
+		sed -i.bak s/SampleBlankSite/$dll_name/g /var/www/nginx/sites/$service_name/public/$dll_name.deps.json
+		
+		# Enable and start service
+		systemctl daemon-reload
+		systemctl enable /var/www/services/$service_name.service
+		service $service_name start
+	fi
+	
+	# Restart nginx
 	systemctl restart nginx
-	systemctl enable /var/www/services/$service_name.service
-	service $service_name start
-
-	echo "========================================================="
-	echo "Installation complete!"
+	
+	# Print summary
+	echo ""
+	echo "========================================================================="
+	echo "✓ Nginx Site Configuration Complete!"
+	echo "========================================================================="
 	echo "Service name: $service_name"
-	echo "Upload your code to: /var/www/nginx/sites/$service_name/public"
-	echo "Main dll name: $dll_name"
-	echo "Service config: /var/www/services/$service_name.service"
-	echo "Nginx config: /var/www/nginx/conf.d/$service_name-port.conf"
-	echo ""
-	echo "Internal port (dotnet): $internal_port_number"
-	echo "External port (nginx): $external_port_number"
-	echo ""
-	echo "You can now use cloudflared or similar tools to tunnel to port $external_port_number"
-	echo "Example: cloudflared tunnel --url http://localhost:$external_port_number"
-	echo "========================================================="
-}
-
-function install_nginx_netcore_domain(){
-	echo "========================================================================="
-	echo "Install new nginx domain and netcore site"
-	printf "\nEnter your main domain [ENTER]: " 
-	read server_name
-	server_name_alias="www.$server_name"
-	if [[ $server_name == *www* ]]; then
-		server_name_alias=${server_name/www./''}
-	fi
-
-	printf "\nEnter your executedll [example.dll]: " 
-	read dll_full_name
 	
-	dll_name="$dll_full_name"
-	if [[ $dll_full_name == *dll* ]]; then
-		dll_name=${dll_full_name/.dll/''}
+	if [ "$use_domain" = true ]; then
+		echo "Access URL: http://$server_name"
+		echo "Domain: $server_name"
+	else
+		echo "Access URL: http://YOUR_SERVER_IP:$external_port"
+		echo "External port: $external_port"
+		echo ""
+		echo "💡 Tip: You can use cloudflared or similar tools to tunnel:"
+		echo "   cloudflared tunnel --url http://localhost:$external_port"
 	fi
 	
-
-	# printf "\nEnter port number [from 2000 to 65000]: " 
-	# read port_number
-	DIFF=$((50000-5000+1))
-	port_number=$(($(($RANDOM%$DIFF))+5000))
-
-	mkdir -p /var/www/nginx/sites/$server_name/public
-	# mkdir -p /var/www/nginx/sites/$server_name/private_html
-	mkdir -p /var/www/nginx/sites/$server_name/logs
-	mkdir -p /var/www/nginx/sites/$server_name/data
+	echo ""
+	if [ "$is_static" = true ]; then
+		echo "Backend: Static HTML files"
+		echo "Upload your files to: /var/www/nginx/sites/$service_name/public"
+	elif [ "$create_dotnet_service" = true ]; then
+		echo "Backend: .NET Core service"
+		echo "Internal port: $internal_port"
+		echo "Upload your code to: /var/www/nginx/sites/$service_name/public"
+		echo "Main dll: $dll_name.dll"
+		echo "Service config: /var/www/services/$service_name.service"
+		echo ""
+		echo "Service commands:"
+		echo "  - Start: service $service_name start"
+		echo "  - Stop: service $service_name stop"
+		echo "  - Restart: service $service_name restart"
+		echo "  - Status: service $service_name status"
+	else
+		echo "Backend: Existing service at $internal_address"
+	fi
 	
-	chmod 777 /var/www/nginx/sites/$server_name
-	# chmod 777 /var/www/nginx/sites/$server_name/logs
-	mkdir -p /var/www/services
-	chmod 777  /var/www/services
-
-
-
-
-	cat > "/var/www/nginx/conf.d/$server_name.conf" <<END
-server {
-		client_max_body_size 200M;
-		listen       80;
-		server_name $server_name;
-		root         /usr/share/nginx/html;
-		error_log /var/www/nginx/log/$server_name-error.log warn;
-		access_log  /var/www/nginx/log/$server_name-access.log main;
-
-		# Load configuration files for the default server block.
-		include /etc/nginx/default.d/*.conf;
-
-		location / {
-			proxy_pass http://127.0.0.1:$port_number;
-			proxy_redirect off;
-			proxy_set_header Host \$host;
-			proxy_set_header X-Real-IP \$remote_addr;
-			proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-			proxy_set_header X-Forwarded-Proto \$scheme;
-		}
-
-		error_page 404 /404.html;
-			location = /40x.html {
-		}
-		error_page 500 502 503 504 /50x.html;
-			location = /50x.html {
-		}
-}
-server {
-    server_name www.$server_name;
-    return 301 \$scheme://$server_name\$request_uri;
-}
-END
-
-
-	cat > "/var/www/services/$server_name.service"  <<END
-[Unit]
-Description=$server_name
-
-[Service]
-WorkingDirectory=/var/www/nginx/sites/$server_name/public
-ExecStart=/usr/bin/dotnet /var/www/nginx/sites/$server_name/public/$dll_name.dll
-Restart=always
-# Restart service after 10 seconds if the dotnet service crashes:
-RestartSec=10
-KillSignal=SIGINT
-SyslogIdentifier=$server_name
-User=root
-Environment=ASPNETCORE_ENVIRONMENT=Production
-Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
-Environment=ASPNETCORE_HTTP_PORT=$port_number
-Environment=ASPNETCORE_URLS=http://localhost:$port_number
-
-[Install]
-WantedBy=multi-user.target
-END
-
-
+	echo ""
+	echo "Nginx config: /var/www/nginx/conf.d/$service_name*.conf"
+	echo "Logs: /var/www/nginx/log/$service_name-*.log"
 	echo "========================================================================="
-	echo "Donwload sample site"
-	wget nsknet.github.io/SampleBlankSite.tar -P  /var/www/nginx/sites/$server_name/public/
-	tar -xvf /var/www/nginx/sites/$server_name/public/SampleBlankSite.tar -C /var/www/nginx/sites/$server_name/public
-	rm -fv  /var/www/nginx/sites/$server_name/public/SampleBlankSite.tar
-	mv /var/www/nginx/sites/$server_name/public/SampleBlankSite.deps.json  /var/www/nginx/sites/$server_name/public/$dll_name.deps.json
-	mv /var/www/nginx/sites/$server_name/public/SampleBlankSite  /var/www/nginx/sites/$server_name/public/$dll_name
-	mv /var/www/nginx/sites/$server_name/public/SampleBlankSite.pdb  /var/www/nginx/sites/$server_name/public/$dll_name.pdb
-	mv /var/www/nginx/sites/$server_name/public/SampleBlankSite.dll  /var/www/nginx/sites/$server_name/public/$dll_name.dll
-	mv /var/www/nginx/sites/$server_name/public/SampleBlankSite.runtimeconfig.json  /var/www/nginx/sites/$server_name/public/$dll_name.runtimeconfig.json
-	# perl -pi -e 's/SampleBlankSite/{$dll_name}/g' /var/www/nginx/sites/$server_name/public/$dll_name.deps.json
-	sed -i.bak s/SampleBlankSite/$dll_name/g /var/www/nginx/sites/$server_name/public/$dll_name.deps.json
-
-
-
-
-	systemctl daemon-reload
-	systemctl restart nginx
-	systemctl enable /var/www/services/$server_name.service
-	service $server_name start
-
-
-
-
-	echo "========================================================="
-	echo "Install nginx done, please upload your code to: /var/www/nginx/sites/$server_name/public"
-	echo "Main dll name is $dll_name, edit it at /var/www/services/$server_name.service"
-	echo "Domain name $server_name, nginx config at /var/www/nginx/conf.d/$server_name.conf"
-	echo "Local port number $port_number"
-	echo "========================================================="
-
-}
-
-function install_nginx_static_domain(){
-    echo "========================================================================="
-    echo "Install new nginx domain for static HTML site"
-    printf "\nEnter your main domain [ENTER]: " 
-    read server_name
-    server_name_alias="www.$server_name"
-    if [[ $server_name == *www* ]]; then
-        server_name_alias=${server_name/www./''}
-    fi
-
-    # Create nginx configuration directory if it doesn't exist
-    mkdir -p /var/www/nginx/conf.d
-    
-    # Create directory structure
-    mkdir -p /var/www/nginx/sites/$server_name/public
-    mkdir -p /var/www/nginx/sites/$server_name/logs
-    mkdir -p /var/www/nginx/sites/$server_name/data
-    
-    chmod 777 /var/www/nginx/sites/$server_name
-    chown -R www-data:www-data /var/www/nginx/sites/$server_name
-
-    # Create nginx configuration
-    cat > "/var/www/nginx/conf.d/$server_name.conf" <<END
-server {
-        client_max_body_size 200M;
-        listen       80;
-        server_name $server_name;
-        root /var/www/nginx/sites/$server_name/public;
-        
-        error_log /var/www/nginx/log/$server_name-error.log warn;
-        access_log /var/www/nginx/log/$server_name-access.log main;
-
-        # Index files
-        index index.html;
-
-        # Handle both /page and /page.html
-        location / {
-            try_files \$uri \$uri.html \$uri/ \$uri/index.html =404;
-        }
-
-        # Custom error pages
-        error_page 404 /404.html;
-        location = /404.html {
-            internal;
-        }
-
-        error_page 500 502 503 504 /50x.html;
-        location = /50x.html {
-            internal;
-        }
-
-        # Deny access to hidden files
-        location ~ /\. {
-            deny all;
-        }
-
-        # Enable gzip compression
-        gzip on;
-        gzip_vary on;
-        gzip_min_length 10240;
-        gzip_proxied expired no-cache no-store private auth;
-        gzip_types text/plain text/css text/xml text/javascript application/javascript application/x-javascript application/xml;
-        gzip_disable "MSIE [1-6]\.";
-}
-
-# Redirect www to non-www
-server {
-    server_name www.$server_name;
-    return 301 \$scheme://$server_name\$request_uri;
-}
-END
-
-    # Create sample index.html
-    cat > "/var/www/nginx/sites/$server_name/public/index.html" <<END
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Welcome to $server_name</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            margin: 40px auto;
-            max-width: 650px;
-            padding: 0 10px;
-        }
-    </style>
-</head>
-<body>
-    <h1>Welcome to $server_name</h1>
-    <p>This is a sample static page. Replace this content with your own HTML files.</p>
-    <p>You can create:</p>
-    <ul>
-        <li>Direct HTML files (example.html)</li>
-        <li>Folders with index.html files (example/index.html)</li>
-    </ul>
-</body>
-</html>
-END
-
-    # Create sample 404 page
-    cat > "/var/www/nginx/sites/$server_name/public/404.html" <<END
-<!DOCTYPE html>
-<html>
-<head>
-    <title>404 - Page Not Found</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            margin: 40px auto;
-            max-width: 650px;
-            padding: 0 10px;
-            text-align: center;
-        }
-    </style>
-</head>
-<body>
-    <h1>404 - Page Not Found</h1>
-    <p>The page you are looking for does not exist.</p>
-</body>
-</html>
-END
-
-    # Restart nginx
-    systemctl restart nginx
-
-    echo "========================================================="
-    echo "Static HTML site has been configured:"
-    echo "- Domain: $server_name"
-    echo "- Root directory: /var/www/nginx/sites/$server_name/public"
-    echo "- Nginx config: /var/www/nginx/conf.d/$server_name.conf"
-    echo ""
-    echo "You can now:"
-    echo "1. Upload .html files directly (they'll be accessible as domain.com/page.html)"
-    echo "2. Create folders with index.html files (they'll be accessible as domain.com/page/)"
-    echo "3. Both domain.com/page and domain.com/page.html will work"
-    echo "========================================================="
-}
-
-function install_nginx_domain_point_internal_port(){
-    echo "========================================================================="
-    echo "Install new nginx domain pointing to internal port"
-    
-    printf "\nEnter your external domain name [ENTER]: " 
-    read server_name
-    
-    printf "\nEnter internal address and port (e.g., http://localhost:5555 or http://192.168.1.2:6666): " 
-    read internal_address
-    
-    # Create nginx configuration directory if it doesn't exist
-    mkdir -p /var/www/nginx/conf.d
-    
-    # Create the nginx configuration file
-    cat > "/var/www/nginx/conf.d/$server_name.conf" <<END
-server {
-    listen 80;
-    server_name $server_name;
-    
-    location / {
-        proxy_pass $internal_address;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-    
-    access_log /var/log/nginx/$server_name.access.log;
-    error_log /var/log/nginx/$server_name.error.log;
-}
-END
-
-    # Reload nginx to apply the new configuration
-    systemctl reload nginx
-
-    echo "========================================================="
-    echo "Nginx proxy configuration complete"
-    echo "External domain: $server_name"
-    echo "Internal address: $internal_address"
-    echo "Configuration file: /var/www/nginx/conf.d/$server_name.conf"
-    echo "Access log: /var/log/nginx/$server_name.access.log"
-    echo "Error log: /var/log/nginx/$server_name.error.log"
-    echo "========================================================="
 }
 
 
@@ -1180,6 +1168,13 @@ function common_configs(){
 	apt update
 	apt -y install wget axel htop tmux rar unrar bpytop
 
+	#cloudflared
+	wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+	sudo dpkg -i cloudflared-linux-amd64.deb
+	cloudflared --version
+	rm -f cloudflared-linux-amd64.deb
+
+
 	echo "Firewall"
 	apt install -y ufw	
 	ufw default deny incoming
@@ -1201,11 +1196,8 @@ menu_options=(
     "Install: PostgreSql 12"
     "Install: MongoDB"
     "Install: Elasticsearch & Kibana"
-    "Add: Domain with NGINX and NetCore"
-    "Add: Nginx proxy for internal port"
-	"Add: Nginx external port proxy"
+    "Add: Nginx Site (Domain/Port + Static/Proxy/.NET)"
     "Deploy: Wordpress & phpMyAdmin"
-    "Add: Domain with Static HTML Pages"
 )
 
 # Function to display menu
@@ -1226,11 +1218,8 @@ function execute_option() {
         4) install_postgres_remote ;;
         5) install_mongodb ;;
         6) install_elastic_kibana ;;
-        7) install_nginx_netcore_domain ;;
-        8) install_nginx_domain_point_internal_port ;;
-		9) install_nginx_netcore_port ;;
-        10) install_wordpress_phpmyadmin ;;
-		11) install_nginx_static_domain ;;
+        7) add_nginx_site ;;
+        8) install_wordpress_phpmyadmin ;;
         *) echo "Invalid option" ;;
     esac
 }
