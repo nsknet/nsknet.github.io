@@ -1173,7 +1173,7 @@ function common_configs(){
 	sudo dpkg -i cloudflared-linux-amd64.deb
 	cloudflared --version
 	rm -f cloudflared-linux-amd64.deb
-
+	
 
 	echo "Firewall"
 	apt install -y ufw	
@@ -1208,7 +1208,7 @@ function display_menu() {
     done
 }
 
-# Function to execute selected option (remains unchanged)
+# Function to execute selected option
 function execute_option() {
     case $1 in
         0) common_configs ;;
@@ -1224,7 +1224,7 @@ function execute_option() {
     esac
 }
 
-# Main menu loop (remains unchanged)
+# Main menu loop
 function main_menu() {
     while true; do
         echo "========================================================================="
