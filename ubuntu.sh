@@ -1166,7 +1166,7 @@ function common_configs(){
 	
 	echo "Common tools"
 	apt update
-	apt -y install wget axel htop tmux rar unrar bpytop
+	apt -y install wget axel htop tmux rar unrar bpytop ncdu
 
 	#cloudflared
 	wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
