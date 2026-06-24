@@ -1,0 +1,306 @@
+/* ===== Design tokens ===== */
+:root {
+  --font-sans: 'Geist', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'JetBrains Mono', monospace;
+
+  /* Light theme (default) */
+  --bg: #ffffff;
+  --bg-elev: #fafafa;
+  --bg-subtle: #f5f5f4;
+  --bg-hover: #f5f5f4;
+  --border: #e7e5e4;
+  --border-strong: #d6d3d1;
+  --text: #0c0a09;
+  --text-2: #57534e;
+  --text-3: #a8a29e;
+  --text-inv: #fafaf9;
+
+  --accent: #f59e0b;
+  --accent-hover: #d97706;
+  --accent-soft: #fef3c7;
+  --accent-fg: #1c1917;
+
+  --ok: #16a34a;
+  --ok-soft: #dcfce7;
+  --warn: #ca8a04;
+  --warn-soft: #fef9c3;
+  --danger: #dc2626;
+  --danger-soft: #fee2e2;
+  --info: #2563eb;
+  --info-soft: #dbeafe;
+  --muted-soft: #f5f5f4;
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+  --shadow-md: 0 4px 14px -2px rgb(0 0 0 / 0.06), 0 2px 4px -2px rgb(0 0 0 / 0.04);
+  --shadow-lg: 0 24px 48px -12px rgb(0 0 0 / 0.18);
+
+  --radius: 8px;
+  --radius-sm: 6px;
+  --radius-lg: 12px;
+
+  /* density */
+  --row-h: 40px;
+  --pad-x: 24px;
+  --pad-y: 20px;
+  --text-base: 14px;
+  --text-sm: 13px;
+  --text-xs: 12px;
+}
+
+.theme-dark {
+  --bg: #0a0a0a;
+  --bg-elev: #111111;
+  --bg-subtle: #18181b;
+  --bg-hover: #1c1c1f;
+  --border: #1f1f23;
+  --border-strong: #2e2e33;
+  --text: #fafafa;
+  --text-2: #a1a1aa;
+  --text-3: #71717a;
+  --text-inv: #0a0a0a;
+
+  --accent-soft: rgba(245, 158, 11, 0.12);
+  --accent-fg: #0a0a0a;
+
+  --ok-soft: rgba(22, 163, 74, 0.14);
+  --warn-soft: rgba(202, 138, 4, 0.14);
+  --danger-soft: rgba(220, 38, 38, 0.14);
+  --info-soft: rgba(37, 99, 235, 0.14);
+  --muted-soft: rgba(255, 255, 255, 0.06);
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.5);
+  --shadow-md: 0 4px 14px -2px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 24px 48px -12px rgb(0 0 0 / 0.7);
+}
+
+/* density variants */
+.density-compact {
+  --row-h: 34px;
+  --pad-x: 18px;
+  --pad-y: 14px;
+  --text-base: 13px;
+  --text-sm: 12px;
+  --text-xs: 11px;
+}
+.density-comfortable {
+  --row-h: 52px;
+  --pad-x: 32px;
+  --pad-y: 28px;
+  --text-base: 15px;
+  --text-sm: 14px;
+  --text-xs: 13px;
+}
+
+/* ===== Base ===== */
+/* Preflight is disabled, so replicate its border reset: without this, Tailwind's
+   `border` utilities set width but leave border-style at the UA default (none /
+   button outset), so card borders vanish and buttons render a beveled edge. */
+*, ::before, ::after {
+  box-sizing: border-box;
+  border-width: 0;
+  border-style: solid;
+  border-color: var(--border);
+}
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'cv11', 'ss01';
+  line-height: 1.5;
+  letter-spacing: -0.005em;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+header, nav, main, button, input, textarea, select, .rail-btn, div, span, table, tr, td, th {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+.mono { font-family: var(--font-mono); font-feature-settings: normal; }
+button { font-family: inherit; cursor: pointer; }
+input, textarea, select { font-family: inherit; font-size: inherit; color: inherit; }
+::selection { background: var(--accent); color: var(--accent-fg); }
+
+/* ===== Sidebar (collapsible rail) ===== */
+.sidebar-grid {
+  transition: grid-template-columns 200ms ease;
+}
+
+/* ===== Rail buttons (pseudo-element tooltip + active marker — not expressible as utilities) ===== */
+.rail-btn {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  border: 1px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+/* Expanded (wide) rail — icon + label aligned left, label fades in */
+.rail-btn--wide {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 0 10px;
+  overflow: hidden;
+}
+.rail-btn .rail-label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  animation: rail-label-in 160ms ease;
+}
+@keyframes rail-label-in {
+  from { opacity: 0; transform: translateX(-4px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.rail-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.rail-btn.active {
+  background: var(--bg-subtle);
+  color: var(--text);
+  border-color: var(--border);
+}
+.rail-btn.active::before {
+  content: '';
+  position: absolute;
+  left: -10px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+/* Wide button clips overflow, so anchor the active marker just inside */
+.rail-btn--wide.active::before {
+  left: 0;
+}
+.rail-btn svg { width: 18px; height: 18px; }
+.rail-btn[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 6px 10px;
+  background: var(--text);
+  color: var(--text-inv);
+  font-size: var(--text-xs);
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 999;
+  box-shadow: var(--shadow-md);
+}
+
+/* ===== Form input (focus ring + select caret + density height — kept as a primitive) ===== */
+.input {
+  height: 36px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 12px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 120ms, box-shadow 120ms;
+  width: 100%;
+}
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent);
+}
+textarea.input { padding: 10px 12px; height: auto; resize: vertical; min-height: 100px; }
+.input.mono { font-family: var(--font-mono); }
+select.input { appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a8a29e' stroke-width='2'><polyline points='6 9 12 15 18 9'/></svg>"); background-repeat: no-repeat; background-position: right 10px center; background-size: 14px; padding-right: 30px; }
+
+/* ===== Tables (descendant selectors — putting utilities on every cell would be worse) ===== */
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.tbl th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-3);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev);
+  white-space: nowrap;
+}
+.tbl td {
+  padding: 0 14px;
+  height: var(--row-h);
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  white-space: nowrap;
+  color: var(--text);
+}
+.tbl tr:last-child td { border-bottom: 0; }
+.tbl tr.row-click { cursor: pointer; }
+.tbl tr.row-click:hover { background: var(--bg-hover); }
+.tbl td.num { font-variant-numeric: tabular-nums; }
+.tbl td.muted { color: var(--text-2); }
+.tbl td.mono { font-family: var(--font-mono); font-size: var(--text-xs); }
+
+/* ===== Progress bar (child selector + transition) ===== */
+.bar {
+  margin-top: 12px;
+  height: 4px;
+  background: var(--bg-subtle);
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+}
+.bar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 240ms ease;
+}
+.bar.bar-ok > span { background: var(--ok); }
+.bar.bar-warn > span { background: var(--warn); }
+.bar.bar-danger > span { background: var(--danger); }
+
+/* ===== Sparkline (SVG descendants) ===== */
+.spark { width: 100%; height: 32px; margin-top: 12px; }
+.spark path { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+.spark .area { fill: var(--accent); opacity: 0.10; stroke: none; }
+
+/* ===== Terminal (dark content surface with per-token colors) ===== */
+.term {
+  flex: 1;
+  background: #08080a;
+  color: #d4d4d8;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  padding: 14px 16px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.theme-dark .term { background: #050507; }
+.term .ln { display: block; min-height: 1.55em; }
+.term .info { color: #a1a1aa; }
+.term .ok { color: #4ade80; }
+.term .warn { color: #fbbf24; }
+.term .err { color: #fb7185; }
+.term .cmd { color: var(--accent); }
+.term .dim { color: #52525b; }
+
+/* ===== Scrollbars ===== */
+.term::-webkit-scrollbar, .content::-webkit-scrollbar { width: 10px; height: 10px; }
+.term::-webkit-scrollbar-thumb, .content::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; }
+.term::-webkit-scrollbar-track, .content::-webkit-scrollbar-track { background: transparent; }

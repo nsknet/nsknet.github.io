@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NsPanel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      corePlugins: { preflight: false },
+      theme: {
+        extend: {
+          colors: {
+            'c-bg':       'var(--bg)',
+            'c-elev':     'var(--bg-elev)',
+            'c-subtle':   'var(--bg-subtle)',
+            'c-hover':    'var(--bg-hover)',
+            'c-border':   'var(--border)',
+            'c-bstrong':  'var(--border-strong)',
+            'c-tx':       'var(--text)',
+            'c-tx2':      'var(--text-2)',
+            'c-tx3':      'var(--text-3)',
+            'c-txinv':    'var(--text-inv)',
+            'c-accent':   'var(--accent)',
+            'c-achover':  'var(--accent-hover)',
+            'c-acsoft':   'var(--accent-soft)',
+            'c-acfg':     'var(--accent-fg)',
+            'c-muted':    'var(--muted-soft)',
+            'c-ok':       'var(--ok)',
+            'c-oksoft':   'var(--ok-soft)',
+            'c-info':     'var(--info)',
+            'c-infosoft': 'var(--info-soft)',
+            'c-warn':     'var(--warn)',
+            'c-warnsoft': 'var(--warn-soft)',
+            'c-danger':   'var(--danger)',
+            'c-dngsoft':  'var(--danger-soft)',
+          },
+          borderRadius: {
+            'theme':    'var(--radius)',
+            'theme-sm': 'var(--radius-sm)',
+            'theme-lg': 'var(--radius-lg)',
+          },
+          boxShadow: {
+            'sm': 'var(--shadow-sm)',
+            'md': 'var(--shadow-md)',
+            'lg': 'var(--shadow-lg)',
+          },
+          fontSize: {
+            'base-var': 'var(--text-base)',
+            'sm-var':   'var(--text-sm)',
+            'xs-var':   'var(--text-xs)',
+          },
+          keyframes: {
+            fade:    { from: { opacity: '0' }, to: { opacity: '1' } },
+            pop:     { from: { transform: 'translateY(8px) scale(0.98)', opacity: '0' }, to: { transform: 'none', opacity: '1' } },
+            slidein: { from: { opacity: '0', transform: 'translateX(20px)' }, to: { opacity: '1', transform: 'none' } },
+          },
+          animation: {
+            fade:    'fade 140ms ease',
+            pop:     'pop 160ms cubic-bezier(.2,.7,.2,1)',
+            slidein: 'slidein 180ms cubic-bezier(.2,.7,.2,1)',
+          },
+        },
+      },
+    };
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- CDN libraries loaded before the ES module so Vue is available as a global -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://unpkg.com/lucide@0.461.0/dist/umd/lucide.min.js"></script>
+</head>
+<body class="theme-light density-comfortable">
+
+<!-- Vue mounts here; root template is defined as a string in app.js -->
+<div id="app"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
