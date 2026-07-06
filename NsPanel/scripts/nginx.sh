@@ -206,6 +206,68 @@ install_ssl_domain() {
     echo "✔  SSL certificate issued for ${domain}."
 }
 
+# register_site_ssl <name> <domain>
+# Issues a Let's Encrypt certificate via the certbot nginx plugin (installing
+# certbot on first use) and links the live cert into the site's ssl/ dir.
+# Best-effort: callers guard the call with `|| echo` so a validation failure
+# (bad DNS, port 80 unreachable) never rolls back an otherwise healthy site.
+register_site_ssl() {
+    local name="$1" domain="$2"
+    local ssl_dir="/var/www/nginx/sites/${name}/ssl"
+
+    echo "▶  Requesting Let's Encrypt certificate for ${domain}..."
+
+    if ! command -v certbot &>/dev/null; then
+        echo "▶  Installing certbot (first run)..."
+        apt-get update -q
+        apt-get install -y certbot python3-certbot-nginx
+        # Auto-renew twice daily unless a renew job already exists
+        (crontab -l 2>/dev/null | grep -q 'certbot renew') || \
+            (crontab -l 2>/dev/null; echo "0 0,12 * * * certbot renew --quiet") | crontab -
+    elif ! certbot plugins --non-interactive 2>/dev/null | grep -q nginx; then
+        # certbot exists (e.g. installed standalone earlier) but lacks the
+        # nginx authenticator/installer plugin.
+        echo "▶  certbot found but nginx plugin missing — installing python3-certbot-nginx..."
+        apt-get install -y python3-certbot-nginx
+        if ! certbot plugins --non-interactive 2>/dev/null | grep -q nginx; then
+            echo "✗  nginx plugin still unavailable (certbot may be a snap build without it)." >&2
+            echo "   Try: snap install certbot --classic  (or remove the old certbot and rerun)" >&2
+            return 1
+        fi
+    fi
+
+    # The nginx plugin finds the server block by server_name, validates over
+    # HTTP-01, then rewrites the vhost for 443 + HTTP→HTTPS redirect.
+    if ! certbot --nginx --non-interactive --agree-tos --register-unsafely-without-email \
+        --redirect -d "$domain"; then
+        echo "✗  certbot failed for ${domain} — check that DNS points to this server and port 80 is reachable." >&2
+        return 1
+    fi
+
+    # www.<domain> is best-effort — only attempt it when the record actually
+    # resolves, so a missing www record doesn't produce an alarming (but
+    # harmless) certbot authentication failure in the logs.
+    if getent hosts "www.${domain}" >/dev/null 2>&1; then
+        certbot --nginx --non-interactive --agree-tos --register-unsafely-without-email \
+            --expand -d "$domain" -d "www.${domain}" \
+            || echo "  (www.${domain} skipped — validation failed)"
+    else
+        echo "  (www.${domain} skipped — no DNS record)"
+    fi
+
+    # Convenience symlinks: certbot renews in place under /etc/letsencrypt/live,
+    # so these links always point at the current certificate.
+    local live="/etc/letsencrypt/live/${domain}"
+    if [[ -d "$live" ]]; then
+        mkdir -p "$ssl_dir"
+        ln -sfn "${live}/fullchain.pem" "${ssl_dir}/fullchain.pem"
+        ln -sfn "${live}/privkey.pem"   "${ssl_dir}/privkey.pem"
+        echo "▶  Certificate linked at ${ssl_dir}/"
+    fi
+
+    echo "✔  HTTPS enabled for ${domain}."
+}
+
 # ── Add Nginx site ─────────────────────────────────────────────────────────────
 add_nginx_site() {
     echo "════════════════════════════════════════════════════════════"
@@ -395,7 +457,7 @@ server {
     location / {
         proxy_pass ${target};
         proxy_redirect          off;
-        proxy_set_header Host              \$host;
+        proxy_set_header Host              \$http_host;
         proxy_set_header X-Real-IP         \$remote_addr;
         proxy_set_header X-Forwarded-For   \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
@@ -520,9 +582,9 @@ UNIT
 # These functions are fully non-interactive and write an info.yml that the
 # Python panel uses to discover and display the site.
 
-# add_static_site <name> <kind:port|domain> <value>
+# add_static_site <name> <kind:port|domain> <value> [ssl]
 add_static_site() {
-    local name="$1" kind="$2" value="$3"
+    local name="$1" kind="$2" value="$3" want_ssl="${4:-}"
     local site_dir="/var/www/nginx/sites/${name}"
     echo "▶  Creating static site '${name}' [${kind}:${value}]..."
 
@@ -563,12 +625,18 @@ YAML
         echo "✗  nginx config test failed — site not activated." >&2
         return 1
     fi
+
+    if [[ "$kind" == "domain" && "$want_ssl" == "ssl" ]]; then
+        register_site_ssl "$name" "$value" \
+            || echo "⚠  SSL setup failed — site is live over HTTP; fix DNS and retry certbot later." >&2
+    fi
+
     echo "✔  Static site '${name}' ready."
 }
 
-# add_proxy_site <name> <kind:port|domain> <value> <target>
+# add_proxy_site <name> <kind:port|domain> <value> <target> [ssl]
 add_proxy_site() {
-    local name="$1" kind="$2" value="$3" target="$4"
+    local name="$1" kind="$2" value="$3" target="$4" want_ssl="${5:-}"
     local site_dir="/var/www/nginx/sites/${name}"
     echo "▶  Creating proxy site '${name}' → ${target} [${kind}:${value}]..."
 
@@ -609,12 +677,18 @@ YAML
         echo "✗  nginx config test failed — site not activated." >&2
         return 1
     fi
+
+    if [[ "$kind" == "domain" && "$want_ssl" == "ssl" ]]; then
+        register_site_ssl "$name" "$value" \
+            || echo "⚠  SSL setup failed — site is live over HTTP; fix DNS and retry certbot later." >&2
+    fi
+
     echo "✔  Proxy site '${name}' ready."
 }
 
-# add_dotnet_site <name> <kind:port|domain> <value> <dll> <internal_port> [aspnetcore_env]
+# add_dotnet_site <name> <kind:port|domain> <value> <dll> <internal_port> [aspnetcore_env] [ssl]
 add_dotnet_site() {
-    local name="$1" kind="$2" value="$3" dll="${4%.dll}" internal_port="$5" aspnetcore_env="${6:-Production}"
+    local name="$1" kind="$2" value="$3" dll="${4%.dll}" internal_port="$5" aspnetcore_env="${6:-Production}" want_ssl="${7:-}"
     local site_dir="/var/www/nginx/sites/${name}"
     local internal_addr="http://127.0.0.1:${internal_port}"
     echo "▶  Creating .NET site '${name}' (${dll}.dll → :${internal_port}) [${kind}:${value}]..."
@@ -664,6 +738,12 @@ YAML
         echo "✗  nginx config test failed — check above." >&2
         return 1
     fi
+
+    if [[ "$kind" == "domain" && "$want_ssl" == "ssl" ]]; then
+        register_site_ssl "$name" "$value" \
+            || echo "⚠  SSL setup failed — site is live over HTTP; fix DNS and retry certbot later." >&2
+    fi
+
     echo "✔  .NET site '${name}' ready. Service registered in /var/www/services/."
 }
 

@@ -69,6 +69,7 @@ def get_site_status(info: dict, nginx_ok: bool | None = None) -> dict:
             "inactive": "stopped",
         }.get(state, "unknown")
         return {"state": state, "badge": badge, "pid": pid,
+                "enabled": services.service_enabled(name),
                 "memory_mb": memory_mb, "cpu_percent": cpu_percent}
 
     # static / proxy: OK if the nginx conf exists and nginx -t passes globally.

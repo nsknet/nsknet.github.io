@@ -28,6 +28,7 @@ export const SiteDetail = {
         rows.push({ k: 'DLL',           v: s.dll || '—',          mono: true });
         rows.push({ k: 'Internal port', v: String(s.internalPort || '—'), mono: true });
         rows.push({ k: 'Environment',   v: s.env || '—',          mono: true });
+        rows.push({ k: 'Autostart',     v: s.autostart || '—',    mono: true });
       }
       if (s.type === 'proxy') {
         rows.push({ k: 'Proxy target', v: s.proxyTarget || '—', mono: true });
@@ -177,19 +178,36 @@ export const SiteDetail = {
           </div>
           <div class="text-sm-var text-c-tx2 mono mt-1">{{ site.access }}</div>
         </div>
-        <div class="flex flex-wrap gap-2 w-full lg:w-auto">
-          <btn variant="success" @click="runJobAction('/api/v1/sites/' + site.name + '/reload-nginx', {}, 'Reloading Nginx')">
-            <l-icon name="refresh-cw" /> Reload Nginx
-          </btn>
-          <btn variant="warn" v-if="site.type === 'dotnet'" @click="runJobAction('/api/v1/sites/' + site.name + '/restart', {}, 'Restarting service')">
-            <l-icon name="rotate-ccw" /> Restart service
-          </btn>
-          <btn variant="info" @click="viewConfig">
-            <l-icon name="file-text" /> Show config
-          </btn>
-          <btn variant="info" @click="viewLogs">
-            <l-icon name="terminal" /> Tail logs
-          </btn>
+        <div class="flex flex-col gap-2 w-full lg:w-auto lg:items-end">
+          <div class="flex flex-wrap gap-2">
+            <btn variant="success" @click="runJobAction('/api/v1/sites/' + site.name + '/reload-nginx', {}, 'Reloading Nginx')">
+              <l-icon name="refresh-cw" /> Reload Nginx
+            </btn>
+            <btn variant="info" @click="viewConfig">
+              <l-icon name="file-text" /> Show config
+            </btn>
+            <btn variant="info" @click="viewLogs">
+              <l-icon name="terminal" /> Tail logs
+            </btn>
+          </div>
+          <div v-if="site.type === 'dotnet'" class="flex flex-wrap gap-2">
+            <btn variant="success" :disabled="site.status === 'running'" @click="runJobAction('/api/v1/sites/' + site.name + '/start', {}, 'Starting service')">
+              <l-icon name="play" /> Start
+            </btn>
+            <btn variant="danger" :disabled="site.status === 'stopped'" @click="runJobAction('/api/v1/sites/' + site.name + '/stop', {}, 'Stopping service')">
+              <l-icon name="square" /> Stop
+            </btn>
+            <btn variant="warn" @click="runJobAction('/api/v1/sites/' + site.name + '/restart', {}, 'Restarting service')">
+              <l-icon name="rotate-ccw" /> Restart
+            </btn>
+            <div class="hidden sm:block w-px bg-c-border mx-1 self-stretch"></div>
+            <btn variant="success" :disabled="site.autostart === 'enabled'" @click="runJobAction('/api/v1/sites/' + site.name + '/enable', {}, 'Enabling service')">
+              <l-icon name="check-circle" /> Enable
+            </btn>
+            <btn variant="danger" :disabled="site.autostart === 'disabled'" @click="runJobAction('/api/v1/sites/' + site.name + '/disable', {}, 'Disabling service')">
+              <l-icon name="ban" /> Disable
+            </btn>
+          </div>
         </div>
       </div>
 

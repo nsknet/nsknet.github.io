@@ -43,6 +43,12 @@ def is_active(service: str) -> bool:
     return service_state(service) == "active"
 
 
+def service_enabled(service: str) -> str:
+    """Returns systemctl's word: enabled | disabled | static | unknown ..."""
+    _, out = run(["systemctl", "is-enabled", service])
+    return first_line(out) or "unknown"
+
+
 def main_pid(service: str) -> int | None:
     _, out = run(["systemctl", "show", "-p", "MainPID", "--value", service])
     try:

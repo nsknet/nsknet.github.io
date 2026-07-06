@@ -352,6 +352,7 @@ export async function fetchSamples(query = "", specificApis = null) {
             access: accessStr,
             status: site.status.badge || 'ok',
             pid: site.status.pid,
+            autostart: site.status.enabled || null,
             mem: site.status.memory_mb != null ? site.status.memory_mb : null,
             cpu: site.status.cpu_percent != null ? site.status.cpu_percent : null,
             modified: site.last_modified,

@@ -31,19 +31,26 @@ const SCREENS = {
   'tasks': TaskManager,
 };
 
+// Each crumb: { label, screen? } — crumbs with a `screen` navigate on click.
 const CRUMBS = {
-  'dashboard': () => ['Dashboard'],
-  'sites': () => ['Sites'],
-  'site-detail': () => ['Sites', MOCK.sites.find((x) => x.slug === appState.selectedSiteSlug)?.name || 'Site'],
-  'create-site': () => ['Sites', 'New site'],
-  'dns': () => ['DNS'],
-  'system': () => ['System'],
-  'firewall': () => ['Firewall'],
-  'services': () => ['Services'],
-  'service-detail': () => ['Services', appState.selectedServiceName || 'Service'],
-  'tools': () => ['Tools'],
-  'tasks': () => ['Task manager'],
-  'logs': () => ['Audit logs'],
+  'dashboard': () => [{ label: 'Dashboard' }],
+  'sites': () => [{ label: 'Sites' }],
+  'site-detail': () => [
+    { label: 'Sites', screen: 'sites' },
+    { label: MOCK.sites.find((x) => x.slug === appState.selectedSiteSlug)?.name || 'Site' },
+  ],
+  'create-site': () => [{ label: 'Sites', screen: 'sites' }, { label: 'New site' }],
+  'dns': () => [{ label: 'DNS' }],
+  'system': () => [{ label: 'System' }],
+  'firewall': () => [{ label: 'Firewall' }],
+  'services': () => [{ label: 'Services' }],
+  'service-detail': () => [
+    { label: 'Services', screen: 'services' },
+    { label: appState.selectedServiceName || 'Service' },
+  ],
+  'tools': () => [{ label: 'Tools' }],
+  'tasks': () => [{ label: 'Task manager' }],
+  'logs': () => [{ label: 'Audit logs' }],
 };
 
 const NAV_KEYS = ['dashboard', 'system', 'firewall', 'sites', 'dns', 'services', 'tools', 'logs', 'tasks'];
@@ -70,7 +77,7 @@ function applyThemeVars() {
 const App = {
   setup() {
     const currentScreenComp = computed(() => SCREENS[appState.currentScreen] || Dashboard);
-    const crumbs = computed(() => (CRUMBS[appState.currentScreen] || (() => [appState.currentScreen]))());
+    const crumbs = computed(() => (CRUMBS[appState.currentScreen] || (() => [{ label: appState.currentScreen }]))());
     const railKey = computed(() => currentRailKey());
 
     function isRailActive(key) { return railKey.value === key; }
@@ -147,10 +154,17 @@ const App = {
       <div class="flex flex-col min-w-0 h-screen overflow-hidden">
         <header class="h-12 border-b border-c-border flex items-center px-[var(--pad-x)] gap-3 shrink-0 bg-c-bg">
           <nav class="flex items-center gap-2 text-sm-var text-c-tx2" aria-label="Breadcrumb">
+            <a class="inline-flex items-center cursor-pointer text-c-tx3 hover:text-c-tx transition-colors" aria-label="Dashboard" title="Dashboard" @click="navigate('dashboard')">
+              <l-icon name="house" is="width:14px;height:14px" />
+            </a>
+            <span class="text-c-tx3">/</span>
             <template v-for="(crumb, i) in crumbs" :key="i">
-              <span v-if="i < crumbs.length - 1">{{ crumb }}</span>
-              <span v-if="i < crumbs.length - 1" class="text-c-tx3">/</span>
-              <span v-else class="text-c-tx font-medium">{{ crumb }}</span>
+              <template v-if="i < crumbs.length - 1">
+                <a v-if="crumb.screen" class="cursor-pointer hover:text-c-tx hover:underline underline-offset-2 transition-colors" @click="navigate(crumb.screen)">{{ crumb.label }}</a>
+                <span v-else>{{ crumb.label }}</span>
+                <span class="text-c-tx3">/</span>
+              </template>
+              <span v-else class="text-c-tx font-medium">{{ crumb.label }}</span>
             </template>
           </nav>
           <div class="ml-auto flex items-center gap-2">

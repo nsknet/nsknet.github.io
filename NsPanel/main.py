@@ -30,6 +30,10 @@ def _print_banner() -> None:
         "Tunnel",
         Text("ssh -L 7777:localhost:7777 user@server", style="dim"),
     )
+    info.add_row(
+        "Note",
+        Text("If startup fails (port blocked), run: fuser -k 7777/tcp", style="dim"),
+    )
 
     console.print(
         Panel(info, title="[bold]VPS Admin Panel[/bold]", box=box.DOUBLE_EDGE, expand=False)

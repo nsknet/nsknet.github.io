@@ -33,6 +33,7 @@ async def sites_create(
     dll_name: str = Form(""),
     internal_port: str = Form(""),
     aspnetcore_env: str = Form("Production"),
+    auto_ssl: str = Form("false"),
 ):
     access_kind = access_kind.strip()
     access_value = access_value.strip()
@@ -57,13 +58,17 @@ async def sites_create(
     if sites_feature.read_info(name) is not None:
         raise HTTPException(status_code=400, detail=f"A site named '{name}' already exists.")
 
+    # SSL registration only makes sense for domain-bound sites.
+    want_ssl = access_kind == "domain" and auto_ssl.strip().lower() in ("true", "1", "yes", "on")
+    ssl_args = ["ssl"] if want_ssl else []
+
     if backend == "static":
-        cmd = bash_invoker.build_cmd("add_static_site", name, access_kind, access_value)
+        cmd = bash_invoker.build_cmd("add_static_site", name, access_kind, access_value, *ssl_args)
     elif backend == "proxy":
         target = proxy_target.strip()
         if not _PROXY_RE.match(target):
             raise HTTPException(status_code=400, detail="Proxy target must be http(s)://host:port.")
-        cmd = bash_invoker.build_cmd("add_proxy_site", name, access_kind, access_value, target)
+        cmd = bash_invoker.build_cmd("add_proxy_site", name, access_kind, access_value, target, *ssl_args)
     else:  # dotnet
         dll = dll_name.strip()
         if dll.lower().endswith(".dll"):
@@ -77,12 +82,12 @@ async def sites_create(
         if aspenv not in _ASPENV_ALLOWED:
             raise HTTPException(status_code=400, detail="Invalid ASP.NET Core environment.")
         cmd = bash_invoker.build_cmd(
-            "add_dotnet_site", name, access_kind, access_value, dll, internal, aspenv
+            "add_dotnet_site", name, access_kind, access_value, dll, internal, aspenv, *ssl_args
         )
 
     job_id = runner.create_job(cmd, label=f"Create site {name}")
     runner.start_job(job_id)
-    audit.log("site.create", f"name={name} backend={backend} access={access_kind}:{access_value} job={job_id}")
+    audit.log("site.create", f"name={name} backend={backend} access={access_kind}:{access_value} ssl={want_ssl} job={job_id}")
 
     return {
         "status": "success",
@@ -99,13 +104,19 @@ def get_site(name: str):
     return info
 
 
-@router.post("/{name}/restart")
-def site_restart(name: str):
+def _dotnet_site_or_error(name: str) -> dict:
+    """The site's info dict if it exists and is a .NET site, else raise."""
     info = sites_feature.read_info(name)
     if info is None:
         raise HTTPException(status_code=404, detail=f"Site '{name}' not found.")
     if info.get("type") != "dotnet":
-        raise HTTPException(status_code=400, detail="Only .NET sites have a service to restart.")
+        raise HTTPException(status_code=400, detail="Only .NET sites have a service to control.")
+    return info
+
+
+@router.post("/{name}/restart")
+def site_restart(name: str):
+    _dotnet_site_or_error(name)
     job_id = runner.create_job(["systemctl", "restart", name], label=f"Restart {name}")
     runner.start_job(job_id)
     audit.log("site.restart", f"name={name} job={job_id}")
@@ -113,6 +124,60 @@ def site_restart(name: str):
         "status": "success",
         "job_id": job_id,
         "title": f"Restarting '{name}'"
+    }
+
+
+@router.post("/{name}/start")
+def site_start(name: str):
+    _dotnet_site_or_error(name)
+    job_id = runner.create_job(["systemctl", "start", name], label=f"Start {name}")
+    runner.start_job(job_id)
+    audit.log("site.start", f"name={name} job={job_id}")
+    return {
+        "status": "success",
+        "job_id": job_id,
+        "title": f"Starting '{name}'"
+    }
+
+
+@router.post("/{name}/stop")
+def site_stop(name: str):
+    _dotnet_site_or_error(name)
+    job_id = runner.create_job(["systemctl", "stop", name], label=f"Stop {name}")
+    runner.start_job(job_id)
+    audit.log("site.stop", f"name={name} job={job_id}")
+    return {
+        "status": "success",
+        "job_id": job_id,
+        "title": f"Stopping '{name}'"
+    }
+
+
+@router.post("/{name}/enable")
+def site_enable(name: str):
+    info = _dotnet_site_or_error(name)
+    unit = (info.get("paths") or {}).get("systemd_unit") or f"/var/www/services/{name}.service"
+    cmd = ["bash", "-c", f"systemctl daemon-reload && systemctl enable {unit}"]
+    job_id = runner.create_job(cmd, label=f"Enable {name}")
+    runner.start_job(job_id)
+    audit.log("site.enable", f"name={name} job={job_id}")
+    return {
+        "status": "success",
+        "job_id": job_id,
+        "title": f"Enabling '{name}'"
+    }
+
+
+@router.post("/{name}/disable")
+def site_disable(name: str):
+    _dotnet_site_or_error(name)
+    job_id = runner.create_job(["systemctl", "disable", name], label=f"Disable {name}")
+    runner.start_job(job_id)
+    audit.log("site.disable", f"name={name} job={job_id}")
+    return {
+        "status": "success",
+        "job_id": job_id,
+        "title": f"Disabling '{name}'"
     }
 
 

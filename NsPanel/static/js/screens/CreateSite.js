@@ -8,6 +8,8 @@ export const CreateSite = {
     const channel = ref('domain');
     const backend = ref('proxy');
 
+    const autoSsl  = ref(false);
+
     const domain   = ref('app.acme.io');
     const port     = ref('7842');
     const siteName = ref('');
@@ -50,6 +52,7 @@ export const CreateSite = {
         dll_name: dll.value,
         internal_port: internal.value,
         aspnetcore_env: env.value,
+        auto_ssl: channel.value === 'domain' && autoSsl.value ? 'true' : 'false',
       }, `Creating site ${resolvedName}`, () => {
         setTimeout(() => navigate('site-detail', { selectedSiteSlug: resolvedName }), 500);
       });
@@ -58,7 +61,7 @@ export const CreateSite = {
     onMounted(() => nextTick(() => window.lucide?.createIcons()));
 
     return {
-      channel, backend, domain, port, siteName, proxy, dll, internal, env,
+      channel, backend, domain, port, siteName, proxy, dll, internal, env, autoSsl,
       showDomain, showPort, showProxy, showDotnet,
       randomPort, cleanDll, submit, navigate,
     };
@@ -98,6 +101,14 @@ export const CreateSite = {
           <input id="i-domain" class="input mono" placeholder="example.com" v-model="domain" />
           <div class="text-xs-var text-c-tx2">Used as the logical site identifier and the Nginx <span class="mono">server_name</span>.</div>
         </div>
+
+        <label v-if="showDomain" :class="['flex items-start gap-3 py-3 px-3.5 border rounded-theme-sm cursor-pointer transition-colors select-none', autoSsl ? 'border-c-accent bg-[color-mix(in_oklab,var(--accent)_6%,var(--bg))]' : 'border-c-border bg-c-bg hover:border-c-bstrong']">
+          <input type="checkbox" v-model="autoSsl" class="mt-0.5 w-4 h-4 accent-c-accent rounded shrink-0" />
+          <span class="flex flex-col gap-1">
+            <span class="flex items-center gap-2 text-sm-var font-medium"><l-icon name="lock" :is="'width:14px;height:14px;color:' + (autoSsl ? 'var(--accent)' : 'var(--text-2)')" /> Auto-register SSL certificate</span>
+            <span class="text-xs-var text-c-tx2">Issues a free Let's Encrypt certificate via certbot (ACME) right after the site is created, enables HTTPS with an HTTP→HTTPS redirect, and links the cert into <span class="mono">sites/&lt;domain&gt;/ssl/</span>. The domain's DNS must already point to this server.</span>
+          </span>
+        </label>
 
         <template v-if="showPort">
           <div class="flex flex-col gap-1.5">
