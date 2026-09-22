@@ -476,9 +476,16 @@ WantedBy=multi-user.target`;
               deletes the tunnel if nothing else uses it, then removes the local unit file. This cannot be undone.
             </div>
             <div class="flex flex-col gap-1">
-              <label for="tun-del-token" class="text-sm-var font-medium text-c-tx">Cloudflare API token</label>
+              <div class="flex items-center justify-between">
+                <label for="tun-del-token" class="text-sm-var font-medium text-c-tx">Cloudflare API token</label>
+                <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener noreferrer"
+                  class="text-[11px] text-c-accent hover:underline inline-flex items-center gap-1 font-medium">
+                  <span>Get token</span>
+                  <l-icon name="external-link" is="width:11px;height:11px" />
+                </a>
+              </div>
               <input id="tun-del-token" type="password" class="input mono" placeholder="Paste API token" v-model="tunnelDeleteToken" autocomplete="off" required autofocus />
-              <pre class="m-0 mt-1 px-2.5 py-2 text-[10px] leading-snug text-c-tx2 bg-c-subtle border border-c-border rounded font-mono whitespace-pre-wrap break-all">{{ TOKEN_HELP }}</pre>
+              <cloudflare-token-help note="Used once to delete the tunnel — not stored on the server." />
             </div>
             <div class="flex justify-end gap-2 mt-1">
               <btn type="button" @click="showTunnelDelete = false" :disabled="tunnelDeleteSubmitting">Cancel</btn>

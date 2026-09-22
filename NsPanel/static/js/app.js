@@ -1,6 +1,6 @@
 import { appState, MOCK, navigate, openSite, addToast, openOverlay, confirmThen, currentRailKey, syncHashToState, fetchSamples } from './store.js';
 import { LIcon, StatusBadge, TypeChip, Btn, Badge } from './utils.js';
-import { OverlayModal, ConfirmDialog, InstallDialog, NetworkDialog, ToastList } from './components.js';
+import { OverlayModal, ConfirmDialog, InstallDialog, NetworkDialog, ToastList, CloudflareTokenHelp } from './components.js';
 import { Dashboard } from './screens/Dashboard.js';
 import { Sites } from './screens/Sites.js';
 import { SiteDetail } from './screens/SiteDetail.js';
@@ -225,6 +225,7 @@ app.component('confirm-dialog', ConfirmDialog);
 app.component('install-dialog', InstallDialog);
 app.component('network-dialog', NetworkDialog);
 app.component('toast-list', ToastList);
+app.component('cloudflare-token-help', CloudflareTokenHelp);
 
 // Sync hash router
 window.addEventListener('hashchange', syncHashToState);

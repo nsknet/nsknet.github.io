@@ -270,10 +270,16 @@ export const Services = {
 
           <form class="p-4 flex flex-col gap-3.5 animate-fade" @submit="submitTunnel">
             <div class="flex flex-col gap-1">
-              <label for="tun-token" class="text-sm-var font-medium text-c-tx">Cloudflare API token</label>
+              <div class="flex items-center justify-between">
+                <label for="tun-token" class="text-sm-var font-medium text-c-tx">Cloudflare API token</label>
+                <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener noreferrer"
+                  class="text-[11px] text-c-accent hover:underline inline-flex items-center gap-1 font-medium">
+                  <span>Get token</span>
+                  <l-icon name="external-link" is="width:11px;height:11px" />
+                </a>
+              </div>
               <input id="tun-token" type="password" class="input mono" placeholder="Paste API token" v-model="tunnelForm.api_token" autocomplete="off" required autofocus />
-              <pre class="m-0 mt-1 px-2.5 py-2 text-[10px] leading-snug text-c-tx2 bg-c-subtle border border-c-border rounded font-mono whitespace-pre-wrap break-all">{{ TOKEN_HELP }}</pre>
-              <div class="text-[10px] text-c-tx3">Used once to create the tunnel — not stored on the server.</div>
+              <cloudflare-token-help note="Used once to create the tunnel — not stored on the server." />
             </div>
 
             <div class="flex flex-col gap-1">

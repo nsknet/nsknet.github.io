@@ -501,4 +501,65 @@ export const ToastList = {
   `,
 };
 
+// ============ Cloudflare Token Help ============
+export const CloudflareTokenHelp = {
+  name: 'CloudflareTokenHelp',
+  props: {
+    note: {
+      type: String,
+      default: 'Used once — not stored on the server.'
+    }
+  },
+  setup() {
+    const open = ref(false);
+    function toggle() {
+      open.value = !open.value;
+      nextTick(() => window.lucide?.createIcons());
+    }
+    return { open, toggle };
+  },
+  template: `
+    <div class="flex flex-col gap-1.5 mt-0.5">
+      <div class="flex items-center justify-between text-[11px] text-c-tx3 flex-wrap gap-1">
+        <span>{{ note }}</span>
+        <button type="button" @click="toggle"
+          class="text-c-tx2 hover:text-c-tx inline-flex items-center gap-1 transition-colors cursor-pointer select-none bg-transparent border-0 p-0 text-[11px]">
+          <l-icon name="info" is="width:11px;height:11px" />
+          <span>{{ open ? 'Hide requirements' : 'Required permissions' }}</span>
+          <l-icon :name="open ? 'chevron-up' : 'chevron-down'" is="width:11px;height:11px" />
+        </button>
+      </div>
+
+      <div v-if="open" class="p-2.5 rounded-lg bg-c-subtle border border-c-border text-[11px] flex flex-col gap-2 animate-fade">
+        <div class="flex items-start gap-1.5 text-c-tx2">
+          <l-icon name="key-round" is="width:13px;height:13px;color:var(--accent);margin-top:2px;flex-shrink:0" />
+          <div class="leading-relaxed">
+            Create at <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener noreferrer" class="text-c-accent hover:underline font-medium">dash.cloudflare.com</a>:
+            <span class="text-c-tx font-medium">API Tokens</span> &rarr;
+            <span class="text-c-tx font-medium">Create Token</span> &rarr;
+            <span class="text-c-tx font-medium">Create Custom Token</span>
+          </div>
+        </div>
+        <div>
+          <div class="text-[10px] font-medium uppercase tracking-[0.05em] text-c-tx3 mb-1">Required Permissions</div>
+          <div class="flex flex-col gap-1">
+            <div class="flex items-center justify-between px-2.5 py-1 rounded bg-c-bg border border-c-border">
+              <span class="text-c-tx2"><span class="font-medium text-c-tx">Account</span> &rsaquo; Cloudflare Tunnel</span>
+              <span class="mono text-[10px] font-medium px-1.5 py-0.5 rounded bg-c-acsoft text-c-accent border border-transparent">Edit</span>
+            </div>
+            <div class="flex items-center justify-between px-2.5 py-1 rounded bg-c-bg border border-c-border">
+              <span class="text-c-tx2"><span class="font-medium text-c-tx">Zone</span> &rsaquo; DNS</span>
+              <span class="mono text-[10px] font-medium px-1.5 py-0.5 rounded bg-c-acsoft text-c-accent border border-transparent">Edit</span>
+            </div>
+            <div class="flex items-center justify-between px-2.5 py-1 rounded bg-c-bg border border-c-border">
+              <span class="text-c-tx2"><span class="font-medium text-c-tx">Zone</span> &rsaquo; Zone</span>
+              <span class="mono text-[10px] font-medium px-1.5 py-0.5 rounded bg-c-subtle text-c-tx2 border border-c-border">Read</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `,
+};
+
 
