@@ -1,5 +1,6 @@
 import { MOCK, appState, navigate, addToast, runJobAction, confirmThen } from '../store.js';
 import { ansiToHtml } from '../utils.js';
+import { TOKEN_HELP } from './Services.js';
 
 const { computed, onMounted, nextTick, ref } = Vue;
 
@@ -12,10 +13,29 @@ export const ServiceDetail = {
     const outputTitle = ref('');
     const outputContent = ref('');
     const outputWordWrap = ref(true);
+    const showTunnelDelete = ref(false);
+    const tunnelDeleteToken = ref('');
+    const tunnelDeleteSubmitting = ref(false);
 
     const service = computed(() =>
       MOCK.services.find((x) => x.name === appState.selectedServiceName) || MOCK.services[0] || {}
     );
+
+    // Set for cloudflared.<hostname> units created via "New tunnel".
+    const tunnel = computed(() => service.value.tunnel || null);
+
+    const tunnelMeta = computed(() => {
+      const t = tunnel.value;
+      if (!t) return [];
+      return [
+        { k: 'Hostname', v: t.hostname, mono: true },
+        { k: 'Public URL', v: t.public_url, link: true },
+        { k: 'Local service', v: t.service_url, mono: true },
+        { k: 'Tunnel name', v: t.tunnel_name || '—', mono: true },
+        { k: 'Tunnel ID', v: t.tunnel_id, mono: true, break: true },
+        { k: 'Zone', v: t.zone || '—', mono: true },
+      ];
+    });
 
     // Dynamic defaults based on active service
     const serviceDetails = computed(() => {
@@ -62,8 +82,12 @@ export const ServiceDetail = {
     const meta = computed(() => {
       const s = service.value;
       const d = serviceDetails.value;
+      // The tunnel token lives in ExecStart — mask it here (still visible in Edit Unit File).
+      const cmd = tunnel.value
+        ? (s.cmd || '').replace(/(--token\s+)\S+/, '$1••••••')
+        : s.cmd;
       return [
-        { k: 'Command', v: s.cmd || '—', mono: true, break: true },
+        { k: 'Command', v: cmd || '—', mono: true, break: true },
         { k: 'Working dir', v: d.workingDir || '—', mono: true },
         { k: 'User', v: d.user || '—', mono: true },
         { k: 'Restart policy', v: d.restart ? `${d.restart} / ${d.restartSec}s` : '—', mono: false },
@@ -160,6 +184,35 @@ WantedBy=multi-user.target`;
       );
     }
 
+    function openTunnelDelete() {
+      tunnelDeleteToken.value = '';
+      showTunnelDelete.value = true;
+      nextTick(() => window.lucide?.createIcons());
+    }
+
+    async function submitTunnelDelete(e) {
+      if (e) e.preventDefault();
+      const name = service.value.name;
+      const token = tunnelDeleteToken.value.trim();
+      if (!name) return;
+      if (!token) {
+        addToast({ t: 'Validation error', d: 'Cloudflare API token is required.', k: 'warn' });
+        return;
+      }
+      tunnelDeleteSubmitting.value = true;
+      try {
+        const res = await runJobAction(
+          `/api/v1/services/${name}/tunnel-delete`,
+          { api_token: token },
+          `Deleting tunnel ${name}`,
+          () => navigate('services')
+        );
+        if (res) showTunnelDelete.value = false;
+      } finally {
+        tunnelDeleteSubmitting.value = false;
+      }
+    }
+
     async function copyOutput() {
       const text = outputContent.value || '';
       try {
@@ -212,7 +265,9 @@ WantedBy=multi-user.target`;
       service, serviceDetails, getServicePath, meta, runtime, recentEvents,
       isEditingUnit, editableUnitContent, showOutput, outputTitle, outputContent,
       openEditModal, saveUnitFile, runServiceAction, viewOutput, deleteService, navigate,
-      outputWordWrap, copyOutput, downloadOutput, formattedOutput
+      outputWordWrap, copyOutput, downloadOutput, formattedOutput,
+      tunnel, tunnelMeta, showTunnelDelete, tunnelDeleteToken, tunnelDeleteSubmitting,
+      openTunnelDelete, submitTunnelDelete, TOKEN_HELP,
     };
   },
   template: `
@@ -229,6 +284,7 @@ WantedBy=multi-user.target`;
             <h1 class="text-[22px] font-semibold tracking-[-0.02em] mono font-mono">{{ service.name }}</h1>
             <status-badge :status="service.status" />
             <status-badge :status="service.autostart" />
+            <badge v-if="tunnel" tone="accent">tunnel</badge>
           </div>
           <div v-if="service.desc" class="text-sm-var text-c-tx2 mt-1">{{ service.desc }}</div>
         </div>
@@ -240,6 +296,29 @@ WantedBy=multi-user.target`;
         <!-- Left Side Cards -->
         <div class="flex flex-col gap-3">
           
+          <!-- Cloudflare Tunnel Card (panel-created cloudflared.<hostname> units only) -->
+          <div v-if="tunnel" class="bg-c-bg border border-c-border rounded-theme overflow-hidden">
+            <div class="flex items-center justify-between gap-3 py-3.5 px-4 border-b border-c-border">
+              <h3 class="m-0 text-sm-var font-semibold tracking-[-0.01em] flex items-center gap-2">
+                <l-icon name="cloud" is="width:14px;height:14px" /> Cloudflare Tunnel
+              </h3>
+              <span class="text-xs-var text-c-tx3 mono font-mono">cloud-managed · proxied CNAME</span>
+            </div>
+            <div class="p-4">
+              <dl class="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-y-2.5 gap-x-4 text-sm-var m-0">
+                <template v-for="m in tunnelMeta" :key="m.k">
+                  <dt class="text-c-tx2 font-medium">{{ m.k }}</dt>
+                  <dd class="m-0 tabular-nums" :class="[m.mono ? 'mono text-xs-var select-all' : '', m.break ? 'break-all' : '']">
+                    <a v-if="m.link" :href="m.v" target="_blank" rel="noopener" class="text-c-accent underline underline-offset-2 inline-flex items-center gap-1">
+                      {{ m.v }} <l-icon name="external-link" is="width:12px;height:12px" />
+                    </a>
+                    <template v-else>{{ m.v }}</template>
+                  </dd>
+                </template>
+              </dl>
+            </div>
+          </div>
+
           <!-- Configuration Details Card -->
           <div class="bg-c-bg border border-c-border rounded-theme overflow-hidden">
             <div class="flex items-center justify-between gap-3 py-3.5 px-4 border-b border-c-border">
@@ -323,6 +402,15 @@ WantedBy=multi-user.target`;
                 <l-icon name="trash-2" /> Delete Service
               </btn>
             </div>
+            <div v-if="tunnel" class="px-4 pb-4 flex items-center justify-between gap-4 flex-wrap border-t border-c-dngstrong/20">
+              <div class="pt-4">
+                <p class="m-0 text-sm-var font-medium">Delete service and remove tunnel on Cloudflare</p>
+                <p class="m-0 text-xs-var text-c-tx2 mt-0.5">Also deletes the DNS CNAME for <span class="mono">{{ tunnel.hostname }}</span> and the tunnel itself if no other hostnames use it. Requires your API token again.</p>
+              </div>
+              <btn variant="danger" class="mt-4" @click="openTunnelDelete">
+                <l-icon name="cloud-off" /> Delete + Cloudflare cleanup
+              </btn>
+            </div>
           </div>
         </div>
 
@@ -367,6 +455,39 @@ WantedBy=multi-user.target`;
           </div>
         </div>
 
+      </div>
+
+      <!-- Delete + Cloudflare cleanup modal -->
+      <div v-if="showTunnelDelete" class="fixed inset-0 z-[250] grid place-items-center p-10 px-6 bg-black/40 backdrop-blur-[4px] animate-fade" @click.self="!tunnelDeleteSubmitting && (showTunnelDelete = false)">
+        <div class="w-full max-w-[520px] bg-c-bg border border-c-border rounded-theme-lg shadow-lg overflow-hidden animate-pop" role="dialog" aria-modal="true">
+          <div class="flex items-center gap-2.5 py-3.5 px-4 border-b border-c-border">
+            <div class="w-7 h-7 rounded-[7px] bg-c-dngsoft text-c-danger grid place-items-center"><l-icon name="cloud-off" is="width:14px;height:14px" /></div>
+            <div>
+              <div class="font-semibold text-sm-var">Delete tunnel on Cloudflare</div>
+              <div class="text-xs-var text-c-tx2 mono">{{ service.name }}</div>
+            </div>
+            <btn variant="ghost" sm square class="ml-auto" @click="showTunnelDelete = false" aria-label="Close" :disabled="tunnelDeleteSubmitting">
+              <l-icon name="x" />
+            </btn>
+          </div>
+          <form class="p-4 flex flex-col gap-3.5" @submit="submitTunnelDelete">
+            <div class="text-sm-var text-c-tx2">
+              This stops the service, removes the CNAME <span class="mono">{{ tunnel?.hostname }}</span>, drops its ingress rule,
+              deletes the tunnel if nothing else uses it, then removes the local unit file. This cannot be undone.
+            </div>
+            <div class="flex flex-col gap-1">
+              <label for="tun-del-token" class="text-sm-var font-medium text-c-tx">Cloudflare API token</label>
+              <input id="tun-del-token" type="password" class="input mono" placeholder="Paste API token" v-model="tunnelDeleteToken" autocomplete="off" required autofocus />
+              <pre class="m-0 mt-1 px-2.5 py-2 text-[10px] leading-snug text-c-tx2 bg-c-subtle border border-c-border rounded font-mono whitespace-pre overflow-x-auto">{{ TOKEN_HELP }}</pre>
+            </div>
+            <div class="flex justify-end gap-2 mt-1">
+              <btn type="button" @click="showTunnelDelete = false" :disabled="tunnelDeleteSubmitting">Cancel</btn>
+              <btn type="submit" variant="danger" :disabled="tunnelDeleteSubmitting">
+                <l-icon name="trash-2" /> {{ tunnelDeleteSubmitting ? 'Deleting…' : 'Delete everything' }}
+              </btn>
+            </div>
+          </form>
+        </div>
       </div>
 
       <!-- Edit Unit File Modal -->

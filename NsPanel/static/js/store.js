@@ -443,7 +443,10 @@ export async function fetchSamples(query = "", specificApis = null) {
         restart: s.restart,
         restartSec: s.restart_sec,
         syslogId: s.syslog_id,
-        envVars: s.env_vars || []
+        envVars: s.env_vars || [],
+        // Present only for cloudflared.<hostname> units created by the panel
+        // (parsed from X-NsPanel-Tunnel-* keys in the unit file).
+        tunnel: s.tunnel || null
       }));
     }));
   }

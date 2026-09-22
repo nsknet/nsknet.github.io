@@ -51,12 +51,16 @@ def write_service(
     command: str,
     user: str,
     env_vars: list[str],
+    unit_extra: list[str] | None = None,
 ) -> Path:
+    """Write a unit file. `unit_extra` lines are appended to the [Unit]
+    section verbatim (e.g. After=…, or X-NsPanel-* metadata keys)."""
     SERVICES_DIR.mkdir(parents=True, exist_ok=True)
     path = _svc_path(name)
     lines = [
         "[Unit]",
         f"Description={description or name}",
+        *[ln.strip() for ln in (unit_extra or []) if ln.strip()],
         "",
         "[Service]",
         f"WorkingDirectory={working_dir}",
@@ -106,6 +110,28 @@ def get_journal_logs(name: str, lines: int = 60) -> str:
         return str(exc)
 
 
+# Tunnel metadata is kept in the unit file itself as X-NsPanel-Tunnel-* keys
+# (systemd ignores X- prefixed settings), so no separate store is needed.
+TUNNEL_KEY_PREFIX = "X-NsPanel-Tunnel-"
+_TUNNEL_KEYS = {
+    "Hostname": "hostname",
+    "ServiceUrl": "service_url",
+    "Id": "tunnel_id",
+    "Name": "tunnel_name",
+    "Zone": "zone",
+}
+
+
+def tunnel_unit_lines(hostname: str, service_url: str, tunnel_id: str, tunnel_name: str, zone: str) -> list[str]:
+    return [
+        f"{TUNNEL_KEY_PREFIX}Hostname={hostname}",
+        f"{TUNNEL_KEY_PREFIX}ServiceUrl={service_url}",
+        f"{TUNNEL_KEY_PREFIX}Id={tunnel_id}",
+        f"{TUNNEL_KEY_PREFIX}Name={tunnel_name}",
+        f"{TUNNEL_KEY_PREFIX}Zone={zone}",
+    ]
+
+
 def _parse_service_file(content: str) -> dict:
     fields: dict = {
         "description": None,
@@ -116,7 +142,9 @@ def _parse_service_file(content: str) -> dict:
         "restart_sec": None,
         "syslog_id": None,
         "env_vars": [],
+        "tunnel": None,   # {hostname, service_url, tunnel_id, tunnel_name, zone, public_url}
     }
+    tunnel: dict = {}
     for line in content.splitlines():
         line = line.strip()
         if line.startswith("Description="):
@@ -135,6 +163,19 @@ def _parse_service_file(content: str) -> dict:
             fields["syslog_id"] = line[len("SyslogIdentifier="):]
         elif line.startswith("Environment="):
             fields["env_vars"].append(line[len("Environment="):])
+        elif line.startswith(TUNNEL_KEY_PREFIX):
+            key, _, val = line[len(TUNNEL_KEY_PREFIX):].partition("=")
+            if key in _TUNNEL_KEYS:
+                tunnel[_TUNNEL_KEYS[key]] = val.strip()
+    if tunnel.get("hostname") and tunnel.get("tunnel_id"):
+        fields["tunnel"] = {
+            "hostname": tunnel["hostname"],
+            "service_url": tunnel.get("service_url", ""),
+            "tunnel_id": tunnel["tunnel_id"],
+            "tunnel_name": tunnel.get("tunnel_name", ""),
+            "zone": tunnel.get("zone", ""),
+            "public_url": f"https://{tunnel['hostname']}",
+        }
     return fields
 
 
