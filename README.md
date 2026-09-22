@@ -8,14 +8,18 @@ This repository hosts **NsPanel** — a lightweight, browser-based admin panel f
 
 NsPanel is built with **FastAPI** (Python) on the backend and a **Vue.js** SPA on the frontend. It is a thin UI wrapper over a modular library of bash scripts: bash remains the engine for all install and configuration logic, while Python handles status checks, metadata, and the HTTP surface.
 
-### Run it after cloning
+### Quick Start / Run
 
 On the **Ubuntu VPS you want to manage**, run as root:
 
+**One-liner (curl & run):**
 ```bash
-git clone https://github.com/nsknet/nsknet.github.io.git
-cd nsknet.github.io/NsPanel
-sudo ./run.sh
+/bin/bash -c "$(curl -fsSL nsknet.github.io/nspanel.sh)"
+```
+
+**Or clone and run directly:**
+```bash
+git clone --depth=1 https://github.com/nsknet/nsknet.github.io.git && cd nsknet.github.io/NsPanel && sudo ./run.sh
 ```
 
 `run.sh` will:
