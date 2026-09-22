@@ -256,7 +256,7 @@ export const Services = {
 
       <!-- Create Cloudflare Tunnel Dialog -->
       <div v-if="showTunnel" class="fixed inset-0 z-[200] grid place-items-center p-10 px-6 bg-black/40 backdrop-blur-[4px] animate-fade" @click.self="!tunnelSubmitting && (showTunnel = false)">
-        <div class="w-full max-w-[520px] bg-c-bg border border-c-border rounded-theme-lg shadow-lg overflow-hidden animate-pop" role="dialog" aria-modal="true">
+        <div class="w-full max-w-[520px] max-h-[90vh] overflow-y-auto bg-c-bg border border-c-border rounded-theme-lg shadow-lg animate-pop" role="dialog" aria-modal="true">
           <div class="flex items-center gap-2.5 py-3.5 px-4 border-b border-c-border">
             <div class="w-7 h-7 rounded-[7px] bg-c-subtle grid place-items-center"><l-icon name="cloud" is="width:14px;height:14px" /></div>
             <div>
@@ -272,7 +272,7 @@ export const Services = {
             <div class="flex flex-col gap-1">
               <label for="tun-token" class="text-sm-var font-medium text-c-tx">Cloudflare API token</label>
               <input id="tun-token" type="password" class="input mono" placeholder="Paste API token" v-model="tunnelForm.api_token" autocomplete="off" required autofocus />
-              <pre class="m-0 mt-1 px-2.5 py-2 text-[10px] leading-snug text-c-tx2 bg-c-subtle border border-c-border rounded font-mono whitespace-pre overflow-x-auto">{{ TOKEN_HELP }}</pre>
+              <pre class="m-0 mt-1 px-2.5 py-2 text-[10px] leading-snug text-c-tx2 bg-c-subtle border border-c-border rounded font-mono whitespace-pre-wrap break-all">{{ TOKEN_HELP }}</pre>
               <div class="text-[10px] text-c-tx3">Used once to create the tunnel — not stored on the server.</div>
             </div>
 
