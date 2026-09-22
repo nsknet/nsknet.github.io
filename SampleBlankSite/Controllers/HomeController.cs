@@ -173,7 +173,22 @@ namespace SampleBlankSite.Controllers
             }
         }
 
-        private async Task<ServiceStatus> GetMongoDbInfoAsync()
+        private Task<ServiceStatus> GetMongoDbInfoAsync() =>
+            GetDatabaseInfoAsync("MongoDB", 27017, "mongod", "--version", l => l.Contains("db version"));
+
+        private Task<ServiceStatus> GetMySqlInfoAsync() =>
+            GetDatabaseInfoAsync("MySQL", 3306, "mysql", "--version");
+
+        private Task<ServiceStatus> GetPostgreSqlInfoAsync() =>
+            GetDatabaseInfoAsync("PostgreSQL", 5432, "psql", "--version");
+
+        private Task<ServiceStatus> GetSqlServerInfoAsync() =>
+            GetDatabaseInfoAsync("SQL Server", 1433, "sqlcmd", "-?", _ => false);
+
+        // Shared DB check: probe the default port (no driver needed), then ask the
+        // CLI tool for a version string if it is installed.
+        private async Task<ServiceStatus> GetDatabaseInfoAsync(
+            string name, int port, string cliFileName, string cliArguments, Func<string, bool> versionLineFilter = null)
         {
             var status = new ServiceStatus
             {
@@ -185,46 +200,36 @@ namespace SampleBlankSite.Controllers
 
             try
             {
+                using var probeCts = new CancellationTokenSource(TimeoutMs);
+                (status.IsRunning, status.ConnectionStatus) = await ProbeTcpPortAsync(port, probeCts.Token);
+                if (status.IsRunning)
+                {
+                    status.IsInstalled = true;
+                    status.Version = $"Listening on {port}";
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error probing {Name} port {Port}", name, port);
+                status.ConnectionStatus = "Error: " + ex.Message;
+            }
+
+            try
+            {
                 using var cts = new CancellationTokenSource(TimeoutMs);
-                var output = await RunProcessWithTimeoutAsync("mongod", "--version", cts.Token);
+                var output = await RunProcessWithTimeoutAsync(cliFileName, cliArguments, cts.Token);
 
                 if (output.Count > 0)
                 {
                     status.IsInstalled = true;
-                    var versionLine = output
-                        .FirstOrDefault(l => l.Contains("db version"));
-                    status.Version = versionLine != null ? versionLine.Trim() : "Installed, version unknown";
-
-                    // Try to connect to MongoDB with timeout
-                    try
+                    var versionLine = versionLineFilter == null ? output[0] : output.FirstOrDefault(versionLineFilter);
+                    if (versionLine != null)
                     {
-                        var connectionString = "mongodb://localhost:27017/?connectTimeoutMS=2000&serverSelectionTimeoutMS=2000";
-                        var client = new MongoDB.Driver.MongoClient(connectionString);
-
-                        using var connectCts = new CancellationTokenSource(TimeoutMs);
-                        var database = client.GetDatabase("admin");
-                        var command = new MongoDB.Bson.BsonDocument("ping", 1);
-
-                        var pingTask = database.RunCommandAsync<MongoDB.Bson.BsonDocument>(command, cancellationToken: connectCts.Token);
-                        if (await Task.WhenAny(pingTask, Task.Delay(TimeoutMs, connectCts.Token)) == pingTask)
-                        {
-                            await pingTask; // Get any exceptions
-                            status.ConnectionStatus = "Connected";
-                            status.IsRunning = true;
-                        }
-                        else
-                        {
-                            status.ConnectionStatus = "Connection timeout";
-                        }
+                        status.Version = versionLine.Trim();
                     }
-                    catch (OperationCanceledException)
+                    else if (!status.IsRunning)
                     {
-                        status.ConnectionStatus = "Connection timeout";
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(ex, "Failed to connect to MongoDB");
-                        status.ConnectionStatus = "Failed to connect";
+                        status.Version = "Installed, version unknown";
                     }
                 }
             }
@@ -234,225 +239,8 @@ namespace SampleBlankSite.Controllers
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error checking MongoDB installation");
-                status.Version = "Error: " + ex.Message;
-            }
-
-            return status;
-        }
-
-        private async Task<ServiceStatus> GetMySqlInfoAsync()
-        {
-            var status = new ServiceStatus
-            {
-                IsInstalled = false,
-                IsRunning = false,
-                Version = "Not installed",
-                ConnectionStatus = "Not available"
-            };
-
-            try
-            {
-                using var cts = new CancellationTokenSource(TimeoutMs);
-                var output = await RunProcessWithTimeoutAsync("mysql", "--version", cts.Token);
-
-                if (output.Count > 0)
-                {
-                    status.IsInstalled = true;
-                    status.Version = output[0].Trim();
-
-                    try
-                    {
-                        // Set connection timeout to 2 seconds
-                        var connectionString = "server=localhost;user=root;Connect Timeout=2;";
-                        await using var connection = new MySql.Data.MySqlClient.MySqlConnection(connectionString);
-
-                        using var connectCts = new CancellationTokenSource(TimeoutMs);
-                        var connectTask = connection.OpenAsync(connectCts.Token);
-
-                        if (await Task.WhenAny(connectTask, Task.Delay(TimeoutMs, connectCts.Token)) == connectTask)
-                        {
-                            await connectTask; // Get any exceptions
-                            status.ConnectionStatus = "Connected";
-                            status.IsRunning = true;
-                        }
-                        else
-                        {
-                            status.ConnectionStatus = "Connection timeout";
-                        }
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        status.ConnectionStatus = "Connection timeout";
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(ex, "Failed to connect to MySQL");
-                        status.ConnectionStatus = "Failed to connect";
-                    }
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                status.Version = "Timeout checking installation";
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error checking MySQL installation");
-                status.Version = "Error: " + ex.Message;
-            }
-
-            return status;
-        }
-
-        private async Task<ServiceStatus> GetPostgreSqlInfoAsync()
-        {
-            var status = new ServiceStatus
-            {
-                IsInstalled = false,
-                IsRunning = false,
-                Version = "Not installed",
-                ConnectionStatus = "Not available"
-            };
-
-            try
-            {
-                using var cts = new CancellationTokenSource(TimeoutMs);
-                var output = await RunProcessWithTimeoutAsync("psql", "--version", cts.Token);
-
-                if (output.Count > 0)
-                {
-                    status.IsInstalled = true;
-                    status.Version = output[0].Trim();
-
-                    try
-                    {
-                        // Set connection timeout to 2 seconds
-                        var connectionString = "Host=localhost;Username=postgres;Timeout=2;Command Timeout=2;";
-                        await using var connection = new Npgsql.NpgsqlConnection(connectionString);
-
-                        using var connectCts = new CancellationTokenSource(TimeoutMs);
-                        var connectTask = connection.OpenAsync(connectCts.Token);
-
-                        if (await Task.WhenAny(connectTask, Task.Delay(TimeoutMs, connectCts.Token)) == connectTask)
-                        {
-                            await connectTask; // Get any exceptions
-                            status.ConnectionStatus = "Connected";
-                            status.IsRunning = true;
-                        }
-                        else
-                        {
-                            status.ConnectionStatus = "Connection timeout";
-                        }
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        status.ConnectionStatus = "Connection timeout";
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(ex, "Failed to connect to PostgreSQL");
-                        status.ConnectionStatus = "Failed to connect";
-                    }
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                status.Version = "Timeout checking installation";
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error checking PostgreSQL installation");
-                status.Version = "Error: " + ex.Message;
-            }
-
-            return status;
-        }
-
-        private async Task<ServiceStatus> GetSqlServerInfoAsync()
-        {
-            var status = new ServiceStatus
-            {
-                IsInstalled = false,
-                IsRunning = false,
-                Version = "Not installed",
-                ConnectionStatus = "Not available"
-            };
-
-            try
-            {
-                try
-                {
-                    // Set connection timeout to 2 seconds
-                    var connectionString = "Server=localhost;Trusted_Connection=True;TrustServerCertificate=True;Connect Timeout=2;Command Timeout=2;";
-                    await using var connection = new Microsoft.Data.SqlClient.SqlConnection(connectionString);
-
-                    using var connectCts = new CancellationTokenSource(TimeoutMs);
-                    var connectTask = connection.OpenAsync(connectCts.Token);
-
-                    if (await Task.WhenAny(connectTask, Task.Delay(TimeoutMs, connectCts.Token)) == connectTask)
-                    {
-                        await connectTask; // Get any exceptions
-                        status.ConnectionStatus = "Connected";
-                        status.IsInstalled = true;
-                        status.IsRunning = true;
-
-                        await using var command = new Microsoft.Data.SqlClient.SqlCommand("SELECT @@VERSION", connection);
-                        command.CommandTimeout = 2; // 2 second timeout
-
-                        using var commandCts = new CancellationTokenSource(TimeoutMs);
-                        var versionTask = command.ExecuteScalarAsync(commandCts.Token);
-
-                        if (await Task.WhenAny(versionTask, Task.Delay(TimeoutMs, commandCts.Token)) == versionTask)
-                        {
-                            var version = await versionTask;
-                            status.Version = version?.ToString() ?? "Connected, version unknown";
-                        }
-                        else
-                        {
-                            status.Version = "Connected, timeout getting version";
-                        }
-                    }
-                    else
-                    {
-                        status.ConnectionStatus = "Connection timeout";
-                    }
-                }
-                catch (OperationCanceledException)
-                {
-                    status.ConnectionStatus = "Connection timeout";
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Failed to connect to SQL Server");
-                    status.ConnectionStatus = "Failed to connect";
-
-                    // Check if the SQL Server command-line tool is available
-                    try
-                    {
-                        using var cts = new CancellationTokenSource(TimeoutMs);
-                        var output = await RunProcessWithTimeoutAsync("sqlcmd", "-?", cts.Token);
-
-                        if (output.Count > 0)
-                        {
-                            status.IsInstalled = true;
-                            status.Version = "Installed, version unknown";
-                        }
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        // Ignore timeout during detection
-                    }
-                    catch
-                    {
-                        // Ignore additional errors during detection
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error checking SQL Server installation");
-                status.Version = "Error: " + ex.Message;
+                // CLI not on PATH is the normal case when the DB isn't installed
+                logger.LogDebug(ex, "{Name} CLI '{Cli}' not available", name, cliFileName);
             }
 
             return status;
@@ -637,6 +425,25 @@ namespace SampleBlankSite.Controllers
             }
         }
 
+        // Helper method to probe a local TCP port with timeout (no DB driver needed)
+        private static async Task<(bool Open, string Status)> ProbeTcpPortAsync(int port, CancellationToken cancellationToken)
+        {
+            using var client = new TcpClient();
+            try
+            {
+                await client.ConnectAsync(IPAddress.Loopback, port, cancellationToken);
+                return (true, $"Port {port} open");
+            }
+            catch (OperationCanceledException)
+            {
+                return (false, "Connection timeout");
+            }
+            catch (SocketException)
+            {
+                return (false, $"Port {port} closed");
+            }
+        }
+
         // Helper method to run a process with timeout and capture output
         private async Task<List<string>> RunProcessWithTimeoutAsync(string fileName, string arguments, CancellationToken cancellationToken, bool captureError = false)
         {
@@ -682,6 +489,12 @@ namespace SampleBlankSite.Controllers
                 try { process.Kill(); } catch { /* Ignore if already exited */ }
                 throw; // Re-throw to handle timeout in caller
             }
+            catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 2)
+            {
+                // Binary not on PATH: report "nothing found" rather than an error
+                logger.LogDebug("Process {FileName} not found", fileName);
+                output = [];
+            }
             catch (Exception ex)
             {
                 logger.LogError(ex, $"Error running process {fileName} {arguments}");
@@ -689,10 +502,8 @@ namespace SampleBlankSite.Controllers
             }
             finally
             {
-                if (!process.HasExited)
-                {
-                    try { process.Kill(); } catch { /* Ignore if already exited */ }
-                }
+                // HasExited throws if Start() failed (e.g. binary not on PATH)
+                try { if (!process.HasExited) process.Kill(); } catch { /* Ignore if not started or already exited */ }
                 process.Dispose();
             }
 
@@ -776,6 +587,12 @@ namespace SampleBlankSite.Controllers
                 try { process.Kill(); } catch { /* Ignore if already exited */ }
                 throw; // Re-throw to handle timeout in caller
             }
+            catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 2)
+            {
+                // Binary not on PATH: report "nothing found" rather than an error
+                logger.LogDebug("Process {FileName} not found", fileName);
+                return (-1, []);
+            }
             catch (Exception ex)
             {
                 logger.LogError(ex, $"Error running process {fileName} {arguments}");
@@ -783,10 +600,8 @@ namespace SampleBlankSite.Controllers
             }
             finally
             {
-                if (!process.HasExited)
-                {
-                    try { process.Kill(); } catch { /* Ignore if already exited */ }
-                }
+                // HasExited throws if Start() failed (e.g. binary not on PATH)
+                try { if (!process.HasExited) process.Kill(); } catch { /* Ignore if not started or already exited */ }
                 process.Dispose();
             }
         }

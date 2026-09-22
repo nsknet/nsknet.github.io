@@ -501,24 +501,18 @@ HTML
 _deploy_sample_dotnet() {
     local name="$1" dll="$2"
     local public_dir="/var/www/nginx/sites/${name}/public"
-    local tar_local="${SCRIPT_DIR:-}/samples_scripts/SampleBlankSite.tar"
     local tar_dest="${public_dir}/SampleBlankSite.tar"
 
     echo "▶  Deploying sample .NET site as '${dll}.dll'..."
-
-    if [[ -n "${SCRIPT_DIR:-}" && -f "$tar_local" ]]; then
-        echo "   Using local SampleBlankSite.tar..."
-        cp "$tar_local" "$tar_dest"
-    else
-        echo "   Downloading SampleBlankSite.tar..."
-        wget -q "nsknet.github.io/SampleBlankSite.tar" -O "$tar_dest"
-    fi
+    echo "   Downloading SampleBlankSite.tar..."
+    wget -q "nsknet.github.io/SampleBlankSite.tar" -O "$tar_dest"
 
     tar -xf "$tar_dest" -C "$public_dir"
     rm -f "$tar_dest"
 
-    # Rename every SampleBlankSite.* → dll.* (handles .dll, .pdb, .deps.json,
-    # .runtimeconfig.json, and the native ELF binary with no extension)
+    # Rename every SampleBlankSite.* → dll.* (handles .dll, .deps.json,
+    # .runtimeconfig.json, .staticwebassets.endpoints.json, and the native
+    # ELF binary with no extension)
     local src
     for src in "${public_dir}/SampleBlankSite"*; do
         [[ -e "$src" ]] || continue
@@ -578,7 +572,7 @@ UNIT
 }
 
 # ── Panel: non-interactive entry points ───────────────────────────────────────
-# Called by the web panel as: bash ubuntu.sh <function> <args...>
+# Called by the web panel (core/bash_invoker.py) as: source nginx.sh && <function> <args...>
 # These functions are fully non-interactive and write an info.yml that the
 # Python panel uses to discover and display the site.
 

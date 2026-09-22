@@ -16,6 +16,13 @@ On the **Ubuntu VPS you want to manage**, run as root:
 ```bash
 /bin/bash -c "$(curl -fsSL nsknet.github.io/nspanel.sh)"
 ```
+*(Prompts for branch selection if multiple branches exist; auto-selects default after 10s).*
+
+**Run specific branch (e.g. `dev`):**
+```bash
+/bin/bash -c "$(curl -fsSL nsknet.github.io/nspanel.sh)" dev
+# or: BRANCH=dev /bin/bash -c "$(curl -fsSL nsknet.github.io/nspanel.sh)"
+```
 
 **Or clone and run directly:**
 ```bash

@@ -12,11 +12,10 @@ USERNAME = "admin"
 
 # --- Panel install location ---
 BASE_DIR = Path(__file__).resolve().parent
-UBUNTU_SH = BASE_DIR / "ubuntu.sh"
 AUDIT_LOG = BASE_DIR / "audit.log"
 STATIC_DIR = BASE_DIR / "static"
 
-# --- Server filesystem conventions (must match ubuntu.sh) ---
+# --- Server filesystem conventions (must match scripts/*.sh) ---
 SITES_DIR = Path("/var/www/nginx/sites")
 NGINX_CONF_DIR = Path("/var/www/nginx/conf.d")
 SERVICES_DIR = Path("/var/www/services")
