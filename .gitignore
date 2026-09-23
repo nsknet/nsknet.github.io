@@ -1,1 +1,28 @@
-.claude
+# Claude Code workspace
+.claude/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+
+# .NET build output
+bin/
+obj/
+.vs/
+
+# Logs & local state
+*.log
+
+# IDEs and editors
+.vscode/
+.idea/

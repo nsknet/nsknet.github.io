@@ -4,11 +4,13 @@ Only /logout here: returns 401 so the browser drops its cached credentials.
 Mounted WITHOUT the global auth dependency (it must work while logged in).
 """
 import secrets
-from fastapi import APIRouter, Response, Request, Depends
+
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from core.auth import get_password
+
 from config import USERNAME
+from core.auth import get_password
 
 router = APIRouter()
 security = HTTPBasic(auto_error=False)

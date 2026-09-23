@@ -1,11 +1,13 @@
-from features import services
+from features import systemctl
 from modules.base import Module
 
 
 class MariaDBModule(Module):
     name = "mariadb"
     display_name = "MariaDB"
-    description = "MariaDB server via APT. Auto-generates root credentials saved to /etc/mysql/credentials.yml."
+    description = (
+        "MariaDB server via APT. Auto-generates root credentials saved to /etc/mysql/credentials.yml."
+    )
     bash_function = "install_mariadb"
     uninstall_function = "uninstall_mariadb"
     change_password_function = "set_mariadb_password"
@@ -14,10 +16,10 @@ class MariaDBModule(Module):
     logo = "mariadb.png"
 
     def is_installed(self) -> bool:
-        return services.which("mariadb") is not None or services.dpkg_installed("mariadb-server")
+        return systemctl.which("mariadb") is not None or systemctl.dpkg_installed("mariadb-server")
 
     def get_status(self) -> dict:
-        status = services.tool_status(
+        status = systemctl.tool_status(
             binary="mariadb",
             pkg="mariadb-server",
             service="mariadb",

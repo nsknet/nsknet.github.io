@@ -1,4 +1,4 @@
-from features import services
+from features import systemctl
 from modules.base import Module
 
 
@@ -13,10 +13,10 @@ class CoreDNSModule(Module):
     logo = "coredns.png"
 
     def is_installed(self) -> bool:
-        return services.which("coredns") is not None
+        return systemctl.which("coredns") is not None
 
     def get_status(self) -> dict:
-        status = services.tool_status(
+        status = systemctl.tool_status(
             binary="coredns",
             service="coredns",
             version_cmd=["coredns", "-version"],

@@ -1,107 +1,142 @@
-"""Sites API: list, create, and per-site actions."""
-import re
+"""Sites API: list, create, and per-site actions (nginx vhosts)."""
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Form, HTTPException
+from pydantic import BaseModel, field_validator
 
-from core import audit, bash_invoker, runner
+from core import audit, bash_invoker, jobs
+from core.schemas import DataResponse, JobResponse
+from core.validators import DLL, DOMAIN, PROXY_TARGET, bad_request, require_name
 from features import sites as sites_feature
 
 router = APIRouter(prefix="/api/v1/sites")
 
-_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$")
-_DOMAIN_RE = re.compile(r"^[a-zA-Z0-9.-]+$")
-_DLL_RE = re.compile(r"^[a-zA-Z0-9._-]+$")
-_PROXY_RE = re.compile(r"^https?://[a-zA-Z0-9.\-:/]+$")
 _ASPENV_ALLOWED = {"Production", "Development", "Test", "Demo", "Staging"}
+_BACKENDS = {"static", "proxy", "dotnet"}
+_ACCESS_KINDS = {"domain", "port"}
+
+
+class SiteCreate(BaseModel):
+    access_kind: str
+    access_value: str
+    backend_type: str
+    name: str = ""
+    proxy_target: str = ""
+    dll_name: str = ""
+    internal_port: str = ""
+    aspnetcore_env: str = "Production"
+    auto_ssl: str = "false"
+
+    @field_validator("access_kind")
+    @classmethod
+    def _kind(cls, v: str) -> str:
+        v = v.strip()
+        if v not in _ACCESS_KINDS:
+            raise ValueError("choose an access kind (domain or port)")
+        return v
+
+    @field_validator("backend_type")
+    @classmethod
+    def _backend(cls, v: str) -> str:
+        v = v.strip()
+        if v not in _BACKENDS:
+            raise ValueError("choose a backend type")
+        return v
+
+    @property
+    def site_name(self) -> str:
+        """Domain-bound sites are named after the domain; port sites carry their own name."""
+        raw = self.access_value.strip() if self.access_kind == "domain" else self.name
+        return require_name(raw, "site name")
+
+    @property
+    def wants_ssl(self) -> bool:
+        # SSL registration only makes sense for domain-bound sites.
+        return self.access_kind == "domain" and self.auto_ssl.strip().lower() in ("true", "1", "yes", "on")
+
+
+def _build_site_command(payload: SiteCreate, name: str) -> list[str]:
+    access_value = payload.access_value.strip()
+    if payload.access_kind == "domain" and not DOMAIN.match(access_value):
+        raise bad_request("Invalid domain name.")
+    if payload.access_kind == "port" and not access_value.isdigit():
+        raise bad_request("Port must be a number.")
+
+    ssl_args = ["ssl"] if payload.wants_ssl else []
+
+    if payload.backend_type == "static":
+        return bash_invoker.build_cmd(
+            "add_static_site", name, payload.access_kind, access_value, *ssl_args, script="nginx.sh"
+        )
+
+    if payload.backend_type == "proxy":
+        target = payload.proxy_target.strip()
+        if not PROXY_TARGET.match(target):
+            raise bad_request("Proxy target must be http(s)://host:port.")
+        return bash_invoker.build_cmd(
+            "add_proxy_site",
+            name,
+            payload.access_kind,
+            access_value,
+            target,
+            *ssl_args,
+            script="nginx.sh",
+        )
+
+    dll = payload.dll_name.strip()
+    if dll.lower().endswith(".dll"):
+        dll = dll[:-4]
+    if not dll or not DLL.match(dll):
+        raise bad_request("Invalid .dll name.")
+    internal = payload.internal_port.strip()
+    if not internal.isdigit():
+        raise bad_request("Internal port must be a number.")
+    aspenv = payload.aspnetcore_env.strip()
+    if aspenv not in _ASPENV_ALLOWED:
+        raise bad_request("Invalid ASP.NET Core environment.")
+    return bash_invoker.build_cmd(
+        "add_dotnet_site",
+        name,
+        payload.access_kind,
+        access_value,
+        dll,
+        internal,
+        aspenv,
+        *ssl_args,
+        script="nginx.sh",
+    )
 
 
 @router.get("")
-def get_sites():
-    return {
-        "status": "success",
-        "sites": sites_feature.list_sites_with_status()
-    }
+def get_sites() -> DataResponse[list[dict[str, Any]]]:
+    return DataResponse(data=sites_feature.list_sites_with_status())
 
 
 @router.post("/create")
-async def sites_create(
-    access_kind: str = Form(...),
-    access_value: str = Form(...),
-    backend_type: str = Form(...),
-    name: str = Form(""),
-    proxy_target: str = Form(""),
-    dll_name: str = Form(""),
-    internal_port: str = Form(""),
-    aspnetcore_env: str = Form("Production"),
-    auto_ssl: str = Form("false"),
-):
-    access_kind = access_kind.strip()
-    access_value = access_value.strip()
-    backend = backend_type.strip()
-
-    if access_kind == "domain":
-        name = access_value
-    else:
-        name = name.strip()
-
-    if not _NAME_RE.match(name) or ".." in name:
-        raise HTTPException(status_code=400, detail="Invalid site name (use letters, digits, . _ -).")
-    if access_kind not in ("domain", "port"):
-        raise HTTPException(status_code=400, detail="Choose an access kind (domain or port).")
-    if access_kind == "domain" and not _DOMAIN_RE.match(access_value):
-        raise HTTPException(status_code=400, detail="Invalid domain name.")
-    if access_kind == "port" and not access_value.isdigit():
-        raise HTTPException(status_code=400, detail="Port must be a number.")
-    if backend not in ("static", "proxy", "dotnet"):
-        raise HTTPException(status_code=400, detail="Choose a backend type.")
-
+def sites_create(payload: Annotated[SiteCreate, Form()]) -> JobResponse:
+    name = payload.site_name
     if sites_feature.read_info(name) is not None:
-        raise HTTPException(status_code=400, detail=f"A site named '{name}' already exists.")
+        raise bad_request(f"A site named '{name}' already exists.")
 
-    # SSL registration only makes sense for domain-bound sites.
-    want_ssl = access_kind == "domain" and auto_ssl.strip().lower() in ("true", "1", "yes", "on")
-    ssl_args = ["ssl"] if want_ssl else []
-
-    if backend == "static":
-        cmd = bash_invoker.build_cmd("add_static_site", name, access_kind, access_value, *ssl_args)
-    elif backend == "proxy":
-        target = proxy_target.strip()
-        if not _PROXY_RE.match(target):
-            raise HTTPException(status_code=400, detail="Proxy target must be http(s)://host:port.")
-        cmd = bash_invoker.build_cmd("add_proxy_site", name, access_kind, access_value, target, *ssl_args)
-    else:  # dotnet
-        dll = dll_name.strip()
-        if dll.lower().endswith(".dll"):
-            dll = dll[:-4]
-        internal = internal_port.strip()
-        aspenv = aspnetcore_env.strip()
-        if not dll or not _DLL_RE.match(dll):
-            raise HTTPException(status_code=400, detail="Invalid .dll name.")
-        if not internal.isdigit():
-            raise HTTPException(status_code=400, detail="Internal port must be a number.")
-        if aspenv not in _ASPENV_ALLOWED:
-            raise HTTPException(status_code=400, detail="Invalid ASP.NET Core environment.")
-        cmd = bash_invoker.build_cmd(
-            "add_dotnet_site", name, access_kind, access_value, dll, internal, aspenv, *ssl_args
-        )
-
-    job_id = runner.create_job(cmd, label=f"Create site {name}")
-    runner.start_job(job_id)
-    audit.log("site.create", f"name={name} backend={backend} access={access_kind}:{access_value} ssl={want_ssl} job={job_id}")
-
-    return {
-        "status": "success",
-        "job_id": job_id,
-        "title": f"Creating site '{name}'"
-    }
+    cmd = _build_site_command(payload, name)
+    return jobs.launch(
+        cmd,
+        label=f"Create site {name}",
+        title=f"Creating site '{name}'",
+        audit_action="site.create",
+        audit_detail=(
+            f"name={name} backend={payload.backend_type} "
+            f"access={payload.access_kind}:{payload.access_value.strip()} ssl={payload.wants_ssl}"
+        ),
+    )
 
 
 @router.get("/{name}")
-def get_site(name: str):
+def get_site(name: str) -> DataResponse[dict[str, Any]]:
     info = sites_feature.get_site(name)
     if info is None:
         raise HTTPException(status_code=404, detail=f"Site '{name}' not found.")
-    return info
+    return DataResponse(data=info)
 
 
 def _dotnet_site_or_error(name: str) -> dict:
@@ -110,113 +145,91 @@ def _dotnet_site_or_error(name: str) -> dict:
     if info is None:
         raise HTTPException(status_code=404, detail=f"Site '{name}' not found.")
     if info.get("type") != "dotnet":
-        raise HTTPException(status_code=400, detail="Only .NET sites have a service to control.")
+        raise bad_request("Only .NET sites have a service to control.")
     return info
 
 
-@router.post("/{name}/restart")
-def site_restart(name: str):
+_SITE_ACTIONS = {
+    "start": ("Start", "Starting"),
+    "stop": ("Stop", "Stopping"),
+    "restart": ("Restart", "Restarting"),
+    "disable": ("Disable", "Disabling"),
+}
+
+
+def _site_service_action(name: str, verb: str) -> JobResponse:
     _dotnet_site_or_error(name)
-    job_id = runner.create_job(["systemctl", "restart", name], label=f"Restart {name}")
-    runner.start_job(job_id)
-    audit.log("site.restart", f"name={name} job={job_id}")
-    return {
-        "status": "success",
-        "job_id": job_id,
-        "title": f"Restarting '{name}'"
-    }
+    label_verb, title_verb = _SITE_ACTIONS[verb]
+    return jobs.launch(
+        ["systemctl", verb, name],
+        label=f"{label_verb} {name}",
+        title=f"{title_verb} '{name}'",
+        audit_action=f"site.{verb}",
+        audit_detail=f"name={name}",
+    )
 
 
 @router.post("/{name}/start")
-def site_start(name: str):
-    _dotnet_site_or_error(name)
-    job_id = runner.create_job(["systemctl", "start", name], label=f"Start {name}")
-    runner.start_job(job_id)
-    audit.log("site.start", f"name={name} job={job_id}")
-    return {
-        "status": "success",
-        "job_id": job_id,
-        "title": f"Starting '{name}'"
-    }
+def site_start(name: str) -> JobResponse:
+    return _site_service_action(name, "start")
 
 
 @router.post("/{name}/stop")
-def site_stop(name: str):
-    _dotnet_site_or_error(name)
-    job_id = runner.create_job(["systemctl", "stop", name], label=f"Stop {name}")
-    runner.start_job(job_id)
-    audit.log("site.stop", f"name={name} job={job_id}")
-    return {
-        "status": "success",
-        "job_id": job_id,
-        "title": f"Stopping '{name}'"
-    }
+def site_stop(name: str) -> JobResponse:
+    return _site_service_action(name, "stop")
 
 
-@router.post("/{name}/enable")
-def site_enable(name: str):
-    info = _dotnet_site_or_error(name)
-    unit = (info.get("paths") or {}).get("systemd_unit") or f"/var/www/services/{name}.service"
-    cmd = ["bash", "-c", f"systemctl daemon-reload && systemctl enable {unit}"]
-    job_id = runner.create_job(cmd, label=f"Enable {name}")
-    runner.start_job(job_id)
-    audit.log("site.enable", f"name={name} job={job_id}")
-    return {
-        "status": "success",
-        "job_id": job_id,
-        "title": f"Enabling '{name}'"
-    }
+@router.post("/{name}/restart")
+def site_restart(name: str) -> JobResponse:
+    return _site_service_action(name, "restart")
 
 
 @router.post("/{name}/disable")
-def site_disable(name: str):
-    _dotnet_site_or_error(name)
-    job_id = runner.create_job(["systemctl", "disable", name], label=f"Disable {name}")
-    runner.start_job(job_id)
-    audit.log("site.disable", f"name={name} job={job_id}")
-    return {
-        "status": "success",
-        "job_id": job_id,
-        "title": f"Disabling '{name}'"
-    }
+def site_disable(name: str) -> JobResponse:
+    return _site_service_action(name, "disable")
+
+
+@router.post("/{name}/enable")
+def site_enable(name: str) -> JobResponse:
+    info = _dotnet_site_or_error(name)
+    unit = (info.get("paths") or {}).get("systemd_unit") or f"/var/www/services/{name}.service"
+    cmd = jobs.systemctl_chain(["systemctl", "daemon-reload"], ["systemctl", "enable", unit])
+    return jobs.launch(
+        cmd,
+        label=f"Enable {name}",
+        title=f"Enabling '{name}'",
+        audit_action="site.enable",
+        audit_detail=f"name={name}",
+    )
 
 
 @router.post("/{name}/reload-nginx")
-def site_reload_nginx(name: str):
-    job_id = runner.create_job(
-        ["bash", "-c", "nginx -t && systemctl reload nginx"],
-        label="Reload nginx"
+def site_reload_nginx(name: str) -> JobResponse:
+    cmd = jobs.systemctl_chain(["nginx", "-t"], ["systemctl", "reload", "nginx"])
+    return jobs.launch(
+        cmd,
+        label="Reload nginx",
+        title="Reloading nginx",
+        audit_action="nginx.reload",
+        audit_detail=f"triggered_by=site:{name}",
     )
-    runner.start_job(job_id)
-    audit.log("nginx.reload", f"triggered_by=site:{name} job={job_id}")
-    return {
-        "status": "success",
-        "job_id": job_id,
-        "title": "Reloading nginx"
-    }
 
 
 @router.get("/{name}/config")
-def site_config(name: str):
+def site_config(name: str) -> DataResponse[str]:
     info = sites_feature.read_info(name)
     if info is None:
         raise HTTPException(status_code=404, detail=f"Site '{name}' not found.")
     audit.log("site.config_view", f"name={name}")
-    return {
-        "status": "success",
-        "config": sites_feature.read_config(info)
-    }
+    return DataResponse(data=sites_feature.read_config(info))
 
 
 @router.get("/{name}/logs")
-def site_logs(name: str):
+def site_logs(name: str) -> DataResponse[str]:
     info = sites_feature.read_info(name)
     if info is None:
         raise HTTPException(status_code=404, detail=f"Site '{name}' not found.")
     sections = sites_feature.tail_logs(info)
     audit.log("site.logs_view", f"name={name} sections={list(sections.keys())}")
     body = "\n\n".join(f"===== {label} =====\n{text}" for label, text in sections.items())
-    return {
-        "status": "success",
-        "logs": body
-    }
+    return DataResponse(data=body)

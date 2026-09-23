@@ -1,4 +1,4 @@
-from features import services
+from features import systemctl
 from modules.base import Module
 
 
@@ -12,10 +12,10 @@ class MongoDBModule(Module):
     firewall_ports = [27017]
 
     def is_installed(self) -> bool:
-        return services.which("mongod") is not None or services.dpkg_installed("mongodb-org")
+        return systemctl.which("mongod") is not None or systemctl.dpkg_installed("mongodb-org")
 
     def get_status(self) -> dict:
-        return services.tool_status(
+        return systemctl.tool_status(
             binary="mongod",
             pkg="mongodb-org",
             service="mongod",

@@ -1,72 +1,66 @@
-import os
-from pathlib import Path
-from config import BASE_DIR
+"""Builds the command that runs one bash function from scripts/.
 
-def find_script_for_function(function_name: str) -> str:
-    """Scan scripts/ directory to find which script contains the function definition."""
-    scripts_dir = BASE_DIR / "scripts"
-    if scripts_dir.exists():
-        for file in os.listdir(scripts_dir):
-            if file.endswith(".sh"):
-                file_path = scripts_dir / file
-                try:
-                    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                        content = f.read()
-                    # Match function definition: function_name() or function function_name
-                    if f"{function_name}()" in content or f"function {function_name}" in content:
-                        # Auto-normalize line endings to LF on the fly to prevent CRLF bash parsing errors
-                        with open(file_path, "rb") as bf:
-                            raw_bytes = bf.read()
-                        if b"\r\n" in raw_bytes:
-                            with open(file_path, "wb") as bf:
-                                bf.write(raw_bytes.replace(b"\r\n", b"\n"))
-                        return str(file_path)
-                except Exception:
-                    pass
-    
-    # Fallback to system.sh if not found
-    fallback = BASE_DIR / "scripts" / "system.sh"
-    if fallback.exists():
-        # Auto-normalize fallback file as well
-        try:
-            with open(fallback, "rb") as bf:
-                raw_bytes = bf.read()
-            if b"\r\n" in raw_bytes:
-                with open(fallback, "wb") as bf:
-                    bf.write(raw_bytes.replace(b"\r\n", b"\n"))
-        except Exception:
-            pass
-        return str(fallback)
-    return ""
+Bash is the engine: install and configuration logic lives in scripts/, and the
+panel only calls into it. A module names its script explicitly (`Module.script`),
+so the common path is a direct lookup; the scan below is the fallback for
+functions that are not owned by a tool module (system, firewall, disks, …) and
+its result is cached for the process lifetime.
+"""
+import functools
+
+from config import SCRIPTS_DIR, SCRIPTS_LIB_DIR
 
 
-def build_cmd(function: str, *args: str) -> list[str]:
-    script_path = find_script_for_function(function)
-    if not script_path:
-        raise ValueError(f"Could not locate a script defining function: {function}")
-        
-    # Use standard shell positional parameter expansion for safe execution:
-    # $1 is the script path to source, $2 is the function name, and $@ starting from $3 are args.
-    #
-    # Shared helpers (_ufw_allow_port in firewall.sh, _register_panel_service in
-    # service.sh) are defined in their own scripts but called from many install
-    # scripts. Source those libraries first — from the same directory as the
-    # target — so those calls resolve. Re-sourcing the target when it *is* one of
-    # the libraries is harmless (function definitions are simply re-evaluated).
+class ScriptNotFound(ValueError):
+    """No script in scripts/ defines the requested function."""
+
+
+def _defines(path, function: str) -> bool:
+    try:
+        content = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return False
+    return f"{function}()" in content or f"function {function}" in content
+
+
+@functools.lru_cache(maxsize=256)
+def find_script_for_function(function: str) -> str:
+    """Path of the script defining `function`. Cached — scripts/ is static at runtime."""
+    for path in sorted(SCRIPTS_DIR.glob("*.sh")):
+        if _defines(path, function):
+            return str(path)
+    for path in sorted(SCRIPTS_LIB_DIR.glob("*.sh")):
+        if _defines(path, function):
+            return str(path)
+    raise ScriptNotFound(f"No script in scripts/ defines the function '{function}'.")
+
+
+def resolve_script(function: str, script: str | None = None) -> str:
+    """Prefer the script a module declared; fall back to scanning for the function."""
+    if script:
+        candidate = SCRIPTS_DIR / script
+        if candidate.is_file() and _defines(candidate, function):
+            return str(candidate)
+    return find_script_for_function(function)
+
+
+def build_cmd(function: str, *args: str, script: str | None = None) -> list[str]:
+    """`bash -c` command that sources the shared libs, then the target script,
+    then calls `function` with `args`.
+
+    Arguments travel as positional parameters ($3 onwards), never spliced into
+    the script text, so a value containing shell metacharacters stays one word.
+    """
+    script_path = resolve_script(function, script)
+
+    # scripts/lib/*.sh holds helpers install scripts call by name
+    # (_ufw_allow_port, _register_panel_service, log_header, …). Source them
+    # first so those calls resolve regardless of which script is the target.
     snippet = (
-        '_libdir="$(dirname "$1")"; '
-        'for _lib in firewall.sh service.sh; do '
-        'if [ -f "$_libdir/$_lib" ]; then source "$_libdir/$_lib"; fi; '
-        'done; '
+        '_libdir="$(dirname "$1")/lib"; '
+        'if [ -d "$_libdir" ]; then '
+        'for _lib in "$_libdir"/*.sh; do [ -f "$_lib" ] && source "$_lib"; done; '
+        "fi; "
         'source "$1" && "$2" "${@:3}"'
     )
-    return [
-        "bash",
-        "-c",
-        snippet,
-        "--",
-        script_path,
-        function,
-        *[str(a) for a in args]
-    ]
-
+    return ["bash", "-c", snippet, "--", script_path, function, *[str(a) for a in args]]

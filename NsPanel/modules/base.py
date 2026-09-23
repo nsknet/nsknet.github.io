@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import Optional
 
 
 class Module(ABC):
@@ -12,13 +11,17 @@ class Module(ABC):
     name: str                     # "nginx"
     display_name: str             # "NGINX Web Server"
     description: str
-    bash_function: Optional[str]  # "install_nginx", or None
-    logo: Optional[str] = None    # "nginx.png" — filename inside /static/logo/
+    bash_function: str | None     # "install_nginx", or None
+    logo: str | None = None       # "nginx.png" — filename served under /logo/
+    # Script in scripts/ defining this module's bash functions. Defaults to
+    # "<name>.sh"; core.bash_invoker falls back to scanning scripts/ when the
+    # named file does not define the function.
+    script: str | None = None
 
     # Optional lifecycle actions, each a bash function name (or None when the
     # tool doesn't support it). Re-install simply re-runs bash_function.
-    uninstall_function: Optional[str] = None         # "uninstall_nginx"
-    change_password_function: Optional[str] = None   # "set_postgres_password"
+    uninstall_function: str | None = None         # "uninstall_nginx"
+    change_password_function: str | None = None   # "set_postgres_password"
 
     # Install-time prompts shown by the UI before launching the install job.
     # When True, the install dialog asks for an admin/DB password (auto-generated,
@@ -35,6 +38,11 @@ class Module(ABC):
     # is passed to the install script under (same safe channel as DB_PASSWORD).
     # For `select`, `options` is [{value, label}] and the first is the default.
     install_params: list[dict] = []
+
+    @property
+    def script_name(self) -> str:
+        """The script this module's bash functions live in."""
+        return self.script or f"{self.name}.sh"
 
     @abstractmethod
     def is_installed(self) -> bool: ...

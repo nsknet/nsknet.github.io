@@ -1,70 +1,50 @@
-"""FastAPI entry point for the VPS admin panel.
+"""FastAPI entry point for NsPanel.
 
-Run via run.sh (recommended) or directly:  uvicorn app:app --host 127.0.0.1 --port 7777
-Binds to localhost only — reach it through an SSH tunnel.
+Launch with run.sh (recommended), which creates the virtualenv, generates the
+session password and binds per NSPANEL_HOST/NSPANEL_PORT. See docs/ARCHITECTURE.md.
 """
 import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from config import HOST, PORT, STATIC_DIR
+from config import DIST_DIR, HOST, LOGO_DIR, PORT
 from core import runner
 from core.auth import get_password, require_auth
-from routes import auth, dashboard, dns, firewall, logs, processes, services, sites, stream, system, tools
-
-
-def ensure_lf_line_endings():
-    """Recursively convert CRLF line endings to LF for all .sh files in the workspace."""
-    import os
-    import logging
-    from config import BASE_DIR
-
-    logger = logging.getLogger("uvicorn.error")
-    converted_count = 0
-
-    for root, _, files in os.walk(BASE_DIR):
-        for file in files:
-            if file.endswith(".sh"):
-                file_path = os.path.join(root, file)
-                try:
-                    with open(file_path, "rb") as f:
-                        content = f.read()
-                    
-                    if b"\r\n" in content:
-                        normalized = content.replace(b"\r\n", b"\n")
-                        with open(file_path, "wb") as f:
-                            f.write(normalized)
-                        converted_count += 1
-                        logger.info(f"Normalized line endings to LF: {file_path}")
-                except Exception as e:
-                    logger.error(f"Failed to normalize line endings for {file_path}: {e}")
-
-    if converted_count > 0:
-        logger.info(f"Successfully normalized line endings to LF for {converted_count} shell script(s).")
+from routes import (
+    auth,
+    dashboard,
+    dns,
+    firewall,
+    logs,
+    processes,
+    services,
+    sites,
+    stream,
+    system,
+    tools,
+)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     runner.set_event_loop(asyncio.get_running_loop())
-    # Automatically normalize all shell script line endings to prevent CRLF bash errors on Linux.
-    ensure_lf_line_endings()
     # run.sh prints the full banner; this line covers the direct-uvicorn case.
     print("=" * 60)
-    print(f"  VPS Admin Panel  ->  http://{HOST}:{PORT}")
+    print(f"  NsPanel  ->  http://{HOST}:{PORT}")
     print(f"  user: admin   password: {get_password()}")
     print("=" * 60, flush=True)
     yield
 
 
+app = FastAPI(title="NsPanel", lifespan=lifespan)
 
-app = FastAPI(title="VPS Admin Panel", lifespan=lifespan)
-
-# Everything except /logout and static files sits behind a single Basic Auth dependency.
+# Everything except /logout and static assets sits behind one Basic Auth dependency.
 _auth = [Depends(require_auth)]
 
-# Include the JSON REST routers
+# JSON REST API
 app.include_router(dashboard.router, dependencies=_auth)
 app.include_router(system.router, dependencies=_auth)
 app.include_router(processes.router, dependencies=_auth)
@@ -77,9 +57,29 @@ app.include_router(logs.router, dependencies=_auth)
 app.include_router(stream.router, dependencies=_auth)
 app.include_router(auth.router)  # /logout — must work without auth
 
-# Mount the static files directory at the root (/) to serve the Vue SPA.
-# This must be mounted AFTER the API routers so it acts as a fallback for static pages.
-app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
+# Tool icons keep their own URL prefix so the built SPA can reference them
+# independently of the bundle's hashed asset names.
+app.mount("/logo", StaticFiles(directory=str(LOGO_DIR)), name="logo")
+
+
+_MISSING_BUILD_HTML = (
+    "<h1>NsPanel frontend is not built</h1>"
+    "<p>Run <code>cd frontend &amp;&amp; npm ci &amp;&amp; npm run build</code>.</p>"
+)
+
+
+@app.get("/{full_path:path}", include_in_schema=False, dependencies=_auth)
+def spa(full_path: str):
+    """Serve the built Vue SPA, falling back to index.html for client routes."""
+    root = DIST_DIR.resolve()
+    candidate = (DIST_DIR / full_path).resolve()
+    if full_path and candidate.is_file() and candidate.is_relative_to(root):
+        return FileResponse(candidate)
+    index = DIST_DIR / "index.html"
+    if index.exists():
+        return FileResponse(index)
+    return HTMLResponse(_MISSING_BUILD_HTML, status_code=503)
+
 
 if __name__ == "__main__":
     import uvicorn

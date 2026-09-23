@@ -1,238 +1,249 @@
-"""System API."""
+"""System API: host info, timezone, network, swap and disks."""
 import ipaddress
 import re
+from typing import Annotated, Any
+from zoneinfo import available_timezones
 
-from fastapi import APIRouter, Form, HTTPException
+from fastapi import APIRouter, Form
+from pydantic import BaseModel, field_validator
 
-from core import audit, bash_invoker, runner
+from core import jobs
+from core.schemas import DataResponse, JobResponse
+from core.validators import DEVICE, IFACE, MOUNT, VALID_FSTYPES, bad_request, require_match
 from features import disks as disks_feature
 from features import system as system_feature
 
 router = APIRouter(prefix="/api/v1/system")
 
-# Linux interface names: letters, digits, and a few separators (e.g. eth0, ens3, enp0s3, wlan0).
-_IFACE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.@:-]{0,15}$")
-
-# Block-device paths: /dev/sda1, /dev/vdb, /dev/nvme0n1p2, /dev/mapper/vg-lv, …
-_DEVICE_RE = re.compile(r"^/dev/[A-Za-z0-9][A-Za-z0-9/_.-]{0,63}$")
-# Mount points must be absolute paths without traversal or shell-hostile chars.
-_MOUNT_RE = re.compile(r"^/[A-Za-z0-9][A-Za-z0-9/_.-]{0,127}$")
-# Filesystems the panel can create — must stay in sync with format_disk in disks.sh.
-_VALID_FSTYPES = {"ext4", "ext3", "ext2", "xfs", "btrfs", "vfat", "ntfs"}
+_SYSTEM_SCRIPT = "system.sh"
+_DISKS_SCRIPT = "disks.sh"
+_LABEL_RE = re.compile(r"^[A-Za-z0-9._-]{1,32}$")
 
 
 @router.get("")
-def get_system():
-    return {
-        "status": "success",
-        "info": system_feature.get_full_info()
-    }
+def get_system() -> DataResponse[dict[str, Any]]:
+    return DataResponse(data=system_feature.get_full_info())
 
 
 @router.post("/common-config")
-async def run_common_config():
-    cmd = bash_invoker.build_cmd("common_configs")
-    job_id = runner.create_job(cmd, "Common Config Setup")
-    runner.start_job(job_id)
-    audit.log("system.common_configs", f"job={job_id}")
-    return {
-        "status": "success",
-        "job_id": job_id,
-        "title": "Common Config Setup"
-    }
-
-
-@router.post("/set-timezone")
-async def set_timezone(tz: str = Form(...)):
-    allowed = {"Asia/Ho_Chi_Minh", "America/New_York"}
-    if tz not in allowed:
-        tz = "Asia/Ho_Chi_Minh"
-    cmd = bash_invoker.build_cmd("set_timezone", tz)
-    job_id = runner.create_job(cmd, f"Set Timezone → {tz}")
-    runner.start_job(job_id)
-    audit.log("system.set_timezone", f"tz={tz} job={job_id}")
-    return {
-        "status": "success",
-        "job_id": job_id,
-        "title": f"Setting Timezone → {tz}"
-    }
+def run_common_config() -> JobResponse:
+    return jobs.launch_bash(
+        "common_configs",
+        script=_SYSTEM_SCRIPT,
+        label="Common Config Setup",
+        audit_action="system.common_configs",
+    )
 
 
 @router.post("/install-utils")
-async def install_utils():
-    cmd = bash_invoker.build_cmd("install_common_utils")
-    job_id = runner.create_job(cmd, "Install Common Utilities")
-    runner.start_job(job_id)
-    audit.log("system.install_utils", f"job={job_id}")
-    return {
-        "status": "success",
-        "job_id": job_id,
-        "title": "Installing Common Utilities"
-    }
+def install_utils() -> JobResponse:
+    return jobs.launch_bash(
+        "install_common_utils",
+        script=_SYSTEM_SCRIPT,
+        label="Install Common Utilities",
+        title="Installing Common Utilities",
+        audit_action="system.install_utils",
+    )
 
 
-@router.post("/set-network")
-async def set_network(
-    iface: str = Form(...),
-    method: str = Form(...),
-    address: str = Form(""),
-    gateway: str = Form(""),
-    dns: str = Form(""),
-):
-    """Configure an interface for DHCP or a static IPv4 address via netplan."""
-    iface = iface.strip()
-    method = method.strip().lower()
+@router.post("/set-timezone")
+def set_timezone(tz: Annotated[str, Form()]) -> JobResponse:
+    tz = tz.strip()
+    if tz not in available_timezones():
+        raise bad_request(f"Unknown timezone: {tz!r}")
+    return jobs.launch_bash(
+        "set_timezone",
+        tz,
+        script=_SYSTEM_SCRIPT,
+        label=f"Set Timezone → {tz}",
+        title=f"Setting Timezone → {tz}",
+        audit_action="system.set_timezone",
+        audit_detail=f"tz={tz}",
+    )
 
-    if not _IFACE_RE.match(iface):
-        raise HTTPException(status_code=400, detail=f"Invalid interface name: {iface}")
-    if method not in ("dhcp", "manual"):
-        raise HTTPException(status_code=400, detail="method must be 'dhcp' or 'manual'")
 
-    addr_cidr = ""
-    gw = ""
-    dns_list = ""
-    if method == "manual":
-        # Address must be CIDR notation (e.g. 192.168.1.50/24).
+class NetworkConfig(BaseModel):
+    """DHCP or a static IPv4 address for one interface, applied via netplan."""
+
+    iface: str
+    method: str
+    address: str = ""
+    gateway: str = ""
+    dns: str = ""
+
+    @field_validator("iface")
+    @classmethod
+    def _iface(cls, v: str) -> str:
+        v = v.strip()
+        if not IFACE.match(v):
+            raise ValueError("invalid interface name")
+        return v
+
+    @field_validator("method")
+    @classmethod
+    def _method(cls, v: str) -> str:
+        v = v.strip().lower()
+        if v not in ("dhcp", "manual"):
+            raise ValueError("method must be 'dhcp' or 'manual'")
+        return v
+
+    def resolved(self) -> tuple[str, str, str]:
+        """(address/CIDR, gateway, comma-separated DNS) — empty strings for DHCP."""
+        if self.method == "dhcp":
+            return "", "", ""
+
+        address = self.address.strip()
         try:
-            iface_addr = ipaddress.ip_interface(address.strip())
+            # Require an explicit prefix: ip_interface() would silently read a
+            # bare address as /32, which is never what a static config wants.
+            if "/" not in address:
+                raise ValueError
+            iface_addr = ipaddress.ip_interface(address)
             if iface_addr.version != 4:
-                raise ValueError("only IPv4 is supported")
-        except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail="Address must be IPv4 in CIDR notation, e.g. 192.168.1.50/24",
-            )
-        addr_cidr = str(iface_addr)
+                raise ValueError
+        except ValueError as exc:
+            raise bad_request("Address must be IPv4 in CIDR notation, e.g. 192.168.1.50/24") from exc
 
-        gateway = gateway.strip()
+        gateway = self.gateway.strip()
         if gateway:
             try:
                 if ipaddress.ip_address(gateway).version != 4:
-                    raise ValueError("only IPv4 is supported")
-            except ValueError:
-                raise HTTPException(status_code=400, detail=f"Invalid gateway: {gateway}")
-            gw = gateway
+                    raise ValueError
+            except ValueError as exc:
+                raise bad_request(f"Invalid gateway: {gateway}") from exc
 
-        servers = [s.strip() for s in re.split(r"[,\s]+", dns) if s.strip()]
-        for s in servers:
+        servers = [s.strip() for s in re.split(r"[,\s]+", self.dns) if s.strip()]
+        for server in servers:
             try:
-                ipaddress.ip_address(s)
-            except ValueError:
-                raise HTTPException(status_code=400, detail=f"Invalid DNS server: {s}")
-        dns_list = ",".join(servers)
+                ipaddress.ip_address(server)
+            except ValueError as exc:
+                raise bad_request(f"Invalid DNS server: {server}") from exc
 
-    cmd = bash_invoker.build_cmd("set_network_ip", iface, method, addr_cidr, gw, dns_list)
-    title = (
-        f"Set {iface} → DHCP"
-        if method == "dhcp"
-        else f"Set {iface} → {addr_cidr}"
+        return str(iface_addr), gateway, ",".join(servers)
+
+
+@router.post("/set-network")
+def set_network(config: Annotated[NetworkConfig, Form()]) -> JobResponse:
+    addr_cidr, gateway, dns_list = config.resolved()
+    title = f"Set {config.iface} → DHCP" if config.method == "dhcp" else f"Set {config.iface} → {addr_cidr}"
+    return jobs.launch_bash(
+        "set_network_ip",
+        config.iface,
+        config.method,
+        addr_cidr,
+        gateway,
+        dns_list,
+        script=_SYSTEM_SCRIPT,
+        label=title,
+        title=title,
+        audit_action="system.set_network",
+        audit_detail=(
+            f"iface={config.iface} method={config.method} address={addr_cidr} gateway={gateway}"
+        ),
     )
-    job_id = runner.create_job(cmd, title)
-    runner.start_job(job_id)
-    audit.log(
-        "system.set_network",
-        f"iface={iface} method={method} address={addr_cidr} gateway={gw} job={job_id}",
-    )
-    return {
-        "status": "success",
-        "job_id": job_id,
-        "title": title,
-    }
 
 
 @router.post("/swap")
-async def install_swap(size_gb: int = Form(...)):
+def install_swap(size_gb: Annotated[int, Form()]) -> JobResponse:
     size_gb = max(1, min(size_gb, 64))
-    cmd = bash_invoker.build_cmd("install_virtual_ram", str(size_gb))
-    job_id = runner.create_job(cmd, f"Install {size_gb} GB Swap")
-    runner.start_job(job_id)
-    audit.log("system.install_swap", f"size_gb={size_gb} job={job_id}")
-    return {
-        "status": "success",
-        "job_id": job_id,
-        "title": f"Installing {size_gb} GB Virtual RAM"
-    }
+    return jobs.launch_bash(
+        "install_virtual_ram",
+        str(size_gb),
+        script=_SYSTEM_SCRIPT,
+        label=f"Install {size_gb} GB Swap",
+        title=f"Installing {size_gb} GB Virtual RAM",
+        audit_action="system.install_swap",
+        audit_detail=f"size_gb={size_gb}",
+    )
 
 
-# ── Disks ───────────────────────────────────────────────────────────────────────
+# ── Disks ─────────────────────────────────────────────────────────────────────
+
 
 @router.get("/disks")
-def get_disks():
-    return {
-        "status": "success",
-        "disks": disks_feature.list_disks(),
-    }
+def get_disks() -> DataResponse[list[dict[str, Any]]]:
+    return DataResponse(data=disks_feature.list_disks())
 
 
-def _validate_device(device: str) -> str:
-    device = device.strip()
-    if not _DEVICE_RE.match(device):
-        raise HTTPException(status_code=400, detail=f"Invalid device path: {device!r}")
-    return device
+def _device(value: str) -> str:
+    return require_match(value, DEVICE, f"Invalid device path: {value.strip()!r}")
 
 
-def _validate_mountpoint(mountpoint: str) -> str:
-    mountpoint = mountpoint.strip().rstrip("/") or "/"
-    if not _MOUNT_RE.match(mountpoint):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid mount point: {mountpoint!r}. Use an absolute path, e.g. /mnt/data.",
-        )
-    return mountpoint
+def _mountpoint(value: str) -> str:
+    value = value.strip().rstrip("/") or "/"
+    if not MOUNT.match(value):
+        raise bad_request(f"Invalid mount point: {value!r}. Use an absolute path, e.g. /mnt/data.")
+    return value
 
 
 @router.post("/disk/mount")
-async def mount_disk(
-    device: str = Form(...),
-    mountpoint: str = Form(...),
-    persist: bool = Form(False),
-):
-    device = _validate_device(device)
-    mountpoint = _validate_mountpoint(mountpoint)
-    cmd = bash_invoker.build_cmd("mount_disk", device, mountpoint, "1" if persist else "0")
+def mount_disk(
+    device: Annotated[str, Form()],
+    mountpoint: Annotated[str, Form()],
+    persist: Annotated[bool, Form()] = False,
+) -> JobResponse:
+    device = _device(device)
+    mountpoint = _mountpoint(mountpoint)
     title = f"Mount {device} → {mountpoint}"
-    job_id = runner.create_job(cmd, title)
-    runner.start_job(job_id)
-    audit.log("system.mount_disk", f"device={device} mountpoint={mountpoint} persist={persist} job={job_id}")
-    return {"status": "success", "job_id": job_id, "title": title}
+    return jobs.launch_bash(
+        "mount_disk",
+        device,
+        mountpoint,
+        "1" if persist else "0",
+        script=_DISKS_SCRIPT,
+        label=title,
+        title=title,
+        audit_action="system.mount_disk",
+        audit_detail=f"device={device} mountpoint={mountpoint} persist={persist}",
+    )
 
 
 @router.post("/disk/unmount")
-async def unmount_disk(
-    target: str = Form(...),
-    remove_fstab: bool = Form(False),
-):
+def unmount_disk(
+    target: Annotated[str, Form()],
+    remove_fstab: Annotated[bool, Form()] = False,
+) -> JobResponse:
     target = target.strip()
     # target may be a device (/dev/...) or a mount point (/mnt/...).
-    if not (_DEVICE_RE.match(target) or _MOUNT_RE.match(target)):
-        raise HTTPException(status_code=400, detail=f"Invalid target: {target!r}")
-    cmd = bash_invoker.build_cmd("unmount_disk", target, "1" if remove_fstab else "0")
+    if not (DEVICE.match(target) or MOUNT.match(target)):
+        raise bad_request(f"Invalid target: {target!r}")
     title = f"Unmount {target}"
-    job_id = runner.create_job(cmd, title)
-    runner.start_job(job_id)
-    audit.log("system.unmount_disk", f"target={target} remove_fstab={remove_fstab} job={job_id}")
-    return {"status": "success", "job_id": job_id, "title": title}
+    return jobs.launch_bash(
+        "unmount_disk",
+        target,
+        "1" if remove_fstab else "0",
+        script=_DISKS_SCRIPT,
+        label=title,
+        title=title,
+        audit_action="system.unmount_disk",
+        audit_detail=f"target={target} remove_fstab={remove_fstab}",
+    )
 
 
 @router.post("/disk/format")
-async def format_disk(
-    device: str = Form(...),
-    fstype: str = Form(...),
-    label: str = Form(""),
-):
-    device = _validate_device(device)
+def format_disk(
+    device: Annotated[str, Form()],
+    fstype: Annotated[str, Form()],
+    label: Annotated[str, Form()] = "",
+) -> JobResponse:
+    device = _device(device)
     fstype = fstype.strip().lower()
-    if fstype not in _VALID_FSTYPES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid filesystem: {fstype!r}. Expected one of: {', '.join(sorted(_VALID_FSTYPES))}.",
+    if fstype not in VALID_FSTYPES:
+        raise bad_request(
+            f"Invalid filesystem: {fstype!r}. Expected one of: {', '.join(sorted(VALID_FSTYPES))}."
         )
     label = label.strip()
-    if label and not re.match(r"^[A-Za-z0-9._-]{1,32}$", label):
-        raise HTTPException(status_code=400, detail="Label may only contain letters, digits, '.', '_' and '-' (max 32).")
-    cmd = bash_invoker.build_cmd("format_disk", device, fstype, label)
+    if label and not _LABEL_RE.match(label):
+        raise bad_request("Label may only contain letters, digits, '.', '_' and '-' (max 32).")
     title = f"Format {device} as {fstype}"
-    job_id = runner.create_job(cmd, title)
-    runner.start_job(job_id)
-    audit.log("system.format_disk", f"device={device} fstype={fstype} label={label} job={job_id}")
-    return {"status": "success", "job_id": job_id, "title": title}
+    return jobs.launch_bash(
+        "format_disk",
+        device,
+        fstype,
+        label,
+        script=_DISKS_SCRIPT,
+        label=title,
+        title=title,
+        audit_action="system.format_disk",
+        audit_detail=f"device={device} fstype={fstype} label={label}",
+    )

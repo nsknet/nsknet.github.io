@@ -1,96 +1,99 @@
-"""Firewall API."""
+"""Firewall API: UFW rules."""
 import ipaddress
-import re
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Form, HTTPException
+from fastapi import APIRouter, Form
+from pydantic import BaseModel, field_validator
 
-from core import audit, bash_invoker, runner
+from core import jobs
+from core.schemas import DataResponse, JobResponse
+from core.validators import UFW_ACTIONS, UFW_PORT
 from features import system as system_feature
 
 router = APIRouter(prefix="/api/v1/firewall")
 
-# A port is a number, optionally suffixed with /tcp or /udp (e.g. 443 or 443/udp).
-_PORT_RE = re.compile(r"^\d{1,5}(?:/(?:tcp|udp))?$", re.IGNORECASE)
-_VALID_ACTIONS = {"allow", "deny", "reject", "limit"}
+_FIREWALL_SCRIPT = "firewall.sh"
+
+
+class PortRule(BaseModel):
+    port: str
+    action: str = "allow"
+    source: str = "Anywhere"
+    comment: str = ""
+
+    @field_validator("port")
+    @classmethod
+    def _port(cls, v: str) -> str:
+        v = v.strip()
+        if not UFW_PORT.match(v):
+            raise ValueError("use a number, optionally with protocol, e.g. 443 or 443/tcp")
+        if not 1 <= int(v.split("/")[0]) <= 65535:
+            raise ValueError("port out of range (1–65535)")
+        return v
+
+    @field_validator("action")
+    @classmethod
+    def _action(cls, v: str) -> str:
+        v = v.strip()
+        if v.lower() not in UFW_ACTIONS:
+            raise ValueError(f"expected one of: {', '.join(sorted(UFW_ACTIONS))}")
+        return v
+
+    @field_validator("source")
+    @classmethod
+    def _source(cls, v: str) -> str:
+        v = v.strip()
+        # Either an IP/CIDR or the sentinel "Anywhere"/"any" (empty == any).
+        if v.lower() in ("anywhere", "any", ""):
+            return v
+        try:
+            ipaddress.ip_network(v, strict=False)
+        except ValueError as exc:
+            raise ValueError("use an IP/CIDR (e.g. 10.0.0.0/8) or 'Anywhere'") from exc
+        return v
 
 
 @router.get("")
-def get_firewall():
-    return {
-        "status": "success",
-        "ufw": system_feature.get_ufw_info()
-    }
+def get_firewall() -> DataResponse[dict[str, Any]]:
+    return DataResponse(data=system_feature.get_ufw_info())
 
 
 @router.post("/install")
-async def install_ufw():
-    cmd = bash_invoker.build_cmd("install_ufw")
-    job_id = runner.create_job(cmd, "Install UFW Firewall")
-    runner.start_job(job_id)
-    audit.log("firewall.install_ufw", f"job={job_id}")
-    return {
-        "status": "success",
-        "job_id": job_id,
-        "title": "Installing UFW Firewall"
-    }
+def install_ufw() -> JobResponse:
+    return jobs.launch_bash(
+        "install_ufw",
+        script=_FIREWALL_SCRIPT,
+        label="Install UFW Firewall",
+        title="Installing UFW Firewall",
+        audit_action="firewall.install_ufw",
+    )
 
 
 @router.post("/add-port")
-async def add_port(
-    port: str = Form(...),
-    action: str = Form("ALLOW"),
-    source: str = Form("Anywhere"),
-    comment: str = Form("")
-):
-    port = port.strip()
-    action = action.strip()
-    source = source.strip()
-    comment = comment.strip()
-
-    # Validate up front so bad input is rejected with a clear 400 rather than
-    # being handed to ufw (mirrors the validation done in routes/system.py).
-    if not _PORT_RE.match(port):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid port: {port!r}. Use a number, optionally with protocol, e.g. 443 or 443/tcp.",
-        )
-    if not 1 <= int(port.split("/")[0]) <= 65535:
-        raise HTTPException(status_code=400, detail=f"Port out of range (1–65535): {port}")
-    if action.lower() not in _VALID_ACTIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid action: {action!r}. Expected one of: {', '.join(sorted(_VALID_ACTIONS))}.",
-        )
-    # Source is either an IP/CIDR or the sentinel "Anywhere"/"any" (empty == any).
-    if source.lower() not in ("anywhere", "any", ""):
-        try:
-            ipaddress.ip_network(source, strict=False)
-        except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid source: {source!r}. Use an IP/CIDR (e.g. 10.0.0.0/8) or 'Anywhere'.",
-            )
-
-    cmd = bash_invoker.build_cmd("ufw_allow_port", port, action, source, comment)
-    title = f"Adding rule: {action} {port} from {source}"
-    job_id = runner.create_job(cmd, title)
-    runner.start_job(job_id)
-    audit.log("firewall.add_rule", f"port={port} action={action} source={source} job={job_id}")
-    return {
-        "status": "success",
-        "job_id": job_id,
-        "title": title
-    }
+def add_port(rule: Annotated[PortRule, Form()]) -> JobResponse:
+    title = f"Adding rule: {rule.action} {rule.port} from {rule.source}"
+    return jobs.launch_bash(
+        "ufw_allow_port",
+        rule.port,
+        rule.action,
+        rule.source,
+        rule.comment.strip(),
+        script=_FIREWALL_SCRIPT,
+        label=title,
+        title=title,
+        audit_action="firewall.add_rule",
+        audit_detail=f"port={rule.port} action={rule.action} source={rule.source}",
+    )
 
 
 @router.post("/delete-port")
-async def delete_port(rule_num: int = Form(...)):
-    cmd = bash_invoker.build_cmd("ufw_delete_port", str(rule_num))
-    job_id = runner.create_job(cmd, f"Delete rule #{rule_num}")
-    runner.start_job(job_id)
-    audit.log("firewall.delete_rule", f"rule_num={rule_num} job={job_id}")
-    return {
-        "status": "success",
-        "job_id": job_id,
-        "title": f"Deleting firewall rule #{rule_num}"
-    }
+def delete_port(rule_num: Annotated[int, Form()]) -> JobResponse:
+    return jobs.launch_bash(
+        "ufw_delete_port",
+        str(rule_num),
+        script=_FIREWALL_SCRIPT,
+        label=f"Delete rule #{rule_num}",
+        title=f"Deleting firewall rule #{rule_num}",
+        audit_action="firewall.delete_rule",
+        audit_detail=f"rule_num={rule_num}",
+    )

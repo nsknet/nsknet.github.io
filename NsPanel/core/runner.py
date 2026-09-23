@@ -8,6 +8,9 @@ import asyncio
 import os
 import re
 import uuid
+from collections import OrderedDict
+
+from config import MAX_JOBS
 
 # Strip terminal escape sequences except SGR (colors/formatting) sequences.
 # SGR sequences end with 'm' (e.g. \x1b[0m, \x1b[1;31m).
@@ -19,9 +22,23 @@ _ANSI_STRIP = re.compile(
     r"|\x1b[a-ln-zB-Z]"                   # lone ESC followed by non-m, non-[ characters
 )
 
-# job_id -> {cmd, label, status, exit_code, lines}
-_jobs: dict[str, dict] = {}
+# job_id -> {cmd, label, status, exit_code, lines}. Insertion-ordered and
+# capped at MAX_JOBS: the oldest finished job is dropped when a new one starts,
+# so a long-running panel does not accumulate output buffers forever.
+_jobs: OrderedDict[str, dict] = OrderedDict()
 _loop: asyncio.AbstractEventLoop | None = None
+
+
+def _evict_old_jobs() -> None:
+    """Drop the oldest finished jobs once the store is over capacity."""
+    while len(_jobs) > MAX_JOBS:
+        for job_id, job in _jobs.items():
+            if job["status"] in ("done", "failed"):
+                del _jobs[job_id]
+                break
+        else:
+            # Everything still running — nothing safe to drop.
+            return
 
 
 def set_event_loop(loop: asyncio.AbstractEventLoop) -> None:
@@ -42,6 +59,7 @@ def create_job(cmd: list[str], label: str = "", env: dict[str, str] | None = Non
         # into the displayed command line.
         "env": {str(k): str(v) for k, v in (env or {}).items()},
     }
+    _evict_old_jobs()
     return job_id
 
 
@@ -123,7 +141,7 @@ async def _run(job_id: str) -> None:
     # period to flush buffered output, then stop reading and abandon the pipe.
     try:
         await asyncio.wait_for(drain_task, timeout=2.0)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         job["lines"].append(
             "\x1b[2m(output stream left open by a background process — continuing)\x1b[0m"
         )

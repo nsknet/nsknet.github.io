@@ -14,12 +14,15 @@ import re
 import tempfile
 from pathlib import Path
 
-from features import services
+from features import systemctl
 
 COREDNS_DIR = Path("/etc/coredns")
 HOSTS_FILE = COREDNS_DIR / "hosts"
 
-_DOMAIN_RE = re.compile(r"^(?=.{1,253}$)[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
+_DOMAIN_RE = re.compile(
+    r"^(?=.{1,253}$)[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
+    r"(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$"
+)
 
 _HEADER = (
     "# CoreDNS host records — managed by NsPanel (DNS screen).\n"
@@ -28,7 +31,7 @@ _HEADER = (
 
 
 def is_installed() -> bool:
-    return services.which("coredns") is not None
+    return systemctl.which("coredns") is not None
 
 
 def valid_ipv4(value: str) -> bool:
@@ -44,7 +47,7 @@ def valid_domain(value: str) -> bool:
 
 def status() -> dict:
     """{installed, running, version} for the DNS screen header."""
-    st = services.tool_status(
+    st = systemctl.tool_status(
         binary="coredns",
         service="coredns",
         version_cmd=["coredns", "-version"],

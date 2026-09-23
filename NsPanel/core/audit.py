@@ -5,7 +5,7 @@ from config import AUDIT_LOG, AUDIT_TAIL_LINES
 
 
 def _now() -> str:
-    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def log(action: str, detail: str = "") -> None:

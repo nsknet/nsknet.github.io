@@ -1,11 +1,13 @@
-from features import services
+from features import systemctl
 from modules.base import Module
 
 
 class PostgresModule(Module):
     name = "postgres"
     display_name = "PostgreSQL 16"
-    description = "PostgreSQL 16 via PGDG. Auto-generates credentials saved to /etc/postgresql/credentials.yml."
+    description = (
+        "PostgreSQL 16 via PGDG. Auto-generates credentials saved to /etc/postgresql/credentials.yml."
+    )
     bash_function = "install_postgres"
     uninstall_function = "uninstall_postgres"
     change_password_function = "set_postgres_password"
@@ -14,10 +16,10 @@ class PostgresModule(Module):
     firewall_ports = [5432]
 
     def is_installed(self) -> bool:
-        return services.which("psql") is not None or services.dpkg_installed("postgresql-16")
+        return systemctl.which("psql") is not None or systemctl.dpkg_installed("postgresql-16")
 
     def get_status(self) -> dict:
-        status = services.tool_status(
+        status = systemctl.tool_status(
             binary="psql",
             pkg="postgresql-16",
             service="postgresql",

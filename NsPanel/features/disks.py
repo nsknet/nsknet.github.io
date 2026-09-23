@@ -10,7 +10,6 @@ import subprocess
 
 import psutil
 
-
 # Filesystems we treat as "real" data partitions worth showing usage for. Pseudo
 # and snap/loop filesystems are still listed but never get usage probed.
 _PSEUDO_FSTYPES = {"squashfs"}

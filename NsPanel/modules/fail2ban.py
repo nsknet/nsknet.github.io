@@ -1,4 +1,4 @@
-from features import services
+from features import systemctl
 from modules.base import Module
 
 
@@ -11,10 +11,10 @@ class Fail2banModule(Module):
     logo = "fail2ban.png"
 
     def is_installed(self) -> bool:
-        return services.which("fail2ban-client") is not None or services.dpkg_installed("fail2ban")
+        return systemctl.which("fail2ban-client") is not None or systemctl.dpkg_installed("fail2ban")
 
     def get_status(self) -> dict:
-        return services.tool_status(
+        return systemctl.tool_status(
             binary="fail2ban-client",
             pkg="fail2ban",
             service="fail2ban",

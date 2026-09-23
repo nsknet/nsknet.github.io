@@ -1,10 +1,14 @@
 """FastAPI router for system processes."""
 import os
 import signal
-from fastapi import APIRouter, Form, HTTPException, status
+import subprocess
+from typing import Annotated, Any
+
 import psutil
+from fastapi import APIRouter, Form, HTTPException, status
 
 from core import audit
+from core.schemas import DataResponse, MessageResponse
 
 router = APIRouter(prefix="/api/v1/processes")
 
@@ -13,7 +17,7 @@ _process_cache = {}
 
 
 @router.get("")
-def list_processes(q: str = ""):
+def list_processes(q: str = "") -> DataResponse[list[dict[str, Any]]]:
     global _process_cache
     current_pids = set()
     all_processes = []
@@ -83,13 +87,13 @@ def list_processes(q: str = ""):
     # Clean up the cache to prevent memory leaks by keeping only active PIDs
     _process_cache = {pid: proc for pid, proc in _process_cache.items() if pid in current_pids}
 
-    # Find top 100 sets for CPU and RAM
-    top_cpu_pids = set(p["pid"] for p in sorted(all_processes, key=lambda x: x["cpu_percent"], reverse=True)[:100])
-    top_ram_pids = set(p["pid"] for p in sorted(all_processes, key=lambda x: x["ram_gb"], reverse=True)[:100])
+    def _top_pids(rows: list[dict], key: str, limit: int = 100) -> set[int]:
+        return {p["pid"] for p in sorted(rows, key=lambda x: x[key], reverse=True)[:limit]}
 
-    # Find top 100 for threads where threads > 1
-    threaded_procs = [p for p in all_processes if p["threads"] > 1]
-    top_thread_pids = set(p["pid"] for p in sorted(threaded_procs, key=lambda x: x["threads"], reverse=True)[:100])
+    # Without a query the list shows the union of the busiest processes.
+    top_cpu_pids = _top_pids(all_processes, "cpu_percent")
+    top_ram_pids = _top_pids(all_processes, "ram_gb")
+    top_thread_pids = _top_pids([p for p in all_processes if p["threads"] > 1], "threads")
 
     # Apply filtering
     q_clean = q.strip().lower()
@@ -119,14 +123,11 @@ def list_processes(q: str = ""):
             if in_top_cpu or in_top_ram or in_top_thread:
                 filtered_processes.append(p)
 
-    return {
-        "status": "success",
-        "processes": filtered_processes
-    }
+    return DataResponse(data=filtered_processes)
 
 
 @router.post("/kill")
-def kill_process(pid: int = Form(...)):
+def kill_process(pid: Annotated[int, Form()]) -> MessageResponse:
     success = False
 
     # Escalation Strategy 1: psutil kill
@@ -148,7 +149,6 @@ def kill_process(pid: int = Form(...)):
     # Escalation Strategy 3: Subprocess kill command
     if not success:
         try:
-            import subprocess
             subprocess.run(["kill", "-9", str(pid)], check=True)
             success = True
         except Exception:
@@ -162,7 +162,4 @@ def kill_process(pid: int = Form(...)):
             detail=f"Failed to kill process with PID {pid}. Access Denied or process no longer exists."
         )
 
-    return {
-        "status": "success",
-        "message": f"Process {pid} has been terminated successfully."
-    }
+    return MessageResponse(message=f"Process {pid} has been terminated successfully.")

@@ -1,0 +1,90 @@
+/* Tailwind without preflight: theme.css already carries the reset this UI needs
+   (see the "Base" section there), and preflight would restyle it. */
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+@import './theme.css';
+
+/* `inline` so each utility emits the runtime variable directly — that is what
+   lets a single class react to the light/dark and density switches in theme.css. */
+@theme inline {
+  --font-sans: var(--ff-sans);
+  --font-mono: var(--ff-mono);
+
+  --color-c-bg: var(--bg);
+  --color-c-canvas: var(--bg-canvas);
+  --color-c-card: var(--bg-card);
+  --color-c-elev: var(--bg-elev);
+  --color-c-subtle: var(--bg-subtle);
+  --color-c-hover: var(--bg-hover);
+  --color-c-border: var(--border);
+  --color-c-bstrong: var(--border-strong);
+  --color-c-tx: var(--text);
+  --color-c-tx2: var(--text-2);
+  --color-c-tx3: var(--text-3);
+  --color-c-txinv: var(--text-inv);
+  --color-c-accent: var(--accent);
+  --color-c-achover: var(--accent-hover);
+  --color-c-acsoft: var(--accent-soft);
+  --color-c-acfg: var(--accent-fg);
+  --color-c-actx: var(--accent-text);
+  --color-c-muted: var(--muted-soft);
+  --color-c-ok: var(--ok);
+  --color-c-oksoft: var(--ok-soft);
+  --color-c-info: var(--info);
+  --color-c-infosoft: var(--info-soft);
+  --color-c-warn: var(--warn);
+  --color-c-warnsoft: var(--warn-soft);
+  --color-c-danger: var(--danger);
+  --color-c-dngsoft: var(--danger-soft);
+
+  --radius-theme: var(--rad);
+  --radius-theme-sm: var(--rad-sm);
+  --radius-theme-lg: var(--rad-lg);
+
+  --shadow-sm: var(--elev-sm);
+  --shadow-md: var(--elev-md);
+  --shadow-lg: var(--elev-lg);
+  --shadow-card: var(--elev-card);
+  --shadow-card-hover: var(--elev-card-hover);
+
+  --text-base-var: var(--fs-base);
+  --text-sm-var: var(--fs-sm);
+  --text-xs-var: var(--fs-xs);
+
+  --animate-fade: fade 140ms ease;
+  --animate-pop: pop 160ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  --animate-slidein: slidein 180ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pop {
+  from {
+    transform: translateY(8px) scale(0.98);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@keyframes slidein {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

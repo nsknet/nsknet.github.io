@@ -7,66 +7,41 @@
 set -eo pipefail
 
 
-# Open a TCP port to a chosen set of subnets.
-# Usage: _ufw_allow_port <port> <comment>
-#
-# The caller (the web panel) selects which subnets to expose the port to via the
-# ALLOWED_SUBNETS environment variable — a space-separated list of CIDRs, e.g.
-#   ALLOWED_SUBNETS="10.0.0.0/8 192.168.0.0/16"
-# Special value "0.0.0.0/0" opens the port to every IP (no source restriction).
-# When ALLOWED_SUBNETS is unset/empty we fall back to the standard private +
-# loopback subnets, matching the previous default.
-_ufw_allow_port() {
-    local port="$1"
-    local comment="$2"
+# ── Install and enable UFW ─────────────────────────────────────────────────────
+# Called from the Firewall screen and from common_configs in system.sh.
+install_ufw() {
+    log_header "Installing UFW firewall"
 
-    # Resolve the effective subnet list (env override → default private subnets).
-    local subnets
-    if [ -n "${ALLOWED_SUBNETS// /}" ]; then
-        read -r -a subnets <<< "$ALLOWED_SUBNETS"
-    else
-        subnets=("127.0.0.0/8" "10.0.0.0/8" "172.16.0.0/12" "192.168.0.0/16")
-    fi
-    # Export the effective list so install scripts' "Allow:" summary lines reflect
-    # what was actually applied.
-    ALLOWED_SUBNETS="${subnets[*]}"
-
-    command -v ufw >/dev/null 2>&1 || {
-        echo "▶  Installing UFW..."
+    if ! command -v ufw >/dev/null 2>&1; then
+        log_step "Installing the ufw package..."
+        apt-get update -q
         apt-get install -y ufw
-    }
+    else
+        log_step "UFW is already installed."
+    fi
+
+    # Allow SSH before enabling, or enabling locks the operator out.
+    log_step "Allowing OpenSSH (port 22)..."
+    ufw allow OpenSSH >/dev/null 2>&1 || ufw allow 22/tcp >/dev/null
+
+    log_step "Setting defaults: deny incoming, allow outgoing..."
+    ufw default deny incoming >/dev/null
+    ufw default allow outgoing >/dev/null
 
     if ufw status | grep -q "inactive"; then
-        echo "▶  Enabling UFW..."
-        ufw allow OpenSSH >/dev/null
+        log_step "Enabling UFW..."
         ufw --force enable
+    else
+        log_step "UFW is already active."
+        ufw reload >/dev/null
     fi
 
-    # 0.0.0.0/0 means "any source" — express it as a plain port rule rather than
-    # a from-rule so it reads as an unrestricted allow.
-    local cidr
-    for cidr in "${subnets[@]}"; do
-        if [ "$cidr" = "0.0.0.0/0" ]; then
-            if ufw status | grep -F "${port}/tcp" | grep -q -i "Anywhere"; then
-                echo "▶  UFW: any → tcp/${port} already allowed, skipping."
-            else
-                echo "▶  UFW: allow any → tcp/${port} (${comment})"
-                ufw allow "${port}/tcp" comment "$comment" >/dev/null
-            fi
-            continue
-        fi
+    echo ""
+    ufw status numbered
 
-        if ufw status | grep -F "${port}/tcp" | grep -F "$cidr" | grep -q -i "allow"; then
-            echo "▶  UFW: ${cidr} → tcp/${port} already allowed, skipping."
-        else
-            echo "▶  UFW: allow ${cidr} → tcp/${port} (${comment})"
-            ufw allow from "$cidr" to any port "$port" proto tcp comment "$comment" >/dev/null
-        fi
-    done
-
-    ufw reload >/dev/null
+    log_done "UFW is installed and active."
 }
-
+# Open a TCP port (UFW rule from the Firewall screen).
 ufw_allow_port() {
     local port="${1:?Port required}"
     local action="${2:-allow}"
