@@ -3,9 +3,11 @@
 import { storeToRefs } from 'pinia';
 import { computed, ref } from 'vue';
 
+import Card from '@/components/ui/Card.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
 import LIcon from '@/components/ui/LIcon.vue';
-import Spinner from '@/components/ui/Spinner.vue';
+import PageHeader from '@/components/ui/PageHeader.vue';
+import Skeleton from '@/components/ui/Skeleton.vue';
 import Btn from '@/components/ui/Btn.vue';
 import { useReload } from '@/composables/useScreenData';
 import { useLogsStore } from '@/stores/misc';
@@ -23,7 +25,7 @@ const NS_CLS: Record<string, string> = {
   nginx: 'bg-[color-mix(in_oklab,#16a34a_12%,transparent)] text-[#16a34a]',
   firewall: 'bg-c-dngsoft text-c-danger',
   system: 'bg-c-warnsoft text-c-warn',
-  tool: 'bg-c-acsoft text-c-accent',
+  tool: 'bg-c-acsoft text-c-actx',
 };
 
 const namespace = ref('all');
@@ -63,18 +65,13 @@ async function refresh(): Promise<void> {
 
 <template>
   <section>
-    <div class="flex items-end justify-between gap-6 mb-6">
-      <div>
-        <h1 class="text-[22px] font-semibold tracking-[-0.02em] mb-1">Audit logs</h1>
-        <div class="text-sm-var text-c-tx2">
-          {{ countLabel }} entries · tailing
-          <span class="mono">/var/log/nspanel/audit.log</span>
-        </div>
-      </div>
-      <div class="flex gap-2">
-        <Btn @click="refresh"><LIcon name="refresh-cw" /> Refresh</Btn>
-      </div>
-    </div>
+    <PageHeader title="Audit logs">
+      <template #subtitle>
+        {{ countLabel }} entries · tailing
+        <span class="mono">/var/log/nspanel/audit.log</span>
+      </template>
+      <Btn @click="refresh"><LIcon name="refresh-cw" /> Refresh</Btn>
+    </PageHeader>
 
     <div class="flex items-center gap-2 mb-3 flex-wrap">
       <div class="relative flex-1 max-w-xs">
@@ -99,7 +96,7 @@ async function refresh(): Promise<void> {
       </button>
     </div>
 
-    <div class="bg-c-bg border border-c-border rounded-theme overflow-hidden">
+    <Card class="overflow-clip">
       <table class="tbl">
         <thead>
           <tr>
@@ -110,9 +107,7 @@ async function refresh(): Promise<void> {
         </thead>
         <tbody>
           <tr v-if="loading && !audit.length">
-            <td colspan="3">
-              <div class="text-center py-8 px-6"><Spinner label="Loading logs…" /></div>
-            </td>
+            <td colspan="3" style="padding: 0; height: auto"><Skeleton :count="4" /></td>
           </tr>
           <tr v-else-if="!filtered.length">
             <td colspan="3"><EmptyState title="No matching entries" /></td>
@@ -137,6 +132,6 @@ async function refresh(): Promise<void> {
           </tr>
         </tbody>
       </table>
-    </div>
+    </Card>
   </section>
 </template>

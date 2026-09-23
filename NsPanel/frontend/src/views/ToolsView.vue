@@ -1,24 +1,36 @@
 <script setup lang="ts">
 /** One card per tool module: install, re-install, uninstall, change password. */
 import { storeToRefs } from 'pinia';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 
 import type { Tool } from '@/api/types';
 import Btn from '@/components/ui/Btn.vue';
+import Card from '@/components/ui/Card.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
 import LIcon from '@/components/ui/LIcon.vue';
-import Spinner from '@/components/ui/Spinner.vue';
+import PageHeader from '@/components/ui/PageHeader.vue';
+import Skeleton from '@/components/ui/Skeleton.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
+import ToolLogo from '@/components/ui/ToolLogo.vue';
 import { useJobRunner } from '@/composables/useJobs';
 import { useToolsStore } from '@/stores/tools';
 import { useUiStore } from '@/stores/ui';
 
 const ui = useUiStore();
+const route = useRoute();
 const { run, reload } = useJobRunner();
 const { tools, loading } = storeToRefs(useToolsStore());
 
 const filter = ref<'all' | 'installed' | 'not-installed'>('all');
-const search = ref('');
+// The dashboard and the command palette deep-link here as /tools?q=<name>.
+const search = ref(typeof route.query.q === 'string' ? route.query.q : '');
+watch(
+  () => route.query.q,
+  (q) => {
+    if (typeof q === 'string') search.value = q;
+  },
+);
 
 const installedCount = computed(() => tools.value.filter((tool) => tool.installed).length);
 
@@ -106,18 +118,12 @@ const FILTER_LABELS: Record<string, string> = {
 
 <template>
   <section>
-    <div class="flex items-end justify-between gap-6 mb-6">
-      <div>
-        <h1 class="text-[22px] font-semibold tracking-[-0.02em] mb-1">Tools</h1>
-        <div class="text-sm-var text-c-tx2">
-          {{ installedCount }} of {{ tools.length }} tools installed. One-click provisioning, live
-          health.
-        </div>
-      </div>
-      <div class="flex gap-2">
-        <Btn @click="recheck()"><LIcon name="refresh-cw" /> Re-check all</Btn>
-      </div>
-    </div>
+    <PageHeader
+      title="Tools"
+      :subtitle="`${installedCount} of ${tools.length} tools installed. One-click provisioning, live health.`"
+    >
+      <Btn @click="recheck()"><LIcon name="refresh-cw" /> Re-check all</Btn>
+    </PageHeader>
 
     <div class="flex items-center gap-2 mb-3 flex-wrap">
       <div class="relative flex-1 max-w-xs">
@@ -148,9 +154,7 @@ const FILTER_LABELS: Record<string, string> = {
       </button>
     </div>
 
-    <div v-if="loading && !tools.length" class="text-center py-12 px-6">
-      <Spinner label="Loading tools…" />
-    </div>
+    <Skeleton v-if="loading && !tools.length" variant="cards" :count="6" min="320px" />
 
     <EmptyState
       v-else-if="!filtered.length"
@@ -160,27 +164,18 @@ const FILTER_LABELS: Record<string, string> = {
 
     <div v-else class="grid gap-3" style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr))">
       <template v-for="tool in filtered" :key="tool.id">
-        <div
+        <Card
           v-if="tool.installed"
-          class="flex flex-col gap-3 p-[18px] bg-c-bg border border-c-border rounded-theme transition-colors hover:border-c-bstrong"
+          :tone="tool.state === 'failed' ? 'danger' : 'default'"
+          class="flex flex-col gap-3 p-[18px] transition-colors hover:border-c-bstrong"
         >
           <div class="flex items-start gap-3">
-            <div
-              class="w-10 h-10 rounded-[9px] bg-c-subtle flex items-center justify-center shrink-0 overflow-hidden p-1.5 select-none"
-            >
-              <img
-                v-if="tool.logo.endsWith('.png')"
-                :src="tool.logo"
-                :alt="tool.name"
-                class="w-full h-full object-contain"
-              />
-              <span
-                v-else
-                class="text-[13px] font-bold mono tracking-[-0.02em]"
-                :style="{ color: tool.color }"
-                >{{ tool.logo }}</span
-              >
-            </div>
+            <ToolLogo
+              :logo="tool.logo"
+              :name="tool.name"
+              :color="tool.color"
+              :dim="tool.state === 'stopped' || tool.state === 'inactive'"
+            />
             <div class="flex-1 min-w-0">
               <div class="flex items-center justify-between gap-2 min-w-0">
                 <div class="font-semibold text-[15px] tracking-[-0.01em] truncate" :title="tool.name">
@@ -230,29 +225,15 @@ const FILTER_LABELS: Record<string, string> = {
               <LIcon name="trash-2" />
             </Btn>
           </div>
-        </div>
+        </Card>
 
-        <div
+        <Card
           v-else
-          class="flex flex-col gap-3 p-[18px] bg-c-elev border border-c-border rounded-theme transition-colors hover:border-c-bstrong"
+          tone="muted"
+          class="flex flex-col gap-3 p-[18px] border-dashed transition-colors hover:border-c-bstrong"
         >
           <div class="flex items-start gap-3">
-            <div
-              class="w-10 h-10 rounded-[9px] bg-c-subtle flex items-center justify-center shrink-0 overflow-hidden p-1.5 opacity-70 select-none"
-            >
-              <img
-                v-if="tool.logo.endsWith('.png')"
-                :src="tool.logo"
-                :alt="tool.name"
-                class="w-full h-full object-contain"
-              />
-              <span
-                v-else
-                class="text-[13px] font-bold mono tracking-[-0.02em]"
-                :style="{ color: tool.color }"
-                >{{ tool.logo }}</span
-              >
-            </div>
+            <ToolLogo :logo="tool.logo" :name="tool.name" :color="tool.color" dim />
             <div class="flex-1 min-w-0">
               <div class="flex items-center justify-between gap-2 min-w-0">
                 <div class="font-semibold text-[15px] tracking-[-0.01em] truncate" :title="tool.name">
@@ -287,7 +268,7 @@ const FILTER_LABELS: Record<string, string> = {
               <LIcon name="refresh-cw" /> Re-check
             </Btn>
           </div>
-        </div>
+        </Card>
       </template>
     </div>
   </section>

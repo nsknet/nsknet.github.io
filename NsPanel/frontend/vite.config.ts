@@ -17,6 +17,9 @@ export default defineConfig({
   build: {
     outDir: '../static/dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: { inlineDynamicImports: true },
+    },
   },
   server: {
     port: 7778,

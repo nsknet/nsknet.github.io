@@ -8,8 +8,10 @@ import type { Service } from '@/api/types';
 import CloudflareTokenHelp from '@/components/CloudflareTokenHelp.vue';
 import Badge from '@/components/ui/Badge.vue';
 import Btn from '@/components/ui/Btn.vue';
+import Card from '@/components/ui/Card.vue';
 import LIcon from '@/components/ui/LIcon.vue';
-import Spinner from '@/components/ui/Spinner.vue';
+import PageHeader from '@/components/ui/PageHeader.vue';
+import Skeleton from '@/components/ui/Skeleton.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
 import { useJobRunner } from '@/composables/useJobs';
 import { useServicesStore } from '@/stores/services';
@@ -145,22 +147,17 @@ async function submitTunnel(event: Event): Promise<void> {
 
 <template>
   <section>
-    <div class="flex items-end justify-between gap-6 mb-6">
-      <div>
-        <h1 class="text-[22px] font-semibold tracking-[-0.02em] mb-1">Services</h1>
-        <div class="text-sm-var text-c-tx2">
-          {{ services.length }} custom systemd services in
-          <span class="mono">/var/www/services/</span>
-        </div>
-      </div>
-      <div class="flex gap-2">
-        <Btn @click="refresh"><LIcon name="refresh-cw" /> Refresh</Btn>
-        <Btn @click="openTunnel"><LIcon name="cloud" /> New tunnel</Btn>
-        <Btn variant="primary" @click="openCreate"><LIcon name="plus" /> New service</Btn>
-      </div>
-    </div>
+    <PageHeader title="Services">
+      <template #subtitle>
+        {{ services.length }} custom systemd services in
+        <span class="mono">/var/www/services/</span>
+      </template>
+      <Btn @click="refresh"><LIcon name="refresh-cw" /> Refresh</Btn>
+      <Btn @click="openTunnel"><LIcon name="cloud" /> New tunnel</Btn>
+      <Btn variant="primary" @click="openCreate"><LIcon name="plus" /> New service</Btn>
+    </PageHeader>
 
-    <div class="bg-c-bg border border-c-border rounded-theme overflow-hidden">
+    <Card class="overflow-clip">
       <table class="tbl">
         <thead>
           <tr>
@@ -176,9 +173,7 @@ async function submitTunnel(event: Event): Promise<void> {
         </thead>
         <tbody>
           <tr v-if="loading && !services.length">
-            <td colspan="8" class="muted" style="text-align: center; padding: 32px 0">
-              <Spinner label="Loading services…" />
-            </td>
+            <td colspan="8" style="padding: 0; height: auto"><Skeleton :count="4" /></td>
           </tr>
           <tr v-else-if="!services.length">
             <td colspan="8" class="muted" style="text-align: center; padding: 32px 0">
@@ -211,11 +206,17 @@ async function submitTunnel(event: Event): Promise<void> {
             <td class="num">{{ service.cpu != null ? service.cpu.toFixed(1) : '—' }}</td>
             <td class="muted" style="white-space: normal">{{ service.desc }}</td>
             <td class="muted">{{ service.modified }}</td>
-            <td><LIcon name="chevron-right" is="width:14px;height:14px;color:var(--text-3)" /></td>
+            <td class="w-8">
+              <LIcon
+                name="chevron-right"
+                class="row-hint"
+                is="width:14px;height:14px;color:var(--text-2)"
+              />
+            </td>
           </tr>
         </tbody>
       </table>
-    </div>
+    </Card>
 
     <div
       v-if="showCreate"
@@ -223,7 +224,7 @@ async function submitTunnel(event: Event): Promise<void> {
       @click.self="showCreate = false"
     >
       <div
-        class="w-full max-w-[480px] bg-c-bg border border-c-border rounded-theme-lg shadow-lg overflow-hidden animate-pop"
+        class="w-full max-w-[480px] bg-c-card border border-c-border rounded-theme-lg shadow-lg overflow-hidden animate-pop"
         role="dialog"
         aria-modal="true"
       >
@@ -325,7 +326,7 @@ async function submitTunnel(event: Event): Promise<void> {
       @click.self="!tunnelSubmitting && (showTunnel = false)"
     >
       <div
-        class="w-full max-w-[520px] max-h-[90vh] overflow-y-auto bg-c-bg border border-c-border rounded-theme-lg shadow-lg animate-pop"
+        class="w-full max-w-[520px] max-h-[90vh] overflow-y-auto bg-c-card border border-c-border rounded-theme-lg shadow-lg animate-pop"
         role="dialog"
         aria-modal="true"
       >
@@ -362,7 +363,7 @@ async function submitTunnel(event: Event): Promise<void> {
                 href="https://dash.cloudflare.com/profile/api-tokens"
                 target="_blank"
                 rel="noopener noreferrer"
-                class="text-[11px] text-c-accent hover:underline inline-flex items-center gap-1 font-medium"
+                class="text-[11px] text-c-actx hover:underline inline-flex items-center gap-1 font-medium"
               >
                 <span>Get token</span>
                 <LIcon name="external-link" is="width:11px;height:11px" />

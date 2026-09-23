@@ -7,6 +7,7 @@ import { useRouter } from 'vue-router';
 import { fetchData } from '@/api/client';
 import OutputDialog from '@/components/OutputDialog.vue';
 import Btn from '@/components/ui/Btn.vue';
+import Card from '@/components/ui/Card.vue';
 import LIcon from '@/components/ui/LIcon.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
 import TypeChip from '@/components/ui/TypeChip.vue';
@@ -178,7 +179,7 @@ function siteAction(action: string, title: string): void {
 
     <div class="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-3">
       <div class="flex flex-col gap-3">
-        <div class="bg-c-bg border border-c-border rounded-theme overflow-hidden">
+        <Card class="overflow-clip">
           <div class="flex items-center justify-between gap-3 py-3.5 px-4 border-b border-c-border">
             <h3 class="m-0 text-sm-var font-semibold tracking-[-0.01em]">Configuration</h3>
             <span class="text-xs-var text-c-tx3 mono">YAML metadata</span>
@@ -193,9 +194,9 @@ function siteAction(action: string, title: string): void {
               </template>
             </dl>
           </div>
-        </div>
+        </Card>
 
-        <div class="bg-c-bg border border-c-border rounded-theme overflow-hidden">
+        <Card class="overflow-clip">
           <div class="flex items-center justify-between gap-3 py-3.5 px-4 border-b border-c-border">
             <h3 class="m-0 text-sm-var font-semibold tracking-[-0.01em]">Filesystem</h3>
           </div>
@@ -207,11 +208,11 @@ function siteAction(action: string, title: string): void {
               </template>
             </dl>
           </div>
-        </div>
+        </Card>
       </div>
 
       <div class="flex flex-col gap-3">
-        <div class="bg-c-bg border border-c-border rounded-theme overflow-hidden">
+        <Card class="overflow-clip">
           <div class="flex items-center justify-between gap-3 py-3.5 px-4 border-b border-c-border">
             <h3 class="m-0 text-sm-var font-semibold tracking-[-0.01em]">Runtime</h3>
             <span class="text-xs-var text-c-tx3 mono">{{ site.pid ? `PID ${site.pid}` : '' }}</span>
@@ -229,7 +230,7 @@ function siteAction(action: string, title: string): void {
               </div>
             </div>
           </div>
-        </div>
+        </Card>
       </div>
     </div>
 

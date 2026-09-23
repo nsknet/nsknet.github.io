@@ -47,7 +47,7 @@ const PERMISSIONS = [
             href="https://dash.cloudflare.com/profile/api-tokens"
             target="_blank"
             rel="noopener noreferrer"
-            class="text-c-accent hover:underline font-medium"
+            class="text-c-actx hover:underline font-medium"
             >dash.cloudflare.com</a
           >: <span class="text-c-tx font-medium">API Tokens</span> &rarr;
           <span class="text-c-tx font-medium">Create Token</span> &rarr;
@@ -72,7 +72,7 @@ const PERMISSIONS = [
               :class="[
                 'mono text-[10px] font-medium px-1.5 py-0.5 rounded border',
                 permission.level === 'Edit'
-                  ? 'bg-c-acsoft text-c-accent border-transparent'
+                  ? 'bg-c-acsoft text-c-actx border-transparent'
                   : 'bg-c-subtle text-c-tx2 border-c-border',
               ]"
               >{{ permission.level }}</span

@@ -1,4 +1,4 @@
-/** Cross-screen UI state: theme, sidebar, toasts and the four modal dialogs. */
+/** Cross-screen UI state: theme, sidebar, toasts, the command palette and the four modal dialogs. */
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 
@@ -46,6 +46,8 @@ export interface NetworkDialog {
 }
 
 const TOAST_MS = 3700;
+/** How long colours cross-fade after a theme flip (see .theme-switching in theme.css). */
+const THEME_FADE_MS = 250;
 
 function readBool(key: string, fallback: boolean): boolean {
   try {
@@ -72,17 +74,26 @@ export const useUiStore = defineStore('ui', () => {
   const confirm = ref<Confirm | null>(null);
   const installDialog = ref<InstallDialog | null>(null);
   const networkDialog = ref<NetworkDialog | null>(null);
+  const paletteOpen = ref(false);
 
-  function applyTheme(): void {
+  let fadeTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function applyTheme(animate = false): void {
     const dark = theme.value === 'dark';
-    document.body.classList.toggle('theme-dark', dark);
-    document.body.classList.toggle('theme-light', !dark);
+    const body = document.body;
+    if (animate) {
+      body.classList.add('theme-switching');
+      clearTimeout(fadeTimer);
+      fadeTimer = setTimeout(() => body.classList.remove('theme-switching'), THEME_FADE_MS);
+    }
+    body.classList.toggle('theme-dark', dark);
+    body.classList.toggle('theme-light', !dark);
   }
 
   function toggleTheme(): void {
     theme.value = theme.value === 'dark' ? 'light' : 'dark';
     writeBool('themeDark', theme.value === 'dark');
-    applyTheme();
+    applyTheme(true);
   }
 
   function toggleSidebar(): void {
@@ -135,6 +146,7 @@ export const useUiStore = defineStore('ui', () => {
     confirm,
     installDialog,
     networkDialog,
+    paletteOpen,
     applyTheme,
     toggleTheme,
     toggleSidebar,

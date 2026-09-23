@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router';
 
 import Btn from '@/components/ui/Btn.vue';
 import LIcon from '@/components/ui/LIcon.vue';
+import PageHeader from '@/components/ui/PageHeader.vue';
 import { useJobRunner } from '@/composables/useJobs';
 
 const router = useRouter();
@@ -102,20 +103,17 @@ const iconStyle = (selected: boolean) =>
 
 <template>
   <section>
-    <div class="flex items-end justify-between gap-6 mb-6">
-      <div>
-        <div class="flex items-center gap-2 mb-2">
-          <Btn variant="ghost" sm @click="router.push('/sites')">
-            <LIcon name="arrow-left" /> Sites
-          </Btn>
-        </div>
-        <h1 class="text-[22px] font-semibold tracking-[-0.02em] mb-1">Create site</h1>
-        <div class="text-sm-var text-c-tx2">
-          Provision a new Nginx virtual host. The form runs a script and opens the live output
-          stream.
-        </div>
-      </div>
+    <div class="mb-2">
+      <Btn variant="ghost" sm @click="router.push('/sites')">
+        <LIcon name="arrow-left" /> Sites
+      </Btn>
     </div>
+    <PageHeader title="Create site">
+      <template #subtitle>
+        Provision a new Nginx virtual host. The form runs a script and opens the live output
+        stream.
+      </template>
+    </PageHeader>
 
     <form class="grid gap-[22px] max-w-3xl" @submit="submit">
       <div class="flex flex-col gap-1.5">
@@ -191,7 +189,7 @@ const iconStyle = (selected: boolean) =>
 
       <div class="flex flex-col gap-1.5">
         <label class="text-sm-var font-medium text-c-tx">Backend architecture</label>
-        <div class="grid grid-cols-3 gap-2">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
           <div
             v-for="option in BACKENDS"
             :key="option.key"

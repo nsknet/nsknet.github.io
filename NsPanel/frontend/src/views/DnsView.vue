@@ -7,7 +7,9 @@ import { useRouter } from 'vue-router';
 import type { DnsRecord } from '@/api/types';
 import Badge from '@/components/ui/Badge.vue';
 import Btn from '@/components/ui/Btn.vue';
+import Card from '@/components/ui/Card.vue';
 import LIcon from '@/components/ui/LIcon.vue';
+import PageHeader from '@/components/ui/PageHeader.vue';
 import Spinner from '@/components/ui/Spinner.vue';
 import { useJobRunner } from '@/composables/useJobs';
 import { useDnsStore } from '@/stores/misc';
@@ -78,10 +80,9 @@ async function refresh(): Promise<void> {
 
 <template>
   <section>
-    <div class="flex items-end justify-between gap-6 mb-6">
-      <div>
-        <h1 class="text-[22px] font-semibold tracking-[-0.02em] mb-1">DNS</h1>
-        <div class="text-sm-var text-c-tx2 flex items-center gap-2">
+    <PageHeader title="DNS">
+      <template #subtitle>
+        <span class="flex items-center gap-2">
           <template v-if="dns.installed">
             {{ dns.records.length }} record{{ dns.records.length === 1 ? '' : 's' }} · CoreDNS
             <Badge :tone="dns.running ? 'ok' : 'muted'" dot>{{
@@ -89,12 +90,12 @@ async function refresh(): Promise<void> {
             }}</Badge>
           </template>
           <template v-else>Local DNS server (CoreDNS) — map domains to IP addresses.</template>
-        </div>
-      </div>
-      <div v-if="dns.installed" class="flex gap-2">
+        </span>
+      </template>
+      <template v-if="dns.installed">
         <Btn @click="refresh"><LIcon name="refresh-cw" /> Refresh</Btn>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
     <div
       v-if="loading && !dns.installed && !dns.records.length"
@@ -121,7 +122,7 @@ async function refresh(): Promise<void> {
     </div>
 
     <template v-else>
-      <div class="bg-c-bg border border-c-border rounded-theme p-4 mb-4">
+      <Card class="p-4 mb-4">
         <div class="flex items-end gap-3 flex-wrap">
           <div class="flex flex-col gap-1">
             <label class="text-[10px] uppercase tracking-[0.05em] text-c-tx3">IPv4 address</label>
@@ -151,9 +152,9 @@ async function refresh(): Promise<void> {
           </Btn>
           <Btn v-if="editing" variant="ghost" @click="resetForm">Cancel</Btn>
         </div>
-      </div>
+      </Card>
 
-      <div class="bg-c-bg border border-c-border rounded-theme overflow-hidden">
+      <Card class="overflow-clip">
         <table class="tbl">
           <thead>
             <tr>
@@ -185,7 +186,7 @@ async function refresh(): Promise<void> {
             </tr>
           </tbody>
         </table>
-      </div>
+      </Card>
     </template>
   </section>
 </template>

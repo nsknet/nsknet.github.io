@@ -1,12 +1,16 @@
 <script setup lang="ts">
-/** Overview: host metrics, the newest sites, and every tool's state. */
+/** Overview: host metrics, the newest sites, and the installed tools' state. */
 import { storeToRefs } from 'pinia';
-import { computed } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { RouterLink, useRouter } from 'vue-router';
 
 import Btn from '@/components/ui/Btn.vue';
+import Card from '@/components/ui/Card.vue';
 import LIcon from '@/components/ui/LIcon.vue';
+import PageHeader from '@/components/ui/PageHeader.vue';
+import SectionTitle from '@/components/ui/SectionTitle.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
+import ToolLogo from '@/components/ui/ToolLogo.vue';
 import TypeChip from '@/components/ui/TypeChip.vue';
 import { useReload } from '@/composables/useScreenData';
 import { useSitesStore } from '@/stores/sites';
@@ -17,9 +21,52 @@ import { useUiStore } from '@/stores/ui';
 const router = useRouter();
 const ui = useUiStore();
 const reload = useReload();
-const { host } = storeToRefs(useSystemStore());
+const system = useSystemStore();
+const { host } = storeToRefs(system);
 const { sites } = storeToRefs(useSitesStore());
 const { tools } = storeToRefs(useToolsStore());
+
+/** Samples kept for the CPU / memory sparklines, and how often to take one. */
+const HISTORY = 30;
+const SAMPLE_MS = 5000;
+
+const cpuHistory = ref<number[]>([]);
+const ramHistory = ref<number[]>([]);
+
+watch(
+  host,
+  (h) => {
+    if (!h.hostname) return;
+    cpuHistory.value = [...cpuHistory.value, h.cpu.usage].slice(-HISTORY);
+    ramHistory.value = [...ramHistory.value, h.ram.pct].slice(-HISTORY);
+  },
+  { immediate: true },
+);
+
+let sampler: ReturnType<typeof setInterval> | undefined;
+
+onMounted(() => {
+  sampler = setInterval(async () => {
+    if (document.hidden) return;
+    const before = host.value;
+    await system.load();
+    // A failed load keeps the old object and toasts; stop rather than toast every tick.
+    if (host.value === before) clearInterval(sampler);
+  }, SAMPLE_MS);
+});
+onUnmounted(() => clearInterval(sampler));
+
+/** SVG path pair (line + filled area) for a 0-100 series in a 100x32 box. */
+function sparkPaths(values: number[]): { line: string; area: string } | null {
+  if (values.length < 2) return null;
+  const step = 100 / (values.length - 1);
+  const points = values.map((v, i) => {
+    const y = 31 - (Math.min(Math.max(v, 0), 100) / 100) * 30;
+    return `${(i * step).toFixed(2)},${y.toFixed(2)}`;
+  });
+  const line = `M${points.join(' L')}`;
+  return { line, area: `${line} L100,32 L0,32 Z` };
+}
 
 function barClass(pct: number): string {
   if (pct > 85) return 'bar-danger';
@@ -38,6 +85,7 @@ const statCards = computed(() => {
       unit: '%',
       sub: `${h.cpu.cores} cores · load ${h.cpu.load.join(' / ')}`,
       bar: null as { pct: number; cls: string } | null,
+      spark: sparkPaths(cpuHistory.value),
     },
     {
       label: 'Memory',
@@ -46,6 +94,7 @@ const statCards = computed(() => {
       unit: `/ ${h.ram.total.toFixed(1)} GB`,
       sub: `${h.ram.pct}% used`,
       bar: { pct: h.ram.pct, cls: barClass(h.ram.pct) },
+      spark: sparkPaths(ramHistory.value),
     },
     {
       label: 'Disk',
@@ -54,6 +103,7 @@ const statCards = computed(() => {
       unit: `/ ${h.disk.total.toFixed(1)} GB`,
       sub: `${h.disk.pct}% used · /`,
       bar: { pct: h.disk.pct, cls: barClass(h.disk.pct) },
+      spark: null,
     },
     {
       label: 'Uptime',
@@ -62,11 +112,13 @@ const statCards = computed(() => {
       unit: '',
       sub: `${uptimeRest.join(',').trim()} · ${h.kernel.split(' ')[1] ?? ''}`,
       bar: null,
+      spark: null,
     },
   ];
 });
 
 const recentSites = computed(() => sites.value.slice(0, 5));
+const installedTools = computed(() => tools.value.filter((tool) => tool.installed));
 
 async function refresh(): Promise<void> {
   await reload();
@@ -76,48 +128,48 @@ async function refresh(): Promise<void> {
 
 <template>
   <section>
-    <div class="flex items-end justify-between gap-6 mb-6">
-      <div>
-        <h1 class="text-[22px] font-semibold tracking-[-0.02em] mb-1">Overview</h1>
-        <div class="text-sm-var text-c-tx2 mono">{{ host.distro }} · {{ host.kernel }}</div>
-      </div>
-      <div class="flex gap-2">
-        <Btn @click="refresh"><LIcon name="refresh-cw" /> Refresh</Btn>
-        <Btn variant="primary" @click="router.push('/sites/new')">
-          <LIcon name="plus" /> Create site
-        </Btn>
-      </div>
-    </div>
+    <PageHeader title="Overview" :subtitle="`${host.distro} · ${host.kernel}`" mono>
+      <Btn @click="refresh"><LIcon name="refresh-cw" /> Refresh</Btn>
+      <Btn variant="primary" @click="router.push('/sites/new')">
+        <LIcon name="plus" /> Create site
+      </Btn>
+    </PageHeader>
 
-    <div class="grid grid-cols-4 gap-3">
-      <div
-        v-for="card in statCards"
-        :key="card.label"
-        class="bg-c-bg border border-c-border rounded-theme overflow-hidden py-4 px-[18px]"
-      >
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+      <Card v-for="card in statCards" :key="card.label" class="overflow-hidden py-4 px-[18px]">
         <div
           class="flex items-center justify-between text-c-tx2 text-xs-var uppercase tracking-[0.06em] font-medium"
         >
           {{ card.label }}
-          <LIcon :name="card.icon" is="width:14px;height:14px;color:var(--text-3)" />
+          <span class="w-7 h-7 rounded-md bg-c-subtle grid place-items-center">
+            <LIcon :name="card.icon" is="width:14px;height:14px;color:var(--text-2)" />
+          </span>
         </div>
-        <div class="text-[28px] font-semibold tracking-[-0.03em] mt-2 tabular-nums">
+        <div class="text-[28px] font-semibold tracking-[-0.03em] mt-1 tabular-nums">
           {{ card.value
           }}<span v-if="card.unit" class="text-sm text-c-tx3 font-medium ml-0.5">
             {{ card.unit }}</span
           >
         </div>
-        <div class="mt-1 text-xs-var text-c-tx3 mono">{{ card.sub }}</div>
+        <div class="mt-1 text-xs-var text-c-tx3 mono truncate">{{ card.sub }}</div>
+        <svg v-if="card.spark" class="spark" viewBox="0 0 100 32" preserveAspectRatio="none">
+          <path class="area" :d="card.spark.area" />
+          <path :d="card.spark.line" />
+        </svg>
         <div v-if="card.bar" :class="['bar', card.bar.cls]">
           <span :style="{ width: `${card.bar.pct}%` }"></span>
         </div>
-      </div>
+      </Card>
     </div>
 
-    <div class="text-xs-var text-c-tx3 uppercase tracking-[0.08em] font-medium mt-6 mb-2.5">
-      Sites <span class="text-c-tx3">· {{ sites.length }} total</span>
-    </div>
-    <div class="bg-c-bg border border-c-border rounded-theme overflow-hidden">
+    <SectionTitle title="Recent sites" :count="sites.length">
+      <RouterLink
+        to="/sites"
+        class="text-xs-var text-c-tx2 hover:text-c-tx no-underline inline-flex items-center gap-1"
+        >View all <LIcon name="chevron-right" is="width:13px;height:13px"
+      /></RouterLink>
+    </SectionTitle>
+    <Card class="overflow-x-auto">
       <table class="tbl">
         <thead>
           <tr>
@@ -154,44 +206,61 @@ async function refresh(): Promise<void> {
             <td class="num">{{ site.mem != null ? site.mem.toFixed(1) : '—' }}</td>
             <td class="num">{{ site.cpu != null ? `${site.cpu.toFixed(1)}%` : '—' }}</td>
             <td class="muted">{{ site.modified }}</td>
-            <td><LIcon name="chevron-right" is="width:14px;height:14px;color:var(--text-3)" /></td>
+            <td class="w-8">
+              <LIcon
+                name="chevron-right"
+                class="row-hint"
+                is="width:14px;height:14px;color:var(--text-2)"
+              />
+            </td>
           </tr>
         </tbody>
       </table>
-    </div>
+    </Card>
 
-    <div class="text-xs-var text-c-tx3 uppercase tracking-[0.08em] font-medium mt-6 mb-2.5">
-      Installed tools
-    </div>
-    <div class="grid gap-2.5" style="grid-template-columns: repeat(auto-fill, minmax(240px, 1fr))">
-      <div
-        v-for="tool in tools"
+    <SectionTitle title="Installed tools" :count="`${installedTools.length}/${tools.length}`">
+      <RouterLink
+        to="/tools"
+        class="text-xs-var text-c-tx2 hover:text-c-tx no-underline inline-flex items-center gap-1"
+        >Manage <LIcon name="chevron-right" is="width:13px;height:13px"
+      /></RouterLink>
+    </SectionTitle>
+    <Card
+      v-if="!installedTools.length"
+      tone="muted"
+      class="text-center py-8 text-sm-var text-c-tx2"
+    >
+      No tools installed yet.
+      <RouterLink to="/tools" class="text-c-actx font-medium hover:underline">Browse tools</RouterLink>
+    </Card>
+    <div
+      v-else
+      class="grid gap-3"
+      style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr))"
+    >
+      <Card
+        v-for="tool in installedTools"
         :key="tool.id"
-        class="flex flex-col gap-2.5 p-3.5 bg-c-bg border border-c-border rounded-theme cursor-pointer transition-colors hover:border-c-bstrong hover:bg-c-elev"
-        @click="router.push('/tools')"
+        :to="{ path: '/tools', query: { q: tool.name } }"
+        :tone="tool.state === 'failed' ? 'danger' : 'default'"
+        class="flex items-center gap-3 p-3.5"
       >
-        <div class="flex items-center gap-2">
-          <div
-            class="w-7 h-7 rounded-md bg-c-subtle flex items-center justify-center shrink-0 overflow-hidden p-1 select-none"
-          >
-            <img
-              v-if="tool.logo.endsWith('.png')"
-              :src="tool.logo"
-              :alt="tool.name"
-              class="w-full h-full object-contain"
-            />
-            <span v-else class="text-[11px] font-bold mono" :style="{ color: tool.color }">{{
-              tool.logo
-            }}</span>
+        <ToolLogo
+          :logo="tool.logo"
+          :name="tool.name"
+          :color="tool.color"
+          :dim="tool.state === 'stopped' || tool.state === 'inactive'"
+        />
+        <div class="flex-1 min-w-0">
+          <div class="font-medium text-sm-var text-c-tx truncate" :title="tool.name">
+            {{ tool.name }}
           </div>
-          <div class="flex-1"></div>
-          <StatusBadge :status="tool.state" />
+          <div class="flex items-center justify-between gap-2 mt-1">
+            <span class="mono text-xs-var text-c-tx3 truncate">{{ tool.version || '—' }}</span>
+            <StatusBadge :status="tool.state" />
+          </div>
         </div>
-        <div>
-          <div class="font-medium text-sm-var">{{ tool.name }}</div>
-          <div class="mono text-xs-var text-c-tx3">{{ tool.version || 'not installed' }}</div>
-        </div>
-      </div>
+      </Card>
     </div>
   </section>
 </template>

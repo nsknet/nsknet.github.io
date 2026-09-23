@@ -24,6 +24,7 @@ Pick a branch explicitly:
 ```bash
 /bin/bash -c "$(curl -fsSL nsknet.github.io/nspanel.sh)" dev
 # or: BRANCH=dev /bin/bash -c "$(curl -fsSL nsknet.github.io/nspanel.sh)"
+# or: NSPANEL_HOST=0.0.0.0 /bin/bash -c "$(curl -fsSL nsknet.github.io/nspanel.sh)" dev
 ```
 
 Or clone and run it yourself:

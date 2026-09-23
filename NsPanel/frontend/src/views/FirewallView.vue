@@ -5,8 +5,9 @@ import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 
 import Badge from '@/components/ui/Badge.vue';
 import Btn from '@/components/ui/Btn.vue';
+import Card from '@/components/ui/Card.vue';
 import LIcon from '@/components/ui/LIcon.vue';
-import Spinner from '@/components/ui/Spinner.vue';
+import Skeleton from '@/components/ui/Skeleton.vue';
 import { useJobRunner } from '@/composables/useJobs';
 import { useFirewallStore } from '@/stores/misc';
 import { useUiStore } from '@/stores/ui';
@@ -125,7 +126,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
       </div>
     </div>
 
-    <div class="bg-c-bg border border-c-border rounded-theme overflow-hidden">
+    <Card class="overflow-clip">
       <div class="flex items-center justify-between gap-3 py-3.5 px-4 border-b border-c-border">
         <h3 class="m-0 text-sm-var font-semibold tracking-[-0.01em]">Allowed ports</h3>
         <span class="text-xs-var text-c-tx3 mono">{{ ruleCount }}</span>
@@ -142,9 +143,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
         </thead>
         <tbody>
           <tr v-if="loading && !firewall.rules.length">
-            <td colspan="5" class="muted" style="text-align: center; padding: 32px 0">
-              <Spinner label="Loading rules…" />
-            </td>
+            <td colspan="5" style="padding: 0; height: auto"><Skeleton :count="4" /></td>
           </tr>
           <tr v-else-if="!firewall.rules.length">
             <td colspan="5" class="muted" style="text-align: center; padding: 32px 0">
@@ -180,7 +179,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
           </tr>
         </tbody>
       </table>
-    </div>
+    </Card>
 
     <div
       v-if="showAdd"
@@ -188,7 +187,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
       @click.self="showAdd = false"
     >
       <div
-        class="w-full max-w-[460px] bg-c-bg border border-c-border rounded-theme-lg shadow-lg overflow-hidden animate-pop"
+        class="w-full max-w-[460px] bg-c-card border border-c-border rounded-theme-lg shadow-lg overflow-hidden animate-pop"
         role="dialog"
         aria-modal="true"
       >

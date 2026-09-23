@@ -27,7 +27,7 @@ const COLOR: Record<ToastKind, string> = {
     <div
       v-for="toast in toasts"
       :key="toast.id"
-      class="pointer-events-auto flex items-start gap-2.5 min-w-[260px] max-w-[360px] py-2.5 px-3 bg-c-bg border border-c-border rounded-theme shadow-md text-sm-var animate-slidein"
+      class="pointer-events-auto flex items-start gap-2.5 min-w-[260px] max-w-[360px] py-2.5 px-3 bg-c-card border border-c-border rounded-theme shadow-md text-sm-var animate-slidein"
     >
       <LIcon
         :name="ICON[toast.k] ?? 'info'"

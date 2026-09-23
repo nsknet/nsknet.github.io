@@ -13,6 +13,8 @@
   --font-mono: var(--ff-mono);
 
   --color-c-bg: var(--bg);
+  --color-c-canvas: var(--bg-canvas);
+  --color-c-card: var(--bg-card);
   --color-c-elev: var(--bg-elev);
   --color-c-subtle: var(--bg-subtle);
   --color-c-hover: var(--bg-hover);
@@ -26,6 +28,7 @@
   --color-c-achover: var(--accent-hover);
   --color-c-acsoft: var(--accent-soft);
   --color-c-acfg: var(--accent-fg);
+  --color-c-actx: var(--accent-text);
   --color-c-muted: var(--muted-soft);
   --color-c-ok: var(--ok);
   --color-c-oksoft: var(--ok-soft);
@@ -43,6 +46,8 @@
   --shadow-sm: var(--elev-sm);
   --shadow-md: var(--elev-md);
   --shadow-lg: var(--elev-lg);
+  --shadow-card: var(--elev-card);
+  --shadow-card-hover: var(--elev-card-hover);
 
   --text-base-var: var(--fs-base);
   --text-sm-var: var(--fs-sm);

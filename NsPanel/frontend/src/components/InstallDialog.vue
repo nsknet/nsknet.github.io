@@ -128,13 +128,13 @@ function confirm(): void {
     @click.self="dismiss"
   >
     <div
-      class="w-full max-w-[460px] bg-c-bg border border-c-border rounded-theme-lg shadow-lg p-5 animate-pop"
+      class="w-full max-w-[460px] bg-c-card border border-c-border rounded-theme-lg shadow-lg p-5 animate-pop"
       role="dialog"
       aria-modal="true"
     >
       <div class="flex items-center gap-3 mb-4">
         <div
-          class="w-10 h-10 rounded-[10px] bg-c-acsoft text-c-accent grid place-items-center shrink-0"
+          class="w-10 h-10 rounded-[10px] bg-c-acsoft text-c-actx grid place-items-center shrink-0"
         >
           <LIcon :name="isPasswordMode ? 'key-round' : 'download'" is="width:20px;height:20px" />
         </div>

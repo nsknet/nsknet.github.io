@@ -17,6 +17,8 @@ export type StoreKey =
   | 'logs'
   | 'processes';
 
+export type NavGroup = 'Overview' | 'Hosting' | 'System';
+
 export interface Crumb {
   label: string;
   to?: string;
@@ -26,8 +28,8 @@ declare module 'vue-router' {
   interface RouteMeta {
     /** Rail item to highlight — defaults to the route name. */
     rail?: string;
-    /** Label and icon for the nav rail. Omit to keep the route out of the rail. */
-    nav?: { label: string; icon: string; order: number };
+    /** Label, icon and rail section. Omit to keep the route out of the rail. */
+    nav?: { label: string; icon: string; order: number; group: NavGroup };
     /** Stores to load when entering the route. */
     loads?: StoreKey[];
     /** Breadcrumb trail; the last crumb is the current page. */
@@ -43,7 +45,7 @@ export const router = createRouter({
       name: 'dashboard',
       component: () => import('@/views/DashboardView.vue'),
       meta: {
-        nav: { label: 'Dashboard', icon: 'layout-dashboard', order: 1 },
+        nav: { label: 'Dashboard', icon: 'layout-dashboard', order: 1, group: 'Overview' },
         loads: ['system', 'sites', 'tools'],
         crumbs: () => [{ label: 'Dashboard' }],
       },
@@ -53,7 +55,7 @@ export const router = createRouter({
       name: 'system',
       component: () => import('@/views/SystemView.vue'),
       meta: {
-        nav: { label: 'System', icon: 'cpu', order: 2 },
+        nav: { label: 'System', icon: 'cpu', order: 6, group: 'System' },
         loads: ['system', 'disks'],
         crumbs: () => [{ label: 'System' }],
       },
@@ -63,7 +65,7 @@ export const router = createRouter({
       name: 'firewall',
       component: () => import('@/views/FirewallView.vue'),
       meta: {
-        nav: { label: 'Firewall', icon: 'shield', order: 3 },
+        nav: { label: 'Firewall', icon: 'shield', order: 7, group: 'System' },
         loads: ['firewall'],
         crumbs: () => [{ label: 'Firewall' }],
       },
@@ -73,7 +75,7 @@ export const router = createRouter({
       name: 'sites',
       component: () => import('@/views/SitesView.vue'),
       meta: {
-        nav: { label: 'Sites', icon: 'globe', order: 4 },
+        nav: { label: 'Sites', icon: 'globe', order: 2, group: 'Hosting' },
         loads: ['sites'],
         crumbs: () => [{ label: 'Sites' }],
       },
@@ -107,7 +109,7 @@ export const router = createRouter({
       name: 'dns',
       component: () => import('@/views/DnsView.vue'),
       meta: {
-        nav: { label: 'DNS', icon: 'network', order: 5 },
+        nav: { label: 'DNS', icon: 'network', order: 3, group: 'Hosting' },
         loads: ['dns'],
         crumbs: () => [{ label: 'DNS' }],
       },
@@ -117,7 +119,7 @@ export const router = createRouter({
       name: 'services',
       component: () => import('@/views/ServicesView.vue'),
       meta: {
-        nav: { label: 'Services', icon: 'server', order: 6 },
+        nav: { label: 'Services', icon: 'server', order: 4, group: 'Hosting' },
         loads: ['services'],
         crumbs: () => [{ label: 'Services' }],
       },
@@ -141,7 +143,7 @@ export const router = createRouter({
       name: 'tools',
       component: () => import('@/views/ToolsView.vue'),
       meta: {
-        nav: { label: 'Tools', icon: 'wrench', order: 7 },
+        nav: { label: 'Tools', icon: 'wrench', order: 5, group: 'Hosting' },
         loads: ['tools'],
         crumbs: () => [{ label: 'Tools' }],
       },
@@ -151,7 +153,7 @@ export const router = createRouter({
       name: 'tasks',
       component: () => import('@/views/TaskManagerView.vue'),
       meta: {
-        nav: { label: 'Task Manager', icon: 'activity', order: 8 },
+        nav: { label: 'Task Manager', icon: 'activity', order: 8, group: 'System' },
         loads: ['processes'],
         crumbs: () => [{ label: 'Task manager' }],
       },
@@ -161,7 +163,7 @@ export const router = createRouter({
       name: 'logs',
       component: () => import('@/views/LogsView.vue'),
       meta: {
-        nav: { label: 'Audit Logs', icon: 'scroll-text', order: 9 },
+        nav: { label: 'Audit Logs', icon: 'scroll-text', order: 9, group: 'System' },
         loads: ['logs'],
         crumbs: () => [{ label: 'Audit logs' }],
       },
@@ -180,4 +182,16 @@ export const navItems = router
     path: route.path,
     label: route.meta.nav!.label,
     icon: route.meta.nav!.icon,
+    group: route.meta.nav!.group,
   }));
+
+/** Rail items bucketed by section, sections in first-appearance order. */
+export const navGroups = navItems.reduce<{ group: NavGroup; items: typeof navItems }[]>(
+  (groups, item) => {
+    const last = groups[groups.length - 1];
+    if (last?.group === item.group) last.items.push(item);
+    else groups.push({ group: item.group, items: [item] });
+    return groups;
+  },
+  [],
+);

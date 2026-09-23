@@ -9,6 +9,7 @@ import CloudflareTokenHelp from '@/components/CloudflareTokenHelp.vue';
 import OutputDialog from '@/components/OutputDialog.vue';
 import Badge from '@/components/ui/Badge.vue';
 import Btn from '@/components/ui/Btn.vue';
+import Card from '@/components/ui/Card.vue';
 import LIcon from '@/components/ui/LIcon.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
 import { useJobRunner } from '@/composables/useJobs';
@@ -193,7 +194,7 @@ const outputFilename = computed(() => {
 
     <div class="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-3">
       <div class="flex flex-col gap-3">
-        <div v-if="tunnel" class="bg-c-bg border border-c-border rounded-theme overflow-hidden">
+        <Card v-if="tunnel" class="overflow-clip">
           <div class="flex items-center justify-between gap-3 py-3.5 px-4 border-b border-c-border">
             <h3 class="m-0 text-sm-var font-semibold tracking-[-0.01em] flex items-center gap-2">
               <LIcon name="cloud" is="width:14px;height:14px" /> Cloudflare Tunnel
@@ -213,7 +214,7 @@ const outputFilename = computed(() => {
                     :href="row.value"
                     target="_blank"
                     rel="noopener"
-                    class="text-c-accent underline underline-offset-2 inline-flex items-center gap-1"
+                    class="text-c-actx underline underline-offset-2 inline-flex items-center gap-1"
                   >
                     {{ row.value }} <LIcon name="external-link" is="width:12px;height:12px" />
                   </a>
@@ -222,9 +223,9 @@ const outputFilename = computed(() => {
               </template>
             </dl>
           </div>
-        </div>
+        </Card>
 
-        <div class="bg-c-bg border border-c-border rounded-theme overflow-hidden">
+        <Card class="overflow-clip">
           <div class="flex items-center justify-between gap-3 py-3.5 px-4 border-b border-c-border">
             <h3 class="m-0 text-sm-var font-semibold tracking-[-0.01em]">Configuration</h3>
             <span class="text-xs-var text-c-tx3 mono">systemd unit configuration</span>
@@ -258,9 +259,9 @@ const outputFilename = computed(() => {
             </ul>
             <div v-else class="text-xs-var text-c-tx3">None declared in the unit file.</div>
           </div>
-        </div>
+        </Card>
 
-        <div class="bg-c-bg border border-c-border rounded-theme overflow-hidden">
+        <Card class="overflow-clip">
           <div class="flex items-center justify-between gap-3 py-3.5 px-4 border-b border-c-border">
             <h3 class="m-0 text-sm-var font-semibold tracking-[-0.01em]">Actions</h3>
           </div>
@@ -308,11 +309,9 @@ const outputFilename = computed(() => {
               <LIcon name="scroll-text" /> Logs
             </Btn>
           </div>
-        </div>
+        </Card>
 
-        <div
-          class="bg-c-bg border border-c-border rounded-theme overflow-hidden bg-[color-mix(in_oklab,var(--danger)_3%,transparent)]"
-        >
+        <Card tone="danger" class="overflow-clip">
           <div class="flex items-center justify-between gap-3 py-3.5 px-4 border-b border-c-border">
             <h3 class="m-0 text-sm-var font-semibold tracking-[-0.01em] text-c-danger">
               Danger zone
@@ -346,11 +345,11 @@ const outputFilename = computed(() => {
               <LIcon name="cloud-off" /> Delete + Cloudflare cleanup
             </Btn>
           </div>
-        </div>
+        </Card>
       </div>
 
       <div class="flex flex-col gap-3">
-        <div class="bg-c-bg border border-c-border rounded-theme overflow-hidden">
+        <Card class="overflow-clip">
           <div class="flex items-center justify-between gap-3 py-3.5 px-4 border-b border-c-border">
             <h3 class="m-0 text-sm-var font-semibold tracking-[-0.01em]">Runtime</h3>
           </div>
@@ -367,7 +366,7 @@ const outputFilename = computed(() => {
               </div>
             </div>
           </div>
-        </div>
+        </Card>
       </div>
     </div>
 
@@ -377,7 +376,7 @@ const outputFilename = computed(() => {
       @click.self="!tunnelDeleteSubmitting && (showTunnelDelete = false)"
     >
       <div
-        class="w-full max-w-[520px] max-h-[90vh] overflow-y-auto bg-c-bg border border-c-border rounded-theme-lg shadow-lg animate-pop"
+        class="w-full max-w-[520px] max-h-[90vh] overflow-y-auto bg-c-card border border-c-border rounded-theme-lg shadow-lg animate-pop"
         role="dialog"
         aria-modal="true"
       >
@@ -417,7 +416,7 @@ const outputFilename = computed(() => {
                 href="https://dash.cloudflare.com/profile/api-tokens"
                 target="_blank"
                 rel="noopener noreferrer"
-                class="text-[11px] text-c-accent hover:underline inline-flex items-center gap-1 font-medium"
+                class="text-[11px] text-c-actx hover:underline inline-flex items-center gap-1 font-medium"
               >
                 <span>Get token</span>
                 <LIcon name="external-link" is="width:11px;height:11px" />
@@ -453,7 +452,7 @@ const outputFilename = computed(() => {
       @click.self="isEditingUnit = false"
     >
       <div
-        class="w-full max-w-3xl bg-c-bg border border-c-border rounded-theme-lg shadow-lg flex flex-col max-h-[85vh] overflow-hidden animate-pop"
+        class="w-full max-w-3xl bg-c-card border border-c-border rounded-theme-lg shadow-lg flex flex-col max-h-[85vh] overflow-hidden animate-pop"
       >
         <div
           class="flex items-center justify-between px-5 py-3.5 border-b border-c-border shrink-0 bg-c-elev"

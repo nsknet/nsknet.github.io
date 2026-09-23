@@ -5,8 +5,10 @@ import { useRouter } from 'vue-router';
 
 import Badge from '@/components/ui/Badge.vue';
 import Btn from '@/components/ui/Btn.vue';
+import Card from '@/components/ui/Card.vue';
 import LIcon from '@/components/ui/LIcon.vue';
-import Spinner from '@/components/ui/Spinner.vue';
+import PageHeader from '@/components/ui/PageHeader.vue';
+import Skeleton from '@/components/ui/Skeleton.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
 import TypeChip from '@/components/ui/TypeChip.vue';
 import { useReload } from '@/composables/useScreenData';
@@ -26,22 +28,17 @@ async function refresh(): Promise<void> {
 
 <template>
   <section>
-    <div class="flex items-end justify-between gap-6 mb-6">
-      <div>
-        <h1 class="text-[22px] font-semibold tracking-[-0.02em] mb-1">Sites</h1>
-        <div class="text-sm-var text-c-tx2">
-          {{ sites.length }} virtual hosts · Nginx <Badge tone="ok" dot>active</Badge>
-        </div>
-      </div>
-      <div class="flex gap-2">
-        <Btn @click="refresh"><LIcon name="refresh-cw" /> Refresh</Btn>
-        <Btn variant="primary" @click="router.push('/sites/new')">
-          <LIcon name="plus" /> Create site
-        </Btn>
-      </div>
-    </div>
+    <PageHeader title="Sites">
+      <template #subtitle>
+        {{ sites.length }} virtual hosts · Nginx <Badge tone="ok" dot>active</Badge>
+      </template>
+      <Btn @click="refresh"><LIcon name="refresh-cw" /> Refresh</Btn>
+      <Btn variant="primary" @click="router.push('/sites/new')">
+        <LIcon name="plus" /> Create site
+      </Btn>
+    </PageHeader>
 
-    <div class="bg-c-bg border border-c-border rounded-theme overflow-hidden">
+    <Card class="overflow-clip">
       <table class="tbl">
         <thead>
           <tr>
@@ -58,9 +55,7 @@ async function refresh(): Promise<void> {
         </thead>
         <tbody>
           <tr v-if="loading && !sites.length">
-            <td colspan="9" class="muted" style="text-align: center; padding: 32px 0">
-              <Spinner label="Loading sites…" />
-            </td>
+            <td colspan="9" style="padding: 0; height: auto"><Skeleton :count="4" /></td>
           </tr>
           <tr v-else-if="!sites.length">
             <td colspan="9" class="muted" style="text-align: center; padding: 32px 0">
@@ -83,10 +78,16 @@ async function refresh(): Promise<void> {
             <td class="num">{{ site.mem != null ? site.mem.toFixed(1) : '—' }}</td>
             <td class="num">{{ site.cpu != null ? site.cpu.toFixed(1) : '—' }}</td>
             <td class="muted">{{ site.modified }}</td>
-            <td><LIcon name="chevron-right" is="width:14px;height:14px;color:var(--text-3)" /></td>
+            <td class="w-8">
+              <LIcon
+                name="chevron-right"
+                class="row-hint"
+                is="width:14px;height:14px;color:var(--text-2)"
+              />
+            </td>
           </tr>
         </tbody>
       </table>
-    </div>
+    </Card>
   </section>
 </template>

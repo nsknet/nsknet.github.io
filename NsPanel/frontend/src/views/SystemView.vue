@@ -6,8 +6,10 @@ import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import type { DiskPartition, NetworkInterface } from '@/api/types';
 import Badge from '@/components/ui/Badge.vue';
 import Btn from '@/components/ui/Btn.vue';
+import Card from '@/components/ui/Card.vue';
 import LIcon from '@/components/ui/LIcon.vue';
-import Spinner from '@/components/ui/Spinner.vue';
+import PageHeader from '@/components/ui/PageHeader.vue';
+import Skeleton from '@/components/ui/Skeleton.vue';
 import { useJobRunner } from '@/composables/useJobs';
 import { useSystemStore } from '@/stores/system';
 import { useUiStore } from '@/stores/ui';
@@ -274,21 +276,15 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
 
 <template>
   <section>
-    <div class="flex items-end justify-between gap-6 mb-6">
-      <div>
-        <h1 class="text-[22px] font-semibold tracking-[-0.02em] mb-1">System</h1>
-        <div class="text-sm-var text-c-tx2">Host machine diagnostics and global configuration.</div>
-      </div>
-      <div class="flex gap-2">
-        <Btn @click="refresh"><LIcon name="refresh-cw" /> Refresh diagnostics</Btn>
-      </div>
-    </div>
+    <PageHeader title="System" subtitle="Host machine diagnostics and global configuration.">
+      <Btn @click="refresh"><LIcon name="refresh-cw" /> Refresh diagnostics</Btn>
+    </PageHeader>
 
-    <div class="grid grid-cols-4 gap-3">
-      <div
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+      <Card
         v-for="card in statCards"
         :key="card.label"
-        class="bg-c-bg border border-c-border rounded-theme overflow-hidden p-[18px]"
+        class="overflow-clip p-[18px]"
       >
         <div class="flex items-center justify-between gap-3 mb-2.5">
           <div class="flex items-center gap-2 text-sm-var font-medium text-c-tx">
@@ -316,12 +312,12 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
             <div class="text-c-tx mono text-sm-var mt-0.5">{{ row[1] }}</div>
           </div>
         </div>
-      </div>
+      </Card>
     </div>
 
     <div class="grid gap-3 mt-4" style="grid-template-columns: 2fr 1fr">
       <div class="flex flex-col gap-3">
-        <div class="bg-c-bg border border-c-border rounded-theme overflow-hidden">
+        <Card class="overflow-clip">
           <div class="flex items-center justify-between gap-3 py-3.5 px-4 border-b border-c-border">
             <h3 class="m-0 text-sm-var font-semibold tracking-[-0.01em]">Host</h3>
             <span class="text-xs-var text-c-tx3 mono">{{ host.kernel }}</span>
@@ -336,9 +332,9 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
               </template>
             </dl>
           </div>
-        </div>
+        </Card>
 
-        <div class="bg-c-bg border border-c-border rounded-theme overflow-hidden">
+        <Card class="overflow-clip">
           <div class="flex items-center justify-between gap-3 py-3.5 px-4 border-b border-c-border">
             <h3 class="m-0 text-sm-var font-semibold tracking-[-0.01em]">Network interfaces</h3>
           </div>
@@ -372,10 +368,10 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
               </tr>
             </tbody>
           </table>
-        </div>
+        </Card>
       </div>
 
-      <div class="bg-c-bg border border-c-border rounded-theme overflow-hidden self-start">
+      <Card class="overflow-clip self-start">
         <div class="flex items-center justify-between gap-3 py-3.5 px-4 border-b border-c-border">
           <h3 class="m-0 text-sm-var font-semibold tracking-[-0.01em]">Quick actions</h3>
         </div>
@@ -443,10 +439,10 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
             <Btn sm @click="installSwap"><LIcon name="hard-drive-download" /> Install</Btn>
           </div>
         </div>
-      </div>
+      </Card>
     </div>
 
-    <div class="bg-c-bg border border-c-border rounded-theme overflow-hidden mt-4">
+    <Card class="overflow-clip mt-4">
       <div class="flex items-center justify-between gap-3 py-3.5 px-4 border-b border-c-border">
         <div class="flex items-center gap-2.5">
           <h3 class="m-0 text-sm-var font-semibold tracking-[-0.01em]">Disks</h3>
@@ -468,9 +464,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
         </thead>
         <tbody>
           <tr v-if="loadingDisks && !diskRows.length">
-            <td colspan="7" class="muted" style="text-align: center; padding: 32px 0">
-              <Spinner label="Loading disks…" />
-            </td>
+            <td colspan="7" style="padding: 0; height: auto"><Skeleton :count="4" /></td>
           </tr>
           <tr v-else-if="!diskRows.length">
             <td colspan="7" class="muted" style="text-align: center; padding: 32px 0">
@@ -542,7 +536,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
           </tr>
         </tbody>
       </table>
-    </div>
+    </Card>
 
     <div
       v-if="diskDialog.open"
@@ -550,7 +544,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
       @click.self="closeDialog"
     >
       <div
-        class="w-full max-w-[460px] bg-c-bg border border-c-border rounded-theme-lg shadow-lg overflow-hidden animate-pop"
+        class="w-full max-w-[460px] bg-c-card border border-c-border rounded-theme-lg shadow-lg overflow-hidden animate-pop"
         role="dialog"
         aria-modal="true"
       >

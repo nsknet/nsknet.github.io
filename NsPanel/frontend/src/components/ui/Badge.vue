@@ -17,7 +17,7 @@ const TONE: Record<Tone, string> = {
   warn: 'bg-c-warnsoft text-c-warn border-transparent',
   danger: 'bg-c-dngsoft text-c-danger border-transparent',
   info: 'bg-c-infosoft text-c-info border-transparent',
-  accent: 'bg-c-acsoft text-c-accent border-transparent',
+  accent: 'bg-c-acsoft text-c-actx border-transparent',
   muted: 'bg-c-muted text-c-tx2 border-transparent',
   neutral: 'bg-c-subtle text-c-tx2 border-c-border',
 };

@@ -7,8 +7,9 @@ import { ApiError, postAction } from '@/api/client';
 import type { ProcessRow } from '@/api/types';
 import Badge from '@/components/ui/Badge.vue';
 import Btn from '@/components/ui/Btn.vue';
+import Card from '@/components/ui/Card.vue';
 import LIcon from '@/components/ui/LIcon.vue';
-import Spinner from '@/components/ui/Spinner.vue';
+import Skeleton from '@/components/ui/Skeleton.vue';
 import { useProcessesStore } from '@/stores/misc';
 import { useUiStore } from '@/stores/ui';
 
@@ -177,7 +178,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section class="animate-fade">
+  <section>
     <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
       <div>
         <h1 class="text-[22px] font-semibold tracking-[-0.02em] mb-1">Task manager</h1>
@@ -203,7 +204,7 @@ onUnmounted(() => {
     </div>
 
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-      <div
+      <Card
         v-for="card in [
           { label: 'Total processes', value: summary.totalProcs, icon: 'list', unit: '' },
           { label: 'Total threads', value: summary.totalThreads, icon: 'git-merge', unit: '' },
@@ -211,7 +212,7 @@ onUnmounted(() => {
           { label: 'Active (CPU > 1%)', value: summary.activeCpuProcs, icon: 'activity', unit: '' },
         ]"
         :key="card.label"
-        class="bg-c-bg border border-c-border rounded-theme p-[15px] flex items-center justify-between"
+        class="p-[15px] flex items-center justify-between"
       >
         <div>
           <div class="text-xs-var text-c-tx3 uppercase tracking-[0.05em] font-medium mb-1">
@@ -225,7 +226,7 @@ onUnmounted(() => {
         <div class="w-8 h-8 rounded-lg bg-c-subtle flex items-center justify-center text-c-tx2">
           <LIcon :name="card.icon" is="width:16px;height:16px" />
         </div>
-      </div>
+      </Card>
     </div>
 
     <div class="mb-4">
@@ -244,7 +245,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="bg-c-bg border border-c-border rounded-theme overflow-hidden">
+    <Card class="overflow-clip">
       <div class="overflow-x-auto">
         <table class="tbl select-none">
           <thead>
@@ -274,9 +275,7 @@ onUnmounted(() => {
           </thead>
           <tbody>
             <tr v-if="loading && !sorted.length">
-              <td colspan="7" class="text-center py-10">
-                <Spinner label="Loading processes…" />
-              </td>
+              <td colspan="7" style="padding: 0; height: auto"><Skeleton :count="4" /></td>
             </tr>
             <tr v-else-if="!sorted.length">
               <td colspan="7" class="text-center py-10 text-c-tx3">
@@ -314,7 +313,7 @@ onUnmounted(() => {
                       </span>
                       <div>
                         <button
-                          class="text-c-accent font-semibold cursor-pointer hover:underline text-[10px] uppercase tracking-wider focus:outline-none"
+                          class="text-c-actx font-semibold cursor-pointer hover:underline text-[10px] uppercase tracking-wider focus:outline-none"
                           @click.stop="toggleExpand(row.pid)"
                         >
                           {{ expandedPids.has(row.pid) ? 'Show less' : 'Show more' }}
@@ -349,6 +348,6 @@ onUnmounted(() => {
           </tbody>
         </table>
       </div>
-    </div>
+    </Card>
   </section>
 </template>

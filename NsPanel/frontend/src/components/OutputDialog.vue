@@ -62,7 +62,7 @@ function download(): void {
     @click.self="emit('close')"
   >
     <div
-      class="flex flex-col w-full max-w-4xl max-h-[80vh] bg-c-bg border border-c-border rounded-theme-lg shadow-lg overflow-hidden animate-pop"
+      class="flex flex-col w-full max-w-4xl max-h-[80vh] bg-c-card border border-c-border rounded-theme-lg shadow-lg overflow-hidden animate-pop"
       role="dialog"
       aria-modal="true"
     >

@@ -31,7 +31,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
     class="fixed inset-0 z-[200] grid place-items-center p-10 px-6 bg-black/40 backdrop-blur-[4px] animate-fade"
     @click.self="dismiss"
   >
-    <div class="max-w-[420px] bg-c-bg border border-c-border rounded-theme-lg shadow-lg p-5">
+    <div class="max-w-[420px] bg-c-card border border-c-border rounded-theme-lg shadow-lg p-5">
       <div
         class="w-10 h-10 rounded-[10px] bg-c-dngsoft text-c-danger grid place-items-center mb-3.5"
       >
