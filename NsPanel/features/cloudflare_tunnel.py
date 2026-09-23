@@ -11,7 +11,7 @@ ingress -> upsert CNAME -> fetch tunnel token.
 import base64
 import re
 import secrets
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from urllib.parse import urlparse
 
 
@@ -190,7 +190,9 @@ def _verify_token(cf) -> None:
         # 400 "Invalid request headers" rather than a 401 — say what it means.
         if "400" in exc.message:
             raise TunnelError(
-                "verify", "Cloudflare rejected the API token as malformed — paste the full token exactly as issued."
+                "verify",
+                "Cloudflare rejected the API token as malformed — "
+                "paste the full token exactly as issued.",
             ) from exc
         raise
     status = getattr(v, "status", None)

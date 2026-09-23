@@ -6,11 +6,10 @@ under SITES_DIR with a readable info.yml is a site.
 import datetime
 from pathlib import Path
 
-import psutil
 import yaml
 
-from config import SITES_DIR, SITE_LOG_TAIL_LINES
-from features import services
+from config import SITE_LOG_TAIL_LINES, SITES_DIR
+from features import systemctl
 
 
 def _mtime(path: Path) -> str:
@@ -58,18 +57,18 @@ def get_site_status(info: dict, nginx_ok: bool | None = None) -> dict:
     name = info.get("name")
 
     if stype == "dotnet":
-        state = services.service_state(name)
-        pid = services.main_pid(name)
+        state = systemctl.service_state(name)
+        pid = systemctl.main_pid(name)
         memory_mb, cpu_percent = None, None
         if pid:
-            memory_mb, cpu_percent = services.get_process_stats(pid)
+            memory_mb, cpu_percent = systemctl.get_process_stats(pid)
         badge = {
             "active": "running",
             "failed": "failed",
             "inactive": "stopped",
         }.get(state, "unknown")
         return {"state": state, "badge": badge, "pid": pid,
-                "enabled": services.service_enabled(name),
+                "enabled": systemctl.service_enabled(name),
                 "memory_mb": memory_mb, "cpu_percent": cpu_percent}
 
     # static / proxy: OK if the nginx conf exists and nginx -t passes globally.
@@ -78,7 +77,7 @@ def get_site_status(info: dict, nginx_ok: bool | None = None) -> dict:
         return {"state": "missing config", "badge": "configured",
                 "pid": None, "memory_mb": None}
     if nginx_ok is None:
-        nginx_ok = services.nginx_test()[0]
+        nginx_ok = systemctl.nginx_test()[0]
     if nginx_ok:
         return {"state": "ok", "badge": "ok", "pid": None, "memory_mb": None}
     return {"state": "config error", "badge": "failed",
@@ -90,7 +89,7 @@ def list_sites_with_status() -> list[dict]:
     sites = list_sites()
     nginx_ok = None
     if any(s.get("type") in ("static", "proxy") for s in sites):
-        nginx_ok = services.nginx_test()[0]
+        nginx_ok = systemctl.nginx_test()[0]
     for site in sites:
         site["status"] = get_site_status(site, nginx_ok)
     return sites
@@ -131,7 +130,7 @@ def tail_logs(info: dict, n: int = SITE_LOG_TAIL_LINES) -> dict:
         "nginx error": _tail_file(log_dir / f"{name}-error.log", n),
     }
     if info.get("type") == "dotnet":
-        code, journal = services.run(
+        code, journal = systemctl.run(
             ["journalctl", "-u", name, "-n", str(n), "--no-pager"]
         )
         out["systemd journal"] = journal or "(no journal output)"

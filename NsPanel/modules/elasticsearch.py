@@ -1,4 +1,4 @@
-from features import services
+from features import systemctl
 from modules.base import Module
 
 
@@ -12,16 +12,16 @@ class ElasticsearchModule(Module):
     firewall_ports = [9200]
 
     def is_installed(self) -> bool:
-        return services.dpkg_installed("elasticsearch")
+        return systemctl.dpkg_installed("elasticsearch")
 
     def get_status(self) -> dict:
-        status = services.tool_status(
+        status = systemctl.tool_status(
             pkg="elasticsearch",
             service="elasticsearch",
             ports=[9200],
         )
         if status["installed"]:
-            _, out = services.run(
+            _, out = systemctl.run(
                 ["dpkg-query", "-W", "-f=${Version}", "elasticsearch"]
             )
             if out and "not found" not in out:

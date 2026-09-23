@@ -1,2 +1,2 @@
-# Force LF line endings for all shell scripts to prevent bash syntax errors on Unix environments
+# Shell scripts must keep LF endings — bash on Linux cannot parse CRLF.
 *.sh text eol=lf

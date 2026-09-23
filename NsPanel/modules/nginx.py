@@ -1,4 +1,4 @@
-from features import services
+from features import systemctl
 from modules.base import Module
 
 
@@ -11,10 +11,10 @@ class NginxModule(Module):
     logo = "nginx.png"
 
     def is_installed(self) -> bool:
-        return services.which("nginx") is not None
+        return systemctl.which("nginx") is not None
 
     def get_status(self) -> dict:
-        return services.tool_status(
+        return systemctl.tool_status(
             binary="nginx",
             service="nginx",
             version_cmd=["nginx", "-v"],

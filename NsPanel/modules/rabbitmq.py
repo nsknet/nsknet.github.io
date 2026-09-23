@@ -1,4 +1,4 @@
-from features import services
+from features import systemctl
 from modules.base import Module
 
 
@@ -14,18 +14,18 @@ class RabbitMQModule(Module):
     firewall_ports = [5672, 15672]
 
     def is_installed(self) -> bool:
-        return services.dpkg_installed("rabbitmq-server")
+        return systemctl.dpkg_installed("rabbitmq-server")
 
     def get_status(self) -> dict:
-        status = services.tool_status(
+        status = systemctl.tool_status(
             pkg="rabbitmq-server",
             service="rabbitmq-server",
             ports=[5672, 15672],
         )
         if status["installed"]:
-            _, out = services.run(["rabbitmqctl", "version"])
+            _, out = systemctl.run(["rabbitmqctl", "version"])
             if out:
-                status["version"] = services.first_line(out)
+                status["version"] = systemctl.first_line(out)
             cred_file = "/etc/rabbitmq/credentials.yml"
             status["extra"]["credentials"] = cred_file
         return status

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from features import services
+from features import systemctl
 from modules.base import Module
 
 _BINARY = "/opt/openobserve/openobserve"
@@ -25,13 +25,13 @@ class OpenObserveModule(Module):
 
         state = "not installed"
         if installed:
-            state = services.service_state("openobserve")
+            state = systemctl.service_state("openobserve")
 
         version = None
         if installed:
-            _, out = services.run([_BINARY, "--version"])
+            _, out = systemctl.run([_BINARY, "--version"])
             if out:
-                version = services.first_line(out)
+                version = systemctl.first_line(out)
 
         extra: dict = {}
         if installed:

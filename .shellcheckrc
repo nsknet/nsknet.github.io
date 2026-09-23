@@ -1,0 +1,3 @@
+# Scripts are sourced dynamically by core/bash_invoker.py and read env vars
+# (DB_PASSWORD, ALLOWED_SUBNETS, …) that shellcheck cannot see.
+disable=SC1090,SC1091,SC2154

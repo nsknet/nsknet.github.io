@@ -1,4 +1,4 @@
-from features import services
+from features import systemctl
 from modules.base import Module
 
 
@@ -32,16 +32,16 @@ class MssqlModule(Module):
     ]
 
     def is_installed(self) -> bool:
-        return services.dpkg_installed("mssql-server")
+        return systemctl.dpkg_installed("mssql-server")
 
     def get_status(self) -> dict:
-        status = services.tool_status(
+        status = systemctl.tool_status(
             pkg="mssql-server",
             service="mssql-server",
             ports=[1433],
         )
         if status["installed"]:
-            _, out = services.run(["dpkg-query", "-W", "-f=${Version}", "mssql-server"])
+            _, out = systemctl.run(["dpkg-query", "-W", "-f=${Version}", "mssql-server"])
             if out and "not found" not in out:
                 status["version"] = f"mssql {out.strip()}"
             status["extra"]["credentials"] = "/var/opt/mssql/credentials.yml"

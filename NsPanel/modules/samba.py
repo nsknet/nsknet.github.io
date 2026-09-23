@@ -1,11 +1,14 @@
-from features import services
+from features import systemctl
 from modules.base import Module
 
 
 class SambaModule(Module):
     name = "samba"
     display_name = "Samba"
-    description = "SMB/CIFS file sharing with password auth. One share, one login user (works on modern Windows)."
+    description = (
+        "SMB/CIFS file sharing with password auth. "
+        "One share, one login user (works on modern Windows)."
+    )
     bash_function = "install_samba"
     uninstall_function = "uninstall_samba"
     change_password_function = "set_samba_password"
@@ -22,7 +25,10 @@ class SambaModule(Module):
             "type": "string",
             "label": "Share name",
             "default": "public",
-            "help": "Folder is created at /srv/<share>. Access via \\\\<ip>\\<share>. Allowed: letters, digits, - and _.",
+            "help": (
+                "Folder is created at /srv/<share>. Access via \\\\<ip>\\<share>. "
+                "Allowed: letters, digits, - and _."
+            ),
         },
         {
             "name": "username",
@@ -35,10 +41,10 @@ class SambaModule(Module):
     ]
 
     def is_installed(self) -> bool:
-        return services.which("smbd") is not None or services.dpkg_installed("samba")
+        return systemctl.which("smbd") is not None or systemctl.dpkg_installed("samba")
 
     def get_status(self) -> dict:
-        status = services.tool_status(
+        status = systemctl.tool_status(
             binary="smbd",
             pkg="samba",
             service="smbd",

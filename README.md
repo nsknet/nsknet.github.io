@@ -1,71 +1,56 @@
 # nsknet.github.io
 
-This repository hosts **NsPanel** — a lightweight, browser-based admin panel for a single Ubuntu VPS — together with a collection of server bootstrap scripts.
+This repository is two things at once:
+
+- **[NsPanel](NsPanel/)** — a browser-based admin panel for a single Ubuntu VPS.
+- **A GitHub Pages site** — which is why `nspanel.sh`, `index.html` and
+  `SampleBlankSite.tar` sit at the repository root: the installer and the .NET
+  site template are fetched from `nsknet.github.io/…`.
 
 ---
 
-## NsPanel — VPS Admin Panel
+## Quick start
 
-NsPanel is built with **FastAPI** (Python) on the backend and a **Vue.js** SPA on the frontend. It is a thin UI wrapper over a modular library of bash scripts: bash remains the engine for all install and configuration logic, while Python handles status checks, metadata, and the HTTP surface.
+On the Ubuntu VPS you want to manage, as root:
 
-### Quick Start / Run
-
-On the **Ubuntu VPS you want to manage**, run as root:
-
-**One-liner (curl & run):**
 ```bash
 /bin/bash -c "$(curl -fsSL nsknet.github.io/nspanel.sh)"
 ```
-*(Prompts for branch selection if multiple branches exist; auto-selects default after 10s).*
 
-**Run specific branch (e.g. `dev`):**
+Prompts for a branch when several exist, then auto-selects the default after 10s.
+
+Pick a branch explicitly:
+
 ```bash
 /bin/bash -c "$(curl -fsSL nsknet.github.io/nspanel.sh)" dev
 # or: BRANCH=dev /bin/bash -c "$(curl -fsSL nsknet.github.io/nspanel.sh)"
 ```
 
-**Or clone and run directly:**
+Or clone and run it yourself:
+
 ```bash
-git clone --depth=1 https://github.com/nsknet/nsknet.github.io.git && cd nsknet.github.io/NsPanel && sudo ./run.sh
+git clone --depth=1 https://github.com/nsknet/nsknet.github.io.git
+cd nsknet.github.io/NsPanel && sudo ./run.sh
 ```
 
-`run.sh` will:
-
-1. Verify it is running as root and that Python 3 is available.
-2. Create a virtualenv (`.venv/`) and install `requirements.txt` (auto-installs `python3-venv` / `python3-pip` via APT if missing).
-3. Set the session credentials (printed in the startup banner).
-4. Print the URL, credentials, and SSH tunnel instructions.
-5. Start `uvicorn` on port `7777`.
-
-> Requires Python 3.12+. The panel manages system services and installs packages, so it must run as **root**.
-
-### Accessing the panel
-
-The panel binds to `0.0.0.0:7777` but is intended to be reached over an SSH tunnel from your local machine:
+The panel binds to `127.0.0.1:7777`. Reach it over an SSH tunnel:
 
 ```bash
 ssh -L 7777:localhost:7777 user@your-server
 ```
 
-Then open <http://localhost:7777> in your browser.
-
-**Credentials:** username `admin`, password shown in the startup banner.
-
-### Sections
-
-| Section | Description |
-|---|---|
-| **Dashboard** | Aggregated overview — CPU, RAM, disk, uptime, installed sites and tools at a glance |
-| **System** | Host specs, timezone presets, common utilities, virtual RAM (swap) management |
-| **Firewall** | UFW rule management — add/remove ports, activate firewall |
-| **Sites** | Nginx virtual host management — static files, reverse proxy, .NET Core apps |
-| **Services** | Custom systemd service lifecycle — create, start, stop, edit unit files |
-| **Tools** | One-click installation and status dashboard for pre-scripted server packages |
-| **DNS** | CoreDNS host record management — map domains to IPs without a restart |
-| **Logs** | Append-only audit trail of every panel action |
-
-### Supported tools
-
-One-click install and status for: Cloudflared, CoreDNS, .NET SDK (6–10), Elasticsearch, Fail2ban, Kibana, MariaDB, MongoDB, SQL Server, NGINX, OpenObserve, PHP-FPM, PostgreSQL, RabbitMQ, Redis, and Samba. Tools are auto-discovered from `NsPanel/modules/` — adding one requires only a single new Python file.
+Then open <http://localhost:7777> — username `admin`, password printed in the banner.
 
 ---
+
+## What is here
+
+| Path | Purpose |
+|---|---|
+| [`NsPanel/`](NsPanel/) | The panel: FastAPI backend, Vue 3 SPA, bash scripts. [Docs](NsPanel/docs/ARCHITECTURE.md). |
+| [`SampleBlankSite/`](SampleBlankSite/) | Source of the .NET template the panel deploys for new .NET sites. |
+| `SampleBlankSite.tar` | Published build of the above, served by Pages. |
+| `nspanel.sh` | The curl-and-run installer. |
+| [`mini-scripts/`](mini-scripts/) | Standalone helpers (Cloudflared setup, Proxmox VM cloning). |
+
+Full documentation lives in [NsPanel/README.md](NsPanel/README.md).
