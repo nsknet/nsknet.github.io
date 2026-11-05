@@ -1,0 +1,16 @@
+@{
+    ViewData["Title"] = "Error";
+}
+
+<main class="wrap" style="max-width: 640px; padding-top: 10vh;">
+    <div class="card crit" style="padding: 28px;">
+        <div class="brand">
+            <div class="logo" style="background: var(--crit);">@Icons.Get("alert", 22)</div>
+            <div>
+                <h1>Something went wrong</h1>
+                <p>The request@(ViewData["Path"] is string path ? $" to {path}" : "") could not be completed. Details are in the service log.</p>
+            </div>
+        </div>
+        <p class="dim small" style="margin: 20px 0 0;">Check with <code>journalctl -u &lt;site-name&gt; -n 100</code>.</p>
+    </div>
+</main>

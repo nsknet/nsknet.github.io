@@ -1,0 +1,32 @@
+@model SiteInfo
+@{
+    ViewData["Title"] = "Site is running";
+}
+
+<main class="wrap" style="max-width: 760px; padding-top: 10vh;">
+    <div class="card" style="padding: 28px;">
+        <div class="brand">
+            <div class="logo">@Icons.Get("check", 22)</div>
+            <div>
+                <h1>Your .NET site is up and running</h1>
+                <p>This placeholder app was deployed by NsPanel. Replace it with your own build.</p>
+            </div>
+        </div>
+
+        <dl class="kv" style="margin-top: 24px;">
+            <dt>Upload to</dt>
+            <dd><code>@Model.ContentRoot</code></dd>
+            <dt>Entry DLL</dt>
+            <dd><code>@Model.DllName</code> <span class="dim small">— systemd starts this file; publish your app with the same name</span></dd>
+            <dt>Environment</dt>
+            <dd>@Model.Environment</dd>
+            <dt>Listening on</dt>
+            <dd><code>@(Model.Urls ?? "—")</code></dd>
+        </dl>
+
+        <div class="actions" style="margin-top: 24px;">
+            <a class="btn primary" href="/check">@Icons.Get("activity", 16) Server health check</a>
+            <a class="btn" href="/health">@Icons.Get("check", 16) /health</a>
+        </div>
+    </div>
+</main>

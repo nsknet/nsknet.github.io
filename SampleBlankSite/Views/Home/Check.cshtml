@@ -1,241 +1,441 @@
-﻿@model SampleBlankSite.Models.SystemInfoViewModel
+﻿@model CheckPage
 @{
-    ViewData["Title"] = "System Information";
+    var r = Model.Report;
+    var site = Model.Site;
+    ViewData["Title"] = $"Health · {r.Host.Hostname}";
+
+    var issueCount = r.Issues.Count(i => i.Level >= HealthLevel.Warn);
+    var headline = r.Overall switch
+    {
+        HealthLevel.Critical => "Critical issues found",
+        HealthLevel.Warn => "Server needs attention",
+        _ => "All systems healthy",
+    };
+
+    var rootDisk = r.Disks.FirstOrDefault(d => d.Mount == "/") ?? r.Disks.OrderByDescending(d => d.UsedPercent).FirstOrDefault();
+    double? loadPercent = r.Cpu.Load5 is { } l5 && r.Cpu.Cores > 0 ? l5 / r.Cpu.Cores * 100 : null;
+
+    var installed = r.Services.Where(s => s.IsInstalled).ToList();
+    var missing = r.Services.Where(s => !s.IsInstalled).Select(s => s.Name).ToList();
+}
+@functions {
+    static string Css(HealthLevel level) => Format.Css(level);
+
+    static string UsageCss(double? percent, double warn = 85, double critical = 95) =>
+        percent is null ? "muted" : Format.Css(Format.Usage(percent, warn, critical));
+
+    static string Width(double? percent) =>
+        FormattableString.Invariant($"width:{Math.Clamp(percent ?? 0, 0, 100):0.#}%");
+
+    static (string Css, string Text) ServicePill(ServiceStatus s) => s.ActiveState switch
+    {
+        "active" when s.PortOpen == false => ("warn", "port closed"),
+        "active" => ("ok", "running"),
+        "failed" => ("crit", "failed"),
+        "activating" or "reloading" => ("info", s.ActiveState),
+        "inactive" => ("warn", "stopped"),
+        null => ("info", "installed"),
+        _ => ("muted", s.ActiveState),
+    };
+
+    static (string Css, string Text) Bool(bool? value, string yes, string no, string yesCss = "ok", string noCss = "crit") =>
+        value switch
+        {
+            true => (yesCss, yes),
+            false => (noCss, no),
+            null => ("muted", "unknown"),
+        };
 }
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"]</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css" />
-</head>
-<body class="bg-gray-100">
-    <div class="container mx-auto px-4 py-8">
-        <header class="mb-8">
-            <h1 class="text-3xl font-bold text-center text-blue-600">
-                <i class="fas fa-server mr-2"></i>System Information Dashboard
-            </h1>
-            <p class="text-center text-gray-600 mt-2">Current status of this web server</p>
-        </header>
-
-        <div class="grid grid-cols-1 gap-6">
-            <!-- Basic Info -->
-            <div class="bg-white rounded-lg shadow-md p-6">
-                <h2 class="text-xl font-semibold mb-4 text-gray-800">
-                    <i class="fas fa-info-circle mr-2 text-blue-500"></i>Basic Information
-                </h2>
-                <div class="space-y-3">
-                    <div class="flex items-start">
-                        <div class="w-8 text-blue-500"><i class="fas fa-network-wired"></i></div>
-                        <div>
-                            <p class="font-medium">IP Address</p>
-                            <p class="text-gray-600">@Model.IpAddress</p>
-                        </div>
-                    </div>
-                    <div class="flex items-start">
-                        <div class="w-8 text-blue-500"><i class="fas fa-folder-open"></i></div>
-                        <div>
-                            <p class="font-medium">Website Directory</p>
-                            <p class="text-gray-600 break-all">@Model.WebsiteDirectory</p>
-                        </div>
-                    </div>
-                    <div class="flex items-start">
-                        <div class="w-8 text-blue-500"><i class="fas fa-globe"></i></div>
-                        <div>
-                            <p class="font-medium">Website IP Address</p>
-                            <p class="text-gray-600">@Model.WebsiteIpAddress</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- .NET Info -->
-            <div class="bg-white rounded-lg shadow-md p-6">
-                <h2 class="text-xl font-semibold mb-4 text-gray-800">
-                    <i class="fab fa-microsoft mr-2 text-purple-600"></i>.NET SDK Versions
-                </h2>
-                <div class="border rounded-lg overflow-hidden">
-                    <div class="max-h-60 overflow-y-auto">
-                        @if (Model.DotNetSdkVersions != null && Model.DotNetSdkVersions.Any())
-                        {
-                            <ul class="divide-y">
-                                @foreach (var version in Model.DotNetSdkVersions)
-                                {
-                                    <li class="p-3 hover:bg-gray-50">
-                                        <i class="fas fa-code-branch mr-2 text-purple-500"></i>@version
-                                    </li>
-                                }
-                            </ul>
-                        }
-                        else
-                        {
-                            <p class="p-3 text-gray-500">No .NET SDK versions found</p>
-                        }
-                    </div>
-                </div>
-            </div>
-
-            <!-- Web Server Info -->
-            <div class="bg-white rounded-lg shadow-md p-6">
-                <h2 class="text-xl font-semibold mb-4 text-gray-800">
-                    <i class="fas fa-server mr-2 text-green-600"></i>Web Server
-                </h2>
-                <div class="space-y-4">
-                    <div class="border rounded-lg p-4">
-                        <div class="flex items-center justify-between mb-2">
-                            <div class="flex items-center">
-                                <i class="fas fa-server mr-2 text-green-500"></i>
-                                <span class="font-medium">Nginx</span>
-                            </div>
-                            <span class="px-2 py-1 text-xs rounded-full @(Model.NginxStatus.IsRunning ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800")">
-                                @(Model.NginxStatus.IsRunning ? "Running" : "Stopped")
-                            </span>
-                        </div>
-                        <div class="text-sm text-gray-600">
-                            <p><span class="font-medium">Installed:</span> @(Model.NginxStatus.IsInstalled ? "Yes" : "No")</p>
-                            <p><span class="font-medium">Version:</span> @Model.NginxStatus.Version</p>
-                            <p><span class="font-medium">Status:</span> @Model.NginxStatus.ConnectionStatus</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Database Info -->
-            <div class="bg-white rounded-lg shadow-md p-6">
-                <h2 class="text-xl font-semibold mb-4 text-gray-800">
-                    <i class="fas fa-database mr-2 text-yellow-600"></i>Databases
-                </h2>
-                <div class="space-y-4">
-                    <!-- MongoDB -->
-                    <div class="border rounded-lg p-4">
-                        <div class="flex items-center justify-between mb-2">
-                            <div class="flex items-center">
-                                <i class="fas fa-database mr-2 text-green-600"></i>
-                                <span class="font-medium">MongoDB</span>
-                            </div>
-                            <span class="px-2 py-1 text-xs rounded-full @(Model.MongoDbInfo.IsRunning ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800")">
-                                @(Model.MongoDbInfo.IsRunning ? "Running" : "Stopped")
-                            </span>
-                        </div>
-                        <div class="text-sm text-gray-600">
-                            <p><span class="font-medium">Installed:</span> @(Model.MongoDbInfo.IsInstalled ? "Yes" : "No")</p>
-                            <p><span class="font-medium">Version:</span> @Model.MongoDbInfo.Version</p>
-                            <p><span class="font-medium">Connection:</span> @Model.MongoDbInfo.ConnectionStatus</p>
-                        </div>
-                    </div>
-
-                    <!-- MySQL -->
-                    <div class="border rounded-lg p-4">
-                        <div class="flex items-center justify-between mb-2">
-                            <div class="flex items-center">
-                                <i class="fas fa-database mr-2 text-blue-600"></i>
-                                <span class="font-medium">MySQL</span>
-                            </div>
-                            <span class="px-2 py-1 text-xs rounded-full @(Model.MySqlInfo.IsRunning ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800")">
-                                @(Model.MySqlInfo.IsRunning ? "Running" : "Stopped")
-                            </span>
-                        </div>
-                        <div class="text-sm text-gray-600">
-                            <p><span class="font-medium">Installed:</span> @(Model.MySqlInfo.IsInstalled ? "Yes" : "No")</p>
-                            <p><span class="font-medium">Version:</span> @Model.MySqlInfo.Version</p>
-                            <p><span class="font-medium">Connection:</span> @Model.MySqlInfo.ConnectionStatus</p>
-                        </div>
-                    </div>
-
-                    <!-- PostgreSQL -->
-                    <div class="border rounded-lg p-4">
-                        <div class="flex items-center justify-between mb-2">
-                            <div class="flex items-center">
-                                <i class="fas fa-database mr-2 text-blue-800"></i>
-                                <span class="font-medium">PostgreSQL</span>
-                            </div>
-                            <span class="px-2 py-1 text-xs rounded-full @(Model.PostgreSqlInfo.IsRunning ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800")">
-                                @(Model.PostgreSqlInfo.IsRunning ? "Running" : "Stopped")
-                            </span>
-                        </div>
-                        <div class="text-sm text-gray-600">
-                            <p><span class="font-medium">Installed:</span> @(Model.PostgreSqlInfo.IsInstalled ? "Yes" : "No")</p>
-                            <p><span class="font-medium">Version:</span> @Model.PostgreSqlInfo.Version</p>
-                            <p><span class="font-medium">Connection:</span> @Model.PostgreSqlInfo.ConnectionStatus</p>
-                        </div>
-                    </div>
-
-                    <!-- SQL Server -->
-                    <div class="border rounded-lg p-4">
-                        <div class="flex items-center justify-between mb-2">
-                            <div class="flex items-center">
-                                <i class="fas fa-database mr-2 text-red-600"></i>
-                                <span class="font-medium">SQL Server</span>
-                            </div>
-                            <span class="px-2 py-1 text-xs rounded-full @(Model.SqlServerInfo.IsRunning ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800")">
-                                @(Model.SqlServerInfo.IsRunning ? "Running" : "Stopped")
-                            </span>
-                        </div>
-                        <div class="text-sm text-gray-600">
-                            <p><span class="font-medium">Installed:</span> @(Model.SqlServerInfo.IsInstalled ? "Yes" : "No")</p>
-                            <p><span class="font-medium">Version:</span> @Model.SqlServerInfo.Version</p>
-                            <p><span class="font-medium">Connection:</span> @Model.SqlServerInfo.ConnectionStatus</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Docker Info -->
-            <div class="bg-white rounded-lg shadow-md p-6">
-                <h2 class="text-xl font-semibold mb-4 text-gray-800">
-                    <i class="fab fa-docker mr-2 text-blue-700"></i>Docker
-                </h2>
-                <div class="border rounded-lg p-4">
-                    <div class="flex items-center justify-between mb-2">
-                        <div class="flex items-center">
-                            <i class="fab fa-docker mr-2 text-blue-600"></i>
-                            <span class="font-medium">Docker</span>
-                        </div>
-                        <span class="px-2 py-1 text-xs rounded-full @(Model.DockerInfo.IsRunning ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800")">
-                            @(Model.DockerInfo.IsRunning ? "Running" : "Stopped")
-                        </span>
-                    </div>
-                    <div class="text-sm text-gray-600">
-                        <p><span class="font-medium">Installed:</span> @(Model.DockerInfo.IsInstalled ? "Yes" : "No")</p>
-                        <p><span class="font-medium">Version:</span> @Model.DockerInfo.Version</p>
-                        <p><span class="font-medium">Status:</span> @Model.DockerInfo.ConnectionStatus</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Open Ports -->
-            <div class="bg-white rounded-lg shadow-md p-6">
-                <h2 class="text-xl font-semibold mb-4 text-gray-800">
-                    <i class="fas fa-plug mr-2 text-indigo-600"></i>Open Ports
-                </h2>
-                <div class="border rounded-lg overflow-hidden">
-                    <div class="max-h-60 overflow-y-auto">
-                        @if (Model.OpenPorts != null && Model.OpenPorts.Any())
-                        {
-                            <div class="grid grid-cols-4 gap-2 p-3">
-                                @foreach (var port in Model.OpenPorts)
-                                {
-                                    <div class="bg-indigo-100 text-indigo-800 rounded px-3 py-1 text-center">
-                                        @port
-                                    </div>
-                                }
-                            </div>
-                        }
-                        else
-                        {
-                            <p class="p-3 text-gray-500">No open ports found</p>
-                        }
-                    </div>
-                </div>
+<main class="wrap">
+    <header class="top">
+        <div class="brand">
+            <div class="logo">@Icons.Get("server", 22)</div>
+            <div>
+                <h1>@r.Host.Hostname</h1>
+                <p>@r.Host.Os · up @Format.Duration(r.Host.Uptime)</p>
             </div>
         </div>
+        <div class="actions">
+            <label class="toggle"><input type="checkbox" id="auto" /> Auto-refresh 10s</label>
+            <a class="btn" href="/check.json">@Icons.Get("json", 16) JSON</a>
+            <a class="btn primary" href="/check">@Icons.Get("refresh", 16) Refresh</a>
+        </div>
+    </header>
 
-        <footer class="mt-8 text-center text-gray-600 text-sm">
-            <p>Last updated: @DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")</p>
-        </footer>
-    </div>
-</body>
-</html>
+    <!-- Overall status -->
+    <section class="card banner @Css(r.Overall)">
+        <div class="score @Css(r.Overall)" style="--p: @r.Score">
+            <div><div><b>@r.Score</b><small>score</small></div></div>
+        </div>
+        <div>
+            <h2 class="tone">@headline</h2>
+            <p class="lead">
+                @(issueCount == 0 ? "No problems detected" : $"{issueCount} issue{(issueCount == 1 ? "" : "s")} to review")
+                · scanned in @Format.Number(r.CollectMs, "0") ms at @r.GeneratedAt.ToString("yyyy-MM-dd HH:mm:ss zzz")
+            </p>
+            @if (r.Issues.Count > 0)
+            {
+                <ul class="issues">
+                    @foreach (var issue in r.Issues)
+                    {
+                        var icon = issue.Level switch { HealthLevel.Critical => "x", HealthLevel.Warn => "alert", _ => "info" };
+                        <li class="@Css(issue.Level)">
+                            <span class="tone">@Icons.Get(icon, 16)</span>
+                            <span class="area">@issue.Area</span>
+                            <span>@issue.Message</span>
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    </section>
+
+    <!-- Key metrics -->
+    <section class="kpis">
+        <div class="card kpi @UsageCss(r.Cpu.UsagePercent, 80, 90)">
+            <div class="label">@Icons.Get("cpu", 16) CPU usage</div>
+            <div class="value">@Format.Percent(r.Cpu.UsagePercent)</div>
+            <div class="hint">@r.Cpu.Cores core@(r.Cpu.Cores == 1 ? "" : "s")</div>
+            <div class="bar"><span style="@Width(r.Cpu.UsagePercent)"></span></div>
+        </div>
+        <div class="card kpi @UsageCss(r.Memory.UsedPercent, 90, 95)">
+            <div class="label">@Icons.Get("memory", 16) Memory</div>
+            <div class="value">@Format.Percent(r.Memory.UsedPercent)</div>
+            <div class="hint">@Format.Bytes(r.Memory.AvailableBytes) free of @Format.Bytes(r.Memory.TotalBytes)</div>
+            <div class="bar"><span style="@Width(r.Memory.UsedPercent)"></span></div>
+        </div>
+        <div class="card kpi @UsageCss(rootDisk?.UsedPercent)">
+            <div class="label">@Icons.Get("disk", 16) Disk @(rootDisk?.Mount)</div>
+            <div class="value">@Format.Percent(rootDisk?.UsedPercent)</div>
+            <div class="hint">@Format.Bytes(rootDisk?.FreeBytes) free of @Format.Bytes(rootDisk?.TotalBytes)</div>
+            <div class="bar"><span style="@Width(rootDisk?.UsedPercent)"></span></div>
+        </div>
+        <div class="card kpi @UsageCss(loadPercent, 100, 200)">
+            <div class="label">@Icons.Get("activity", 16) Load average</div>
+            <div class="value">@Format.Number(r.Cpu.Load1)</div>
+            <div class="hint">5m @Format.Number(r.Cpu.Load5) · 15m @Format.Number(r.Cpu.Load15)</div>
+            <div class="bar"><span style="@Width(loadPercent)"></span></div>
+        </div>
+    </section>
+
+    <section class="grid">
+        <!-- System -->
+        <div class="card">
+            <h3 class="card-h">@Icons.Get("server") System</h3>
+            <dl class="kv">
+                <dt>Hostname</dt><dd>@r.Host.Hostname</dd>
+                <dt>OS</dt><dd>@r.Host.Os</dd>
+                <dt>Kernel</dt><dd class="mono">@r.Host.Kernel</dd>
+                <dt>Architecture</dt><dd>@r.Host.Architecture</dd>
+                <dt>Virtualization</dt><dd>@(r.Host.Virtualization ?? "—")</dd>
+                <dt>CPU</dt><dd>@(r.Cpu.Model ?? "—") <span class="dim">× @r.Cpu.Cores</span></dd>
+                <dt>Uptime</dt><dd>@Format.Duration(r.Host.Uptime)</dd>
+                <dt>Server time</dt><dd>@r.Host.ServerTime.ToString("yyyy-MM-dd HH:mm:ss") <span class="dim">@r.Host.TimeZone</span></dd>
+                <dt>Clock sync</dt>
+                <dd>
+                    @{ var ntp = Bool(r.Host.NtpSynced, "NTP synchronised", "not synchronised", noCss: "warn"); }
+                    <span class="pill @ntp.Css">@ntp.Text</span>
+                </dd>
+                <dt>Swap</dt>
+                <dd>
+                    @if (r.Memory.SwapTotalBytes > 0)
+                    {
+                        <span>@Format.Percent(r.Memory.SwapUsedPercent) used of @Format.Bytes(r.Memory.SwapTotalBytes)</span>
+                    }
+                    else
+                    {
+                        <span class="dim">none</span>
+                    }
+                </dd>
+            </dl>
+        </div>
+
+        <!-- This site -->
+        <div class="card">
+            <h3 class="card-h">@Icons.Get("globe") This site</h3>
+            <dl class="kv">
+                <dt>Entry DLL</dt><dd class="mono">@site.DllName</dd>
+                <dt>Directory</dt><dd class="mono">@site.ContentRoot</dd>
+                <dt>Environment</dt><dd>@site.Environment</dd>
+                <dt>Listening on</dt><dd class="mono">@(site.Urls ?? "—")</dd>
+                <dt>Request</dt><dd class="mono">@site.Scheme://@site.RequestHost</dd>
+                <dt>Client IP</dt><dd class="mono">@(site.ClientIp ?? "—")</dd>
+                <dt>Reverse proxy</dt>
+                <dd>
+                    @if (site.BehindProxy)
+                    {
+                        <span class="pill ok">forwarded headers received</span>
+                    }
+                    else
+                    {
+                        <span class="pill muted">direct request</span>
+                    }
+                </dd>
+                <dt>Process</dt><dd>PID @r.DotNet.ProcessId as <b>@r.DotNet.ProcessUser</b></dd>
+            </dl>
+        </div>
+
+        <!-- Disks -->
+        <div class="card">
+            <h3 class="card-h">@Icons.Get("disk") Disks <span class="sub">@r.Disks.Count mount@(r.Disks.Count == 1 ? "" : "s")</span></h3>
+            @if (r.Disks.Count == 0)
+            {
+                <p class="empty">No disks could be read.</p>
+            }
+            else
+            {
+                <table>
+                    <thead><tr><th>Mount</th><th>Used</th><th class="num">Free</th></tr></thead>
+                    <tbody>
+                        @foreach (var d in r.Disks)
+                        {
+                            <tr class="@UsageCss(d.UsedPercent)">
+                                <td><span class="mono">@d.Mount</span> <span class="dim small">@d.FileSystem</span></td>
+                                <td style="width: 40%;">
+                                    <div class="small">@Format.Percent(d.UsedPercent) <span class="dim">of @Format.Bytes(d.TotalBytes)</span></div>
+                                    <div class="bar" style="margin-top: 4px;"><span style="@Width(d.UsedPercent)"></span></div>
+                                </td>
+                                <td class="num">@Format.Bytes(d.FreeBytes)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+
+        <!-- Services -->
+        <div class="card span-2">
+            <h3 class="card-h">@Icons.Get("layers") Services <span class="sub">@installed.Count(s => s.IsRunning) running · @installed.Count installed</span></h3>
+            @if (installed.Count == 0)
+            {
+                <p class="empty">No known services detected@(r.Services.Count == 0 ? " (systemd not available on this platform)" : "").</p>
+            }
+            else
+            {
+                <div class="scroll">
+                    <table>
+                        <thead><tr><th>Service</th><th>Status</th><th>Port</th><th>Version</th></tr></thead>
+                        <tbody>
+                            @foreach (var s in installed)
+                            {
+                                var pill = ServicePill(s);
+                                <tr>
+                                    <td><b>@s.Name</b> <span class="dim small mono">@s.Unit</span></td>
+                                    <td><span class="pill @pill.Css">@pill.Text</span></td>
+                                    <td class="mono">
+                                        @if (s.Port is { } port)
+                                        {
+                                            <span class="@(s.PortOpen == true ? "tone ok" : "dim")">@port</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="dim">—</span>
+                                        }
+                                    </td>
+                                    <td class="dim small">@(s.Version ?? "—")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            @if (missing.Count > 0 && r.Services.Count > 0)
+            {
+                <p class="dim small" style="margin: 12px 0 0;">Not installed: @string.Join(" · ", missing)</p>
+            }
+        </div>
+
+        <!-- Maintenance -->
+        <div class="card">
+            <h3 class="card-h">@Icons.Get("wrench") Maintenance</h3>
+            <dl class="kv">
+                <dt>Reboot</dt>
+                <dd>
+                    @{ var reboot = Bool(r.Maintenance.RebootRequired, "required", "not required", "warn", "ok"); }
+                    <span class="pill @reboot.Css">@reboot.Text</span>
+                    @if (r.Maintenance.RebootPackages.Count > 0)
+                    {
+                        <div class="dim small mono">@string.Join(", ", r.Maintenance.RebootPackages)</div>
+                    }
+                </dd>
+                <dt>Updates</dt>
+                <dd>
+                    @if (r.Maintenance.PendingUpdates is { } pending)
+                    {
+                        <span class="pill @(pending > 0 ? "info" : "ok")">@pending available</span>
+                        <span class="pill @(r.Maintenance.SecurityUpdates > 0 ? "warn" : "ok")">@r.Maintenance.SecurityUpdates security</span>
+                    }
+                    else
+                    {
+                        <span class="dim">unknown</span>
+                    }
+                </dd>
+                <dt>Failed units</dt>
+                <dd>
+                    @if (r.FailedUnits.Count == 0)
+                    {
+                        <span class="pill ok">none</span>
+                    }
+                    else
+                    {
+                        <div class="chips">@foreach (var u in r.FailedUnits) { <span class="chip tone crit">@u</span> }</div>
+                    }
+                </dd>
+            </dl>
+            @if (r.Maintenance.UpdateNotes.Count > 0)
+            {
+                <div class="dim small" style="margin-top: 12px;">
+                    @foreach (var note in r.Maintenance.UpdateNotes) { <div>@note</div> }
+                </div>
+            }
+        </div>
+        <!-- Network -->
+        <div class="card">
+            <h3 class="card-h">@Icons.Get("network") Network</h3>
+            <dl class="kv" style="margin-bottom: 14px;">
+                <dt>Internet</dt>
+                <dd>
+                    @{ var net = Bool(r.Network.InternetReachable, "reachable", "unreachable"); }
+                    <span class="pill @net.Css">@net.Text</span>
+                    @if (r.Network.InternetLatencyMs is { } ms)
+                    {
+                        <span class="dim small">@Format.Number(ms, "0.#") ms to 1.1.1.1</span>
+                    }
+                </dd>
+                <dt>DNS</dt>
+                <dd>
+                    @{ var dns = Bool(r.Network.DnsWorks, "resolving", "failing"); }
+                    <span class="pill @dns.Css">@dns.Text</span>
+                    <span class="dim small mono">@r.Network.DnsDetail</span>
+                </dd>
+            </dl>
+            @if (r.Network.Interfaces.Count > 0)
+            {
+                <div class="scroll">
+                    <table>
+                        <thead><tr><th>Interface</th><th>Addresses</th></tr></thead>
+                        <tbody>
+                            @foreach (var nic in r.Network.Interfaces)
+                            {
+                                <tr>
+                                    <td>
+                                        <b class="mono">@nic.Name</b>
+                                        <div><span class="pill @(nic.Status == "Up" ? "ok" : "muted")">@nic.Status.ToLowerInvariant()</span></div>
+                                    </td>
+                                    <td class="mono small">
+                                        @foreach (var a in nic.Addresses)
+                                        {
+                                            <div>@a</div>
+                                        }
+                                        @if (nic.Mac != null)
+                                        {
+                                            <div class="dim">@nic.Mac</div>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+
+        <!-- Top processes -->
+        <div class="card">
+            <h3 class="card-h">@Icons.Get("list") Top memory consumers</h3>
+            @if (r.TopProcesses.Count == 0)
+            {
+                <p class="empty">Process list unavailable.</p>
+            }
+            else
+            {
+                <table>
+                    <thead><tr><th>Process</th><th class="num">Memory</th><th class="num">of RAM</th></tr></thead>
+                    <tbody>
+                        @foreach (var p in r.TopProcesses)
+                        {
+                            double? share = r.Memory.TotalBytes > 0 ? 100.0 * p.MemoryBytes / r.Memory.TotalBytes : null;
+                            <tr>
+                                <td><span class="mono">@p.Name</span>@if (p.Count > 1) {<span class="dim small"> ×@p.Count</span>}</td>
+                                <td class="num">@Format.Bytes(p.MemoryBytes)</td>
+                                <td class="num dim">@Format.Percent(share)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+
+        <!-- .NET -->
+        <div class="card">
+            <h3 class="card-h">@Icons.Get("code") .NET</h3>
+            <dl class="kv">
+                <dt>App runtime</dt><dd>@r.DotNet.AppRuntime</dd>
+                <dt>App memory</dt><dd>@Format.Bytes(r.DotNet.WorkingSetBytes) <span class="dim small">(managed heap @Format.Bytes(r.DotNet.ManagedHeapBytes))</span></dd>
+                <dt>Threads</dt><dd>@r.DotNet.ThreadCount</dd>
+                <dt>App uptime</dt><dd>@Format.Duration(r.DotNet.ProcessUptime)</dd>
+                <dt>SDKs</dt>
+                <dd>
+                    @if (r.DotNet.Sdks.Count == 0) { <span class="dim">none (runtime only)</span> }
+                    else { <div class="chips">@foreach (var sdk in r.DotNet.Sdks) { <span class="chip">@sdk</span> }</div> }
+                </dd>
+                <dt>Runtimes</dt>
+                <dd>
+                    @if (r.DotNet.Runtimes.Count == 0) { <span class="dim">—</span> }
+                    else
+                    {
+                        <div class="small mono">
+                            @foreach (var rt in r.DotNet.Runtimes) { <div>@rt</div> }
+                        </div>
+                    }
+                </dd>
+            </dl>
+        </div>
+
+        <!-- Ports -->
+        <div class="card span-all">
+            <h3 class="card-h">@Icons.Get("plug") Listening TCP ports <span class="sub">@r.ListeningPorts.Count total</span></h3>
+            @if (r.ListeningPorts.Count == 0)
+            {
+                <p class="empty">No listening sockets found.</p>
+            }
+            else
+            {
+                <div class="chips">
+                    @foreach (var p in r.ListeningPorts)
+                    {
+                        <span class="chip @(p.LocalOnly ? "local" : "")" title="@p.Addresses">@p.Port</span>
+                    }
+                </div>
+                <p class="dim small" style="margin: 12px 0 0;">Dashed = bound to localhost only. Hover a port to see its addresses.</p>
+            }
+        </div>
+
+    </section>
+
+    <p class="foot">
+        Placeholder page deployed by NsPanel · replace this app with your own build ·
+        <a href="/">home</a> · <a href="/health">/health</a>
+    </p>
+</main>
+
+@section Scripts {
+    <script>
+        (function () {
+            var box = document.getElementById("auto");
+            var key = "check-auto-refresh";
+            var timer = null;
+            function apply() {
+                clearTimeout(timer);
+                if (box.checked) timer = setTimeout(function () { location.reload(); }, 10000);
+            }
+            try { box.checked = localStorage.getItem(key) === "1"; } catch (e) { }
+            box.addEventListener("change", function () {
+                try { localStorage.setItem(key, box.checked ? "1" : "0"); } catch (e) { }
+                apply();
+            });
+            apply();
+        })();
+    </script>
+}

@@ -1,7 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 	<PropertyGroup>
-		<TargetFramework>net8.0</TargetFramework>
+		<TargetFramework>net10.0</TargetFramework>
+		<Nullable>disable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
 		<SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+		<InvariantGlobalization>true</InvariantGlobalization>
 		<DebugType>none</DebugType>
+		<!-- systemd runs `dotnet <name>.dll`, so the native launcher is never used. -->
+		<UseAppHost>false</UseAppHost>
+		<!-- Hosted by Kestrel behind nginx, not IIS. -->
+		<IsTransformWebConfigDisabled>true</IsTransformWebConfigDisabled>
 	</PropertyGroup>
 </Project>
