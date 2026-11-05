@@ -61,6 +61,28 @@ def require_name(value: str, what: str = "name") -> str:
     return value
 
 
+# Subnets an install may open a port to. Validated server-side so only these
+# exact CIDRs (plus, for the panel service, the host's own interface subnets)
+# reach the firewall script.
+ALLOWED_SUBNET_CHOICES = {
+    "10.0.0.0/8",  # class A private
+    "172.16.0.0/12",  # class B private
+    "192.168.0.0/16",  # class C private
+    "127.0.0.0/8",  # loopback
+    "0.0.0.0/0",  # everything (any IP)
+}
+
+
+def require_port(value: int | str | None, lo: int = 1024, hi: int = 65535) -> int:
+    try:
+        port = int(str(value).strip())
+    except (TypeError, ValueError) as exc:
+        raise bad_request("Port must be a number.") from exc
+    if not lo <= port <= hi:
+        raise bad_request(f"Port must be between {lo} and {hi}.")
+    return port
+
+
 def require_password(value: str | None) -> str:
     """Shared check for install-time and change-password flows."""
     pw = (value or "").strip()

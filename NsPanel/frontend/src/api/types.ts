@@ -29,6 +29,59 @@ export interface JobSummary {
   line_count: number;
 }
 
+// --- Panel service ----------------------------------------------------------
+
+export interface CommitInfo {
+  hash: string;
+  short: string;
+  /** Committer date, ISO 8601. */
+  date: string;
+  subject: string;
+}
+
+export interface PanelUpdateCheck {
+  checked_at: string;
+  /** HEAD the check was made against; `stale` once HEAD moved past it. */
+  base: string | null;
+  stale?: boolean;
+  remote_commit: CommitInfo | null;
+  /** Commits that touch the panel — the ones an update would bring in. */
+  behind: number;
+  total_behind: number;
+  commits: CommitInfo[];
+  error: string | null;
+}
+
+export interface SubnetChoice {
+  cidr: string;
+  label: string;
+  default: boolean;
+}
+
+/** GET /api/v1/panel — NsPanel's own systemd service. */
+export interface PanelServiceStatus {
+  installed: boolean;
+  active: string;
+  enabled: string;
+  port: number;
+  branch: string;
+  repo_url: string;
+  repo_dir: string;
+  subnets: string[];
+  urls: string[];
+  installed_commit: CommitInfo | null;
+  /** The commit the panel serving this page was started from. */
+  running_commit: CommitInfo | null;
+  installed_at: string | null;
+  updated_at: string | null;
+  update: PanelUpdateCheck | null;
+  /** This page is served by the service itself. */
+  is_self: boolean;
+  current_port: number;
+  default_port: number;
+  subnet_choices: SubnetChoice[];
+}
+
 // --- System -----------------------------------------------------------------
 
 export interface NetworkInterface {

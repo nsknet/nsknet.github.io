@@ -51,6 +51,21 @@ NGINX_CONF_DIR = Path("/var/www/nginx/conf.d")
 SERVICES_DIR = Path("/var/www/services")
 NGINX_LOG_DIR = Path("/var/www/nginx/log")
 
+# --- Panel as a systemd service (scripts/panel_service.sh) -------------------
+# The service runs from its own sparse clone, so the checkout run.sh uses can be
+# pulled or edited without changing what the service runs until it restarts.
+REPO_URL = "https://github.com/nsknet/nsknet.github.io.git"
+REPO_BRANCH = "main"
+SERVICE_NAME = "nspanel"
+SERVICE_REPO_DIR = Path("/opt/nspanel")
+SERVICE_PANEL_DIR = SERVICE_REPO_DIR / "NsPanel"
+SERVICE_CONF_DIR = Path("/etc/nspanel")
+SERVICE_STATE_FILE = SERVICE_CONF_DIR / "state.json"
+SERVICE_PORT_DEFAULT = 7778
+# Repo paths whose changes count as a panel update (others, e.g. sample-site
+# tarballs, do not need a restart).
+SERVICE_UPDATE_PATHS = ("NsPanel", "nspanel.sh")
+
 # --- Misc ---------------------------------------------------------------------
 PORT_MIN = 5000
 PORT_MAX = 50000

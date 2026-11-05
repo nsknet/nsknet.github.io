@@ -5,22 +5,11 @@ from fastapi import APIRouter, Form, HTTPException, Request
 
 from core import audit, jobs
 from core.schemas import DataResponse, JobResponse, Tool
-from core.validators import bad_request, require_password
+from core.validators import ALLOWED_SUBNET_CHOICES, bad_request, require_password
 from modules import registry
 from modules.base import Module
 
 router = APIRouter(prefix="/api/v1/tools")
-
-# Subnets the install dialog may request a port be opened to. Validated server-side
-# so only these exact CIDRs reach the firewall script (no arbitrary values).
-ALLOWED_SUBNET_CHOICES = {
-    "10.0.0.0/8",  # class A private
-    "172.16.0.0/12",  # class B private
-    "192.168.0.0/16",  # class C private
-    "127.0.0.0/8",  # loopback
-    "0.0.0.0/0",  # everything (any IP)
-}
-
 
 def _module_or_404(name: str) -> Module:
     module = registry.get_module(name)

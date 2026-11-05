@@ -16,7 +16,8 @@ export type StoreKey =
   | 'firewall'
   | 'logs'
   | 'processes'
-  | 'jobs';
+  | 'jobs'
+  | 'panel';
 
 export type NavGroup = 'Overview' | 'Hosting' | 'System';
 
@@ -167,6 +168,16 @@ export const router = createRouter({
         nav: { label: 'Jobs', icon: 'terminal', order: 9, group: 'System' },
         loads: ['jobs'],
         crumbs: () => [{ label: 'Jobs' }],
+      },
+    },
+    {
+      path: '/panel',
+      name: 'panel',
+      component: () => import('@/views/PanelServiceView.vue'),
+      meta: {
+        nav: { label: 'Panel service', icon: 'rocket', order: 11, group: 'System' },
+        loads: ['panel'],
+        crumbs: () => [{ label: 'Panel service' }],
       },
     },
     {

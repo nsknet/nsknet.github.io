@@ -4,6 +4,7 @@ Launch with run.sh (recommended), which creates the virtualenv, generates the
 session password and binds per NSPANEL_HOST/NSPANEL_PORT. See docs/ARCHITECTURE.md.
 """
 import asyncio
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -20,6 +21,7 @@ from routes import (
     firewall,
     jobs,
     logs,
+    panel,
     processes,
     services,
     sites,
@@ -32,11 +34,12 @@ from routes import (
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     runner.set_event_loop(asyncio.get_running_loop())
-    # run.sh prints the full banner; this line covers the direct-uvicorn case.
-    print("=" * 60)
-    print(f"  NsPanel  ->  http://{HOST}:{PORT}")
-    print(f"  user: admin   password: {get_password()}")
-    print("=" * 60, flush=True)
+    # run.sh prints the full banner. The password is printed only when it was
+    # generated here (plain uvicorn): one passed in — by run.sh, or the systemd
+    # service's EnvironmentFile — must not end up in the journal.
+    print(f"NsPanel -> http://{HOST}:{PORT}", flush=True)
+    if not os.environ.get("PANEL_PASSWORD"):
+        print(f"  user: admin   password: {get_password()}", flush=True)
     yield
 
 
@@ -57,6 +60,7 @@ app.include_router(dns.router, dependencies=_auth)
 app.include_router(services.router, dependencies=_auth)
 app.include_router(logs.router, dependencies=_auth)
 app.include_router(jobs.router, dependencies=_auth)
+app.include_router(panel.router, dependencies=_auth)
 app.include_router(stream.router, dependencies=_auth)
 app.include_router(auth.router)  # /logout — must work without auth
 

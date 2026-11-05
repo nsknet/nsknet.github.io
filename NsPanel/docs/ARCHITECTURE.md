@@ -108,7 +108,8 @@ Environment overrides, all set by `run.sh`:
 | `NSPANEL_HOST` | `127.0.0.1` | Bind address. The panel is meant to be reached over an SSH tunnel. |
 | `NSPANEL_PORT` | `7777` | Bind port. |
 | `NSPANEL_DEV` | unset | `1` enables uvicorn auto-reload. |
-| `PANEL_PASSWORD` | random per launch | Basic Auth password, printed in the banner. |
+| `PANEL_PASSWORD` | random per launch | Basic Auth password. Printed at startup only when the panel generated it. |
+| `NSPANEL_SERVICE` | unset | `1` when running as the systemd service (set in its env file). |
 | `NSPANEL_AUDIT_LOG` | `/var/log/nspanel/audit.log` | Falls back next to the code when that path is not writable. |
 
 ## State lives on the filesystem
@@ -121,9 +122,29 @@ Environment overrides, all set by `run.sh`:
 | `/var/www/services/` | Panel-managed systemd units (and symlinks to APT ones) |
 | `/etc/coredns/hosts` | CoreDNS records |
 | `/var/log/nspanel/audit.log` | Append-only action log |
+| `/opt/nspanel` | The panel service's own sparse clone (`scripts/panel_service.sh`) |
+| `/etc/nspanel/` | Service env file (password, 0600) and `state.json` (install/update times, last update check) |
 
 No database. Sites and services are discovered by scanning those directories, so
 the panel and the shell always agree about what exists.
+
+## The panel as a service
+
+`routes/panel.py`, `features/panel_service.py` and `scripts/panel_service.sh` run the
+panel itself under systemd, from its own clone in `/opt/nspanel`. That clone is separate
+from the checkout `run.sh` uses, so pulling or editing that checkout never changes what
+the service runs.
+
+- The **update check** (`POST /api/v1/panel/check`) runs `git fetch`. It counts only the
+  commits that touch `config.SERVICE_UPDATE_PATHS`, then caches the result in `state.json`
+  together with the HEAD it was made against. Once HEAD moves, the cached result is
+  marked `stale` and the page checks again.
+- **Restarts** are scheduled with `systemd-run --on-active=3`. A job that runs inside the
+  service shares its cgroup, so a direct `systemctl restart` would kill the job before
+  its exit status reached the browser. After the job ends, the page polls
+  `GET /api/v1/panel` until the panel has gone down and come back, then reloads to pick
+  up the new bundle.
+- The service **cannot uninstall itself**: the route refuses when `is_self` is true.
 
 ## Frontend
 

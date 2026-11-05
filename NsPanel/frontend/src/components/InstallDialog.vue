@@ -1,37 +1,24 @@
 <script setup lang="ts">
 /** Pre-install prompts: admin password, module params, and firewall scope. */
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from "vue";
 
-import { useUiStore, type InstallDialog } from '@/stores/ui';
+import { useUiStore, type InstallDialog } from "@/stores/ui";
+import {
+  generatePassword,
+  SUBNET_OPTIONS,
+  toggleSubnet,
+} from "@/utils/secrets";
 
-import Btn from './ui/Btn.vue';
-import LIcon from './ui/LIcon.vue';
+import Btn from "./ui/Btn.vue";
+import LIcon from "./ui/LIcon.vue";
 
 const props = defineProps<{ dialog: InstallDialog }>();
 const emit = defineEmits<{ close: [] }>();
 
 const ui = useUiStore();
 
-const SUBNET_OPTIONS = [
-  { cidr: '10.0.0.0/8', label: 'Class A — private' },
-  { cidr: '172.16.0.0/12', label: 'Class B — private' },
-  { cidr: '192.168.0.0/16', label: 'Class C — private' },
-  { cidr: '127.0.0.0/8', label: 'Loopback (local)' },
-  { cidr: '0.0.0.0/0', label: 'Any IP — public' },
-];
-
-const ALPHANUM = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-
-/** Alphanumeric only — the backend rejects characters that are unsafe in the
- *  SQL strings and unit files the install scripts build. */
-function generatePassword(length = 24): string {
-  const values = new Uint32Array(length);
-  crypto.getRandomValues(values);
-  return Array.from(values, (value) => ALPHANUM[value % ALPHANUM.length]).join('');
-}
-
 const tool = props.dialog.tool;
-const isPasswordMode = props.dialog.mode === 'password';
+const isPasswordMode = props.dialog.mode === "password";
 const needsPassword = isPasswordMode || tool.requiresPassword;
 const ports = isPasswordMode ? [] : (tool.firewallPorts ?? []);
 const needsPorts = ports.length > 0;
@@ -40,81 +27,88 @@ const params = isPasswordMode ? [] : (tool.installParams ?? []);
 const paramValues = ref<Record<string, string | boolean>>(
   Object.fromEntries(
     params.map((param) => {
-      if (param.type === 'checkbox') {
-        return [param.name, param.default === true || param.default === 'true'];
+      if (param.type === "checkbox") {
+        return [param.name, param.default === true || param.default === "true"];
       }
-      if (param.default !== undefined && param.default !== null && param.default !== '') {
+      if (
+        param.default !== undefined &&
+        param.default !== null &&
+        param.default !== ""
+      ) {
         return [param.name, String(param.default)];
       }
-      if (param.type === 'select' && param.options?.length) {
+      if (param.type === "select" && param.options?.length) {
         return [param.name, param.options[0].value];
       }
-      return [param.name, ''];
+      return [param.name, ""];
     }),
   ),
 );
 
-const password = ref(needsPassword ? generatePassword() : '');
+const password = ref(needsPassword ? generatePassword() : "");
 const showPassword = ref(true);
 // Default scope: private subnets plus loopback, never the public internet.
 const selected = ref<Record<string, boolean>>({
-  '10.0.0.0/8': true,
-  '172.16.0.0/12': true,
-  '192.168.0.0/16': true,
-  '127.0.0.0/8': true,
-  '0.0.0.0/0': false,
+  "10.0.0.0/8": true,
+  "172.16.0.0/12": true,
+  "192.168.0.0/16": true,
+  "127.0.0.0/8": true,
+  "0.0.0.0/0": false,
 });
 
 const chosenSubnets = computed(() =>
-  SUBNET_OPTIONS.map((option) => option.cidr).filter((cidr) => selected.value[cidr]),
+  SUBNET_OPTIONS.map((option) => option.cidr).filter(
+    (cidr) => selected.value[cidr],
+  ),
 );
 
 function dismiss(): void {
-  emit('close');
+  emit("close");
 }
 
 function onKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Escape') dismiss();
+  if (event.key === "Escape") dismiss();
 }
 
-onMounted(() => document.addEventListener('keydown', onKeydown));
-onUnmounted(() => document.removeEventListener('keydown', onKeydown));
+onMounted(() => document.addEventListener("keydown", onKeydown));
+onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 
 function copyPassword(): void {
   navigator.clipboard
     .writeText(password.value)
-    .then(() => ui.addToast({ t: 'Password copied', k: 'ok' }))
-    .catch(() => ui.addToast({ t: 'Could not copy', k: 'warn' }));
+    .then(() => ui.addToast({ t: "Password copied", k: "ok" }))
+    .catch(() => ui.addToast({ t: "Could not copy", k: "warn" }));
 }
 
 function toggle(cidr: string): void {
-  const next = !selected.value[cidr];
-  if (cidr === '0.0.0.0/0' && next) {
-    // "Any" supersedes everything else — clear the narrower scopes.
-    for (const key of Object.keys(selected.value)) selected.value[key] = false;
-    selected.value['0.0.0.0/0'] = true;
-    return;
-  }
-  selected.value[cidr] = next;
-  if (next) selected.value['0.0.0.0/0'] = false;
+  toggleSubnet(selected.value, cidr);
 }
 
 function confirm(): void {
   if (needsPassword && password.value.trim().length < 8) {
-    ui.addToast({ t: 'Password too short', d: 'Use at least 8 characters.', k: 'warn' });
+    ui.addToast({
+      t: "Password too short",
+      d: "Use at least 8 characters.",
+      k: "warn",
+    });
     return;
   }
   if (needsPorts && chosenSubnets.value.length === 0) {
-    ui.addToast({ t: 'Select a firewall scope', d: 'Pick at least one subnet.', k: 'warn' });
+    ui.addToast({
+      t: "Select a firewall scope",
+      d: "Pick at least one subnet.",
+      k: "warn",
+    });
     return;
   }
 
   const payload: Record<string, string> = {};
   if (needsPassword) payload.db_password = password.value.trim();
-  if (needsPorts) payload.allowed_subnets = chosenSubnets.value.join(',');
+  if (needsPorts) payload.allowed_subnets = chosenSubnets.value.join(",");
   for (const param of params) {
     const value = paramValues.value[param.name];
-    payload[param.name] = param.type === 'checkbox' ? (value ? 'true' : 'false') : String(value);
+    payload[param.name] =
+      param.type === "checkbox" ? (value ? "true" : "false") : String(value);
   }
 
   dismiss();
@@ -136,24 +130,33 @@ function confirm(): void {
         <div
           class="w-10 h-10 rounded-[10px] bg-c-acsoft text-c-actx grid place-items-center shrink-0"
         >
-          <LIcon :name="isPasswordMode ? 'key-round' : 'download'" is="width:20px;height:20px" />
+          <LIcon
+            :name="isPasswordMode ? 'key-round' : 'download'"
+            is="width:20px;height:20px"
+          />
         </div>
         <div class="min-w-0">
           <h3 class="m-0 text-base font-semibold tracking-[-0.01em] truncate">
-            {{ isPasswordMode ? `Change ${tool.name} password` : `Install ${tool.name}` }}
+            {{
+              isPasswordMode
+                ? `Change ${tool.name} password`
+                : `Install ${tool.name}`
+            }}
           </h3>
           <p class="m-0 text-c-tx2 text-xs-var">
             {{
               isPasswordMode
-                ? 'Set a new admin password — the service and its credentials file are updated.'
-                : 'Configure credentials and network access before installing.'
+                ? "Set a new admin password — the service and its credentials file are updated."
+                : "Configure credentials and network access before installing."
             }}
           </p>
         </div>
       </div>
 
       <div v-if="needsPassword" class="mb-4">
-        <label class="flex items-center justify-between text-xs-var text-c-tx2 mb-1.5">
+        <label
+          class="flex items-center justify-between text-xs-var text-c-tx2 mb-1.5"
+        >
           <span class="uppercase tracking-[0.05em] text-[10px] font-medium"
             >Admin / DB password</span
           >
@@ -173,10 +176,18 @@ function confirm(): void {
               :aria-label="showPassword ? 'Hide' : 'Show'"
               @click="showPassword = !showPassword"
             >
-              <LIcon :name="showPassword ? 'eye-off' : 'eye'" is="width:14px;height:14px" />
+              <LIcon
+                :name="showPassword ? 'eye-off' : 'eye'"
+                is="width:14px;height:14px"
+              />
             </button>
           </div>
-          <Btn sm square title="Generate new password" @click="password = generatePassword()">
+          <Btn
+            sm
+            square
+            title="Generate new password"
+            @click="password = generatePassword()"
+          >
             <LIcon name="refresh-cw" />
           </Btn>
           <Btn sm square title="Copy password" @click="copyPassword">
@@ -190,7 +201,10 @@ function confirm(): void {
 
       <div v-if="params.length" class="mb-4 flex flex-col gap-3">
         <div v-for="param in params" :key="param.name">
-          <label v-if="param.type !== 'checkbox'" class="block text-xs-var text-c-tx2 mb-1.5">
+          <label
+            v-if="param.type !== 'checkbox'"
+            class="block text-xs-var text-c-tx2 mb-1.5"
+          >
             <span class="uppercase tracking-[0.05em] text-[10px] font-medium">{{
               param.label
             }}</span>
@@ -200,7 +214,11 @@ function confirm(): void {
             v-model="paramValues[param.name]"
             class="input w-full"
           >
-            <option v-for="option in param.options" :key="option.value" :value="option.value">
+            <option
+              v-for="option in param.options"
+              :key="option.value"
+              :value="option.value"
+            >
               {{ option.label }}
             </option>
           </select>
@@ -223,7 +241,10 @@ function confirm(): void {
             :min="param.min"
             :max="param.max"
           />
-          <div v-if="param.help && param.type !== 'checkbox'" class="text-[11px] text-c-tx3 mt-1.5">
+          <div
+            v-if="param.help && param.type !== 'checkbox'"
+            class="text-[11px] text-c-tx3 mt-1.5"
+          >
             {{ param.help }}
           </div>
         </div>
@@ -232,16 +253,20 @@ function confirm(): void {
       <div v-if="needsPorts" class="mb-4">
         <label class="block text-xs-var text-c-tx2 mb-1.5">
           <span class="uppercase tracking-[0.05em] text-[10px] font-medium">
-            Open port{{ ports.length > 1 ? 's' : '' }} {{ ports.join(', ') }} to
+            Open port{{ ports.length > 1 ? "s" : "" }} {{ ports.join(", ") }} to
           </span>
         </label>
-        <div class="flex flex-col gap-1 border border-c-border rounded-theme p-1.5 bg-c-elev">
+        <div
+          class="flex flex-col gap-1 border border-c-border rounded-theme p-1.5 bg-c-elev"
+        >
           <label
             v-for="option in SUBNET_OPTIONS"
             :key="option.cidr"
             :class="[
               'flex items-center gap-2.5 px-2 py-1.5 rounded-theme cursor-pointer select-none hover:bg-c-hover',
-              option.cidr === '0.0.0.0/0' && selected[option.cidr] ? 'text-c-warn' : '',
+              option.cidr === '0.0.0.0/0' && selected[option.cidr]
+                ? 'text-c-warn'
+                : '',
             ]"
           >
             <input
@@ -251,15 +276,22 @@ function confirm(): void {
               @change="toggle(option.cidr)"
             />
             <span class="text-sm-var flex-1">{{ option.label }}</span>
-            <span class="mono text-[11px] text-c-tx3 tabular-nums">{{ option.cidr }}</span>
+            <span class="mono text-[11px] text-c-tx3 tabular-nums">{{
+              option.cidr
+            }}</span>
           </label>
         </div>
         <div
           v-if="selected['0.0.0.0/0']"
           class="flex items-start gap-1.5 text-[11px] text-c-warn mt-1.5"
         >
-          <LIcon name="triangle-alert" is="width:12px;height:12px;margin-top:1px;flex-shrink:0" />
-          <span>Exposing this port to any IP — make sure that is intended.</span>
+          <LIcon
+            name="triangle-alert"
+            is="width:12px;height:12px;margin-top:1px;flex-shrink:0"
+          />
+          <span
+            >Exposing this port to any IP — make sure that is intended.</span
+          >
         </div>
       </div>
 
@@ -267,7 +299,7 @@ function confirm(): void {
         <Btn @click="dismiss">Cancel</Btn>
         <Btn variant="primary" @click="confirm">
           <LIcon :name="isPasswordMode ? 'key-round' : 'download'" />
-          {{ isPasswordMode ? 'Change password' : 'Install' }}
+          {{ isPasswordMode ? "Change password" : "Install" }}
         </Btn>
       </div>
     </div>

@@ -34,6 +34,28 @@ Then open <http://localhost:7777> — username `admin`, password from the banner
 
 > Requires Python 3.12+ and root — the panel manages system services and installs packages.
 
+### Run it as a service
+
+To keep the panel running on the LAN, open **Panel service** in the rail. Then pick a
+password (or generate one), a port (default `7778`) and the subnets to open the port to,
+and click **Install service**. It:
+
+- clones the repo into `/opt/nspanel` (blobless and sparse, so only `NsPanel/` is
+  checked out) and gives it its own virtualenv;
+- writes `/etc/nspanel/nspanel.env` (root-only, holds the password) and the
+  `nspanel.service` unit, then enables it on boot;
+- adds UFW rules for the chosen subnets, commented `NsPanel service`. If UFW is off,
+  it is not switched on.
+
+The same page shows the installed commit, when it was last updated, and whether `main`
+has new commits that touch the panel. Commits elsewhere in the repo, such as sample-site
+rebuilds, are not counted. **Update & restart** pulls the new code, reinstalls
+dependencies and checks that the app imports. If anything fails, it rolls back without
+restarting.
+
+The service speaks plain HTTP. Use a strong password, or put an nginx site with SSL in
+front of it. To uninstall, use a panel started with `run.sh`, not the service itself.
+
 ---
 
 ## Sections
@@ -49,6 +71,7 @@ Then open <http://localhost:7777> — username `admin`, password from the banner
 | **DNS** | CoreDNS host records |
 | **Task manager** | Live process list with kill |
 | **Audit logs** | Append-only record of every panel action |
+| **Panel service** | Install the panel as a systemd service, check for and apply updates |
 
 ## Supported tools
 

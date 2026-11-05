@@ -84,4 +84,5 @@ export const endpoints = {
   logs: '/api/v1/logs',
   processes: '/api/v1/processes',
   jobs: '/api/v1/jobs',
+  panel: '/api/v1/panel',
 } as const;
