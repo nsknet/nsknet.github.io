@@ -498,21 +498,40 @@ HTML
 }
 
 # --- Helper: deploy SampleBlankSite.tar and rename to the target dll name ---
+SAMPLE_DOTNET_URL="https://nsknet.github.io/SampleBlankSite.tar"
+
 _deploy_sample_dotnet() {
     local name="$1" dll="$2"
     local public_dir="/var/www/nginx/sites/${name}/public"
-    local tar_dest="${public_dir}/SampleBlankSite.tar"
+    # The panel runs from a clone of this repo, so the tarball is normally on disk
+    # already (and matches the checked-out branch). Download only as a fallback.
+    local local_tar
+    local_tar="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/SampleBlankSite.tar"
+    local tar_src="$local_tar" tmp_tar=""
 
     echo "▶  Deploying sample .NET site as '${dll}.dll'..."
-    echo "   Downloading SampleBlankSite.tar..."
-    wget -q "nsknet.github.io/SampleBlankSite.tar" -O "$tar_dest"
+    mkdir -p "$public_dir"
 
-    tar -xf "$tar_dest" -C "$public_dir"
-    rm -f "$tar_dest"
+    if [[ ! -s "$local_tar" ]]; then
+        tmp_tar="$(mktemp --suffix=.tar)"
+        echo "   Downloading ${SAMPLE_DOTNET_URL}..."
+        if ! wget -q "$SAMPLE_DOTNET_URL" -O "$tmp_tar" || [[ ! -s "$tmp_tar" ]]; then
+            rm -f "$tmp_tar"
+            echo "✗  Could not download the sample site from ${SAMPLE_DOTNET_URL}" >&2
+            return 1
+        fi
+        tar_src="$tmp_tar"
+    fi
 
-    # Rename every SampleBlankSite.* → dll.* (handles .dll, .deps.json,
-    # .runtimeconfig.json, .staticwebassets.endpoints.json, and the native
-    # ELF binary with no extension)
+    if ! tar --no-same-owner -xf "$tar_src" -C "$public_dir"; then
+        [[ -n "$tmp_tar" ]] && rm -f "$tmp_tar"
+        echo "✗  Could not extract ${tar_src} into ${public_dir}" >&2
+        return 1
+    fi
+    [[ -n "$tmp_tar" ]] && rm -f "$tmp_tar"
+
+    # Rename every SampleBlankSite.* → dll.* (.dll, .deps.json,
+    # .runtimeconfig.json, .staticwebassets.endpoints.json, ...)
     local src
     for src in "${public_dir}/SampleBlankSite"*; do
         [[ -e "$src" ]] || continue
@@ -541,6 +560,10 @@ _create_dotnet_service() {
     mkdir -p /var/www/.dotnet
     chown www-data:www-data /var/www/.dotnet
 
+    # Deploy the placeholder app first so a failed download doesn't leave a
+    # unit behind that crash-loops on a missing DLL.
+    _deploy_sample_dotnet "$name" "$dll" || return 1
+
     mkdir -p /var/www/services
     cat > "/var/www/services/${name}.service" <<UNIT
 [Unit]
@@ -562,8 +585,6 @@ Environment=ASPNETCORE_URLS=http://localhost:${port}
 [Install]
 WantedBy=multi-user.target
 UNIT
-
-    _deploy_sample_dotnet "$name" "$dll"
 
     echo "▶  Enabling and starting ${name} service..."
     systemctl daemon-reload

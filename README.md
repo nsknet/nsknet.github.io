@@ -49,7 +49,7 @@ Then open <http://localhost:7777> — username `admin`, password printed in the 
 | Path | Purpose |
 |---|---|
 | [`NsPanel/`](NsPanel/) | The panel: FastAPI backend, Vue 3 SPA, bash scripts. [Docs](NsPanel/docs/ARCHITECTURE.md). |
-| [`SampleBlankSite/`](SampleBlankSite/) | Source of the .NET template the panel deploys for new .NET sites. |
+| [`SampleBlankSite/`](SampleBlankSite/) | Source of the .NET 10 placeholder app (with a `/check` server health page) the panel deploys for new .NET sites. |
 | `SampleBlankSite.tar` | Published build of the above, served by Pages. |
 | `nspanel.sh` | The curl-and-run installer. |
 | [`mini-scripts/`](mini-scripts/) | Standalone helpers (Cloudflared setup, Proxmox VM cloning). |

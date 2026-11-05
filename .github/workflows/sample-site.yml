@@ -1,0 +1,81 @@
+name: Build SampleBlankSite
+
+# SampleBlankSite.tar is committed at the repo root so GitHub Pages and the
+# panel's local clone can deploy it. This rebuilds it whenever the source
+# changes, smoke-tests it the same way nginx.sh deploys it, and commits it.
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - 'SampleBlankSite/**'
+      - '.github/workflows/sample-site.yml'
+  pull_request:
+    paths:
+      - 'SampleBlankSite/**'
+      - '.github/workflows/sample-site.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish
+        working-directory: SampleBlankSite
+        run: dotnet publish SampleBlankSite.csproj -c Release -o ./publish -warnaserror
+
+      - name: Pack tarball
+        working-directory: SampleBlankSite
+        run: |
+          tar --owner=0 --group=0 --numeric-owner --sort=name --mtime='2000-01-01 00:00Z' \
+              -cf ../SampleBlankSite.tar -C ./publish $(cd publish && ls -A)
+          tar -tvf ../SampleBlankSite.tar
+
+      - name: Smoke test (extract + rename like nginx.sh, then run)
+        run: |
+          set -euo pipefail
+          dir="$(mktemp -d)/public"; mkdir -p "$dir"
+          tar --no-same-owner -xf SampleBlankSite.tar -C "$dir"
+          dll=Smoke.App
+          for src in "$dir/SampleBlankSite"*; do mv "$src" "$dir/${dll}${src#"$dir"/SampleBlankSite}"; done
+          sed -i "s/SampleBlankSite/${dll}/g" "$dir/${dll}.deps.json"
+
+          cd "$dir"
+          ASPNETCORE_URLS=http://127.0.0.1:5099 dotnet "$dir/${dll}.dll" > app.log 2>&1 &
+          for _ in $(seq 1 30); do curl -fs http://127.0.0.1:5099/health >/dev/null && break; sleep 1; done
+
+          for path in / /health /check /check.json; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:5099${path}")
+            echo "${path} -> ${code}"
+            [ "$code" = 200 ] || { cat app.log; exit 1; }
+          done
+          curl -fs http://127.0.0.1:5099/check.json | python3 -c '
+          import json, sys
+          d = json.load(sys.stdin)
+          r = d["report"]
+          assert d["site"]["dllName"] == "Smoke.App.dll", d["site"]
+          assert r["cpu"]["load1"] is not None and r["memory"]["totalBytes"], "proc parsing failed"
+          assert r["disks"] and r["listeningPorts"], "disks/ports missing"
+          print("overall:", r["overall"], "score:", r["score"])
+          for i in r["issues"]: print(" -", i["level"], i["area"], i["message"])
+          '
+          kill %1 || true
+
+      - name: Commit the rebuilt tarball
+        if: github.event_name == 'push'
+        run: |
+          if [ -z "$(git status --porcelain SampleBlankSite.tar)" ]; then
+            echo "SampleBlankSite.tar is already up to date"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add SampleBlankSite.tar
+          git commit -m "build: rebuild SampleBlankSite.tar [skip ci]"
+          git push

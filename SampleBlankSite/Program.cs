@@ -1,16 +1,39 @@
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Hosting;
+using Microsoft.AspNetCore.HttpOverrides;
+using SampleBlankSite.Services;
 
-namespace SampleBlankSite;
+var builder = WebApplication.CreateBuilder(args);
 
-public class Program
+builder.Services.AddControllersWithViews();
+builder.Services.AddSingleton<ProcessRunner>();
+builder.Services.AddSingleton<HealthProbe>();
+
+// The app runs behind nginx (see NsPanel/scripts/nginx.sh), which sets
+// X-Forwarded-For / X-Forwarded-Proto. Loopback proxies are trusted by default.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
-    public static void Main(string[] args)
-    {
-        CreateHostBuilder(args).Build().Run();
-    }
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+});
 
-    public static IHostBuilder CreateHostBuilder(string[] args) =>
-        Host.CreateDefaultBuilder(args)
-            .ConfigureWebHostDefaults(webBuilder => { webBuilder.UseStartup<Startup>(); });
+var app = builder.Build();
+
+app.UseForwardedHeaders();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseDeveloperExceptionPage();
 }
+else
+{
+    app.UseExceptionHandler("/Home/Error");
+}
+
+app.UseRouting();
+
+// Liveness probe: cheap, no system calls.
+app.MapGet("/health", () => Results.Text("OK"));
+
+app.MapControllerRoute(
+    name: "default",
+    pattern: "{controller=Home}/{action=Index}/{id?}");
+
+app.Run();
