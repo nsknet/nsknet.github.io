@@ -31,6 +31,19 @@ class DataResponse[T](BaseModel):
     data: T
 
 
+class JobSummary(BaseModel):
+    """One background job as listed by GET /api/v1/jobs (no argv, env or output)."""
+
+    id: str
+    label: str
+    status: str  # pending | running | done | failed
+    exit_code: int | None = None
+    created_at: float
+    started_at: float | None = None
+    finished_at: float | None = None
+    line_count: int = 0
+
+
 class MessageResponse(BaseModel):
     """A synchronous action that finished without spawning a job."""
 

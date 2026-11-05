@@ -5,8 +5,10 @@ Jobs live in an in-memory dict, keyed by a random id. State is lost on panel
 restart — acceptable for a single-user, manually-launched panel.
 """
 import asyncio
+import json
 import os
 import re
+import time
 import uuid
 from collections import OrderedDict
 
@@ -22,7 +24,7 @@ _ANSI_STRIP = re.compile(
     r"|\x1b[a-ln-zB-Z]"                   # lone ESC followed by non-m, non-[ characters
 )
 
-# job_id -> {cmd, label, status, exit_code, lines}. Insertion-ordered and
+# job_id -> {cmd, label, status, exit_code, lines, *_at timestamps}. Insertion-ordered and
 # capped at MAX_JOBS: the oldest finished job is dropped when a new one starts,
 # so a long-running panel does not accumulate output buffers forever.
 _jobs: OrderedDict[str, dict] = OrderedDict()
@@ -53,6 +55,11 @@ def create_job(cmd: list[str], label: str = "", env: dict[str, str] | None = Non
         "label": label,
         "status": "pending",   # pending | running | done | failed
         "exit_code": None,
+        # Epoch seconds; lets a client that reconnects (reload, Jobs screen)
+        # show how long the job has been running.
+        "created_at": time.time(),
+        "started_at": None,
+        "finished_at": None,
         "lines": [],
         # Extra environment variables merged into the subprocess env. Used to pass
         # secrets (DB_PASSWORD) and config (ALLOWED_SUBNETS) without leaking them
@@ -65,6 +72,25 @@ def create_job(cmd: list[str], label: str = "", env: dict[str, str] | None = Non
 
 def get_job(job_id: str) -> dict | None:
     return _jobs.get(job_id)
+
+
+def summarize(job_id: str, job: dict) -> dict:
+    """The public view of a job: everything except argv, env and the output."""
+    return {
+        "id": job_id,
+        "label": job["label"],
+        "status": job["status"],
+        "exit_code": job["exit_code"],
+        "created_at": job["created_at"],
+        "started_at": job["started_at"],
+        "finished_at": job["finished_at"],
+        "line_count": len(job["lines"]),
+    }
+
+
+def list_jobs() -> list[dict]:
+    """Every job still in memory, newest first."""
+    return [summarize(job_id, job) for job_id, job in reversed(_jobs.items())]
 
 
 def start_job(job_id: str) -> None:
@@ -81,6 +107,7 @@ def start_job(job_id: str) -> None:
 async def _run(job_id: str) -> None:
     job = _jobs[job_id]
     job["status"] = "running"
+    job["started_at"] = time.time()
     
     # Format and prepend the running command as the first line of output
     cmd_parts = list(job["cmd"])
@@ -108,10 +135,16 @@ async def _run(job_id: str) -> None:
         env["CLICOLOR_FORCE"] = "1"
         env["SYSTEMD_COLORS"] = "1"
         env["TERM"] = "xterm-256color"
+        # Jobs are unattended: apt/debconf and needrestart must never stop to ask.
+        env["DEBIAN_FRONTEND"] = "noninteractive"
+        env["NEEDRESTART_MODE"] = "a"
         env.update(job.get("env") or {})
 
         proc = await asyncio.create_subprocess_exec(
             *job["cmd"],
+            # No stdin: a stray `read` or password prompt gets EOF and fails fast
+            # instead of reading the panel's terminal or hanging the job forever.
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             env=env,
@@ -119,6 +152,7 @@ async def _run(job_id: str) -> None:
     except Exception as exc:  # command not found, etc.
         job["lines"].append(f"\x1b[1;31mfailed to start process: {exc}\x1b[0m")
         job["exit_code"] = 127
+        job["finished_at"] = time.time()
         job["status"] = "failed"
         return
 
@@ -156,6 +190,7 @@ async def _run(job_id: str) -> None:
     else:
         job["lines"].append(f"\x1b[1;31m✗ Failed: exit {code}\x1b[0m")
         
+    job["finished_at"] = time.time()
     job["status"] = "done" if code == 0 else "failed"
 
 
@@ -169,7 +204,9 @@ def _sse(event: str, data: str) -> str:
 async def stream_job(job_id: str):
     """Async generator of SSE-formatted strings for GET /stream/{job_id}.
 
-    Streams every captured line then a final `done` event with the exit code.
+    Opens with a `meta` event (JSON: status and elapsed seconds, so a client that
+    reconnects mid-job shows the real duration), then every captured line, then
+    a final `done` event with the exit code.
     Polls the job's line buffer — trivial cost for a single-user panel and
     avoids races between late-connecting clients and the producer.
     """
@@ -177,6 +214,10 @@ async def stream_job(job_id: str):
     if job is None:
         yield _sse("error", "unknown job")
         return
+
+    started = job["started_at"] or time.time()
+    elapsed = (job["finished_at"] or time.time()) - started
+    yield _sse("meta", json.dumps({"status": job["status"], "elapsed": round(elapsed, 2)}))
 
     idx = 0
     while True:

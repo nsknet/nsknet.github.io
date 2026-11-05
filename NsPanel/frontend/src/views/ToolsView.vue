@@ -1,8 +1,7 @@
 <script setup lang="ts">
 /** One card per tool module: install, re-install, uninstall, change password. */
 import { storeToRefs } from 'pinia';
-import { computed, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { computed } from 'vue';
 
 import type { Tool } from '@/api/types';
 import Btn from '@/components/ui/Btn.vue';
@@ -14,23 +13,18 @@ import Skeleton from '@/components/ui/Skeleton.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
 import ToolLogo from '@/components/ui/ToolLogo.vue';
 import { useJobRunner } from '@/composables/useJobs';
+import { useQueryRef } from '@/composables/useQueryRef';
 import { useToolsStore } from '@/stores/tools';
 import { useUiStore } from '@/stores/ui';
 
 const ui = useUiStore();
-const route = useRoute();
 const { run, reload } = useJobRunner();
 const { tools, loading } = storeToRefs(useToolsStore());
 
-const filter = ref<'all' | 'installed' | 'not-installed'>('all');
+const FILTERS = ['all', 'installed', 'not-installed'] as const;
+const filter = useQueryRef<(typeof FILTERS)[number]>('show', 'all', FILTERS);
 // The dashboard and the command palette deep-link here as /tools?q=<name>.
-const search = ref(typeof route.query.q === 'string' ? route.query.q : '');
-watch(
-  () => route.query.q,
-  (q) => {
-    if (typeof q === 'string') search.value = q;
-  },
-);
+const search = useQueryRef<string>('q', '');
 
 const installedCount = computed(() => tools.value.filter((tool) => tool.installed).length);
 
@@ -140,7 +134,7 @@ const FILTER_LABELS: Record<string, string> = {
         />
       </div>
       <button
-        v-for="key in ['all', 'installed', 'not-installed'] as const"
+        v-for="key in FILTERS"
         :key="key"
         :class="[
           'h-7 px-2.5 rounded-full border text-xs-var mono cursor-pointer inline-flex items-center gap-1 transition-colors',

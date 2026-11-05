@@ -15,6 +15,8 @@ const TONES: Record<string, Tone> = {
   inactive: 'muted',
   'not installed': 'muted',
   failed: 'danger',
+  done: 'ok',
+  pending: 'muted',
   enabled: 'info',
   disabled: 'muted',
 };

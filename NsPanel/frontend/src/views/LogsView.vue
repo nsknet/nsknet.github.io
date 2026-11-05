@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /** The audit trail, filtered by namespace (`service.*`, `site.*`, …). */
 import { storeToRefs } from 'pinia';
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 
 import Card from '@/components/ui/Card.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
@@ -9,6 +9,7 @@ import LIcon from '@/components/ui/LIcon.vue';
 import PageHeader from '@/components/ui/PageHeader.vue';
 import Skeleton from '@/components/ui/Skeleton.vue';
 import Btn from '@/components/ui/Btn.vue';
+import { useQueryRef } from '@/composables/useQueryRef';
 import { useReload } from '@/composables/useScreenData';
 import { useLogsStore } from '@/stores/misc';
 import { useUiStore } from '@/stores/ui';
@@ -17,7 +18,7 @@ const ui = useUiStore();
 const reload = useReload();
 const { audit, loading } = storeToRefs(useLogsStore());
 
-const NAMESPACES = ['all', 'service', 'site', 'nginx', 'firewall', 'system', 'tool'];
+const NAMESPACES = ['all', 'service', 'site', 'nginx', 'firewall', 'system', 'tool'] as const;
 
 const NS_CLS: Record<string, string> = {
   service: 'bg-c-infosoft text-c-info',
@@ -28,8 +29,8 @@ const NS_CLS: Record<string, string> = {
   tool: 'bg-c-acsoft text-c-actx',
 };
 
-const namespace = ref('all');
-const search = ref('');
+const namespace = useQueryRef<(typeof NAMESPACES)[number]>('ns', 'all', NAMESPACES);
+const search = useQueryRef<string>('q', '');
 
 const filtered = computed(() => {
   const query = search.value.toLowerCase();

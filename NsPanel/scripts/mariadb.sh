@@ -9,6 +9,22 @@ set -eo pipefail
 
 MARIADB_CRED_FILE="/etc/mysql/credentials.yml"
 
+# Run SQL as MariaDB root. Root normally logs in over the unix socket (we are
+# root), but servers installed by an older panel lost that, so fall back to the
+# saved password, passed via MYSQL_PWD (never argv).
+# shellcheck disable=SC2120  # forwards optional mariadb flags; callers use stdin
+_mariadb_root() {
+    if mariadb -e 'SELECT 1' </dev/null >/dev/null 2>&1; then
+        mariadb "$@"
+        return
+    fi
+    local saved=""
+    if [ -f "$MARIADB_CRED_FILE" ]; then
+        saved="$(sed -n 's/^admin_password: "\(.*\)"$/\1/p' "$MARIADB_CRED_FILE")"
+    fi
+    MYSQL_PWD="$saved" mariadb -uroot "$@"
+}
+
 install_mariadb() {
     echo "════════════════════════════════════════════════════════════"
     echo "  Installing MariaDB"
@@ -26,18 +42,21 @@ install_mariadb() {
 
     # ── Password: use the one supplied by the panel, else generate one ───────
     local db_password
-    db_password="${DB_PASSWORD:-$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 28)}"
+    db_password="${DB_PASSWORD:-$(gen_password)}"
 
     # On a fresh install root authenticates via the unix_socket plugin (we are
     # running as root, so this works without a password). Set a password and a
     # remote-capable root user, drop the anonymous/test leftovers.
     echo "▶  Securing server and setting root password..."
-    mariadb <<SQL
-ALTER USER 'root'@'localhost' IDENTIFIED BY '${db_password}';
+    # `VIA unix_socket OR …` keeps passwordless socket login for local root, so
+    # re-install and set_mariadb_password keep working after a password is set.
+    _mariadb_root <<SQL
+ALTER USER 'root'@'localhost' IDENTIFIED VIA unix_socket OR mysql_native_password USING PASSWORD('${db_password}');
 DELETE FROM mysql.global_priv WHERE User='';
 DROP DATABASE IF EXISTS test;
 DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';
 CREATE USER IF NOT EXISTS 'root'@'%' IDENTIFIED BY '${db_password}';
+ALTER USER 'root'@'%' IDENTIFIED BY '${db_password}';
 GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
 SQL
@@ -80,7 +99,7 @@ CRED
     mariadb --version | head -n1 || true
     echo "   Host     : <server-ip>:3306"
     echo "   User     : root"
-    echo "   Password : ${db_password}"
+    echo "   Password : saved in ${MARIADB_CRED_FILE} (mode 600)"
     echo "   Allow    : ${ALLOWED_SUBNETS[*]}"
     echo ""
     echo "   Credentials saved to: ${MARIADB_CRED_FILE}"
@@ -103,16 +122,16 @@ uninstall_mariadb() {
 set_mariadb_password() {
     local db_password="${DB_PASSWORD:?DB_PASSWORD env var required}"
     echo "▶  Updating MariaDB root password..."
-    mariadb <<SQL
-ALTER USER IF EXISTS 'root'@'localhost' IDENTIFIED BY '${db_password}';
+    _mariadb_root <<SQL
+ALTER USER IF EXISTS 'root'@'localhost' IDENTIFIED VIA unix_socket OR mysql_native_password USING PASSWORD('${db_password}');
 ALTER USER IF EXISTS 'root'@'%' IDENTIFIED BY '${db_password}';
 FLUSH PRIVILEGES;
 SQL
 
     if [ -f "$MARIADB_CRED_FILE" ]; then
         echo "▶  Updating ${MARIADB_CRED_FILE}..."
-        sed -i -E "s|^admin_password:.*|admin_password: \"${db_password}\"|" "$MARIADB_CRED_FILE"
-        sed -i -E "s|^connection_string:.*|connection_string: \"mysql://root:${db_password}@127.0.0.1:3306/\"|" "$MARIADB_CRED_FILE"
+        cred_set "$MARIADB_CRED_FILE" admin_password "${db_password}"
+        cred_set "$MARIADB_CRED_FILE" connection_string "mysql://root:${db_password}@127.0.0.1:3306/"
     fi
     echo "✔  MariaDB password updated."
 }

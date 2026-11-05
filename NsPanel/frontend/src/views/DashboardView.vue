@@ -44,14 +44,19 @@ watch(
 );
 
 let sampler: ReturnType<typeof setInterval> | undefined;
+let skipped = 0;
 
 onMounted(() => {
+  let failures = 0;
   sampler = setInterval(async () => {
-    if (document.hidden) return;
+    // Back off after a failure (1, 2, 4 … ticks, max 12) instead of toasting every
+    // tick — and instead of stopping for good, which froze the charts until a reload.
+    if (document.hidden || system.loadingHost) return;
+    if (failures && skipped++ < Math.min(2 ** (failures - 1), 12)) return;
+    skipped = 0;
     const before = host.value;
     await system.load();
-    // A failed load keeps the old object and toasts; stop rather than toast every tick.
-    if (host.value === before) clearInterval(sampler);
+    failures = host.value === before ? failures + 1 : 0;
   }, SAMPLE_MS);
 });
 onUnmounted(() => clearInterval(sampler));

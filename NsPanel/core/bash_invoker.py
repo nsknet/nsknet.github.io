@@ -7,6 +7,7 @@ functions that are not owned by a tool module (system, firewall, disks, …) and
 its result is cached for the process lifetime.
 """
 import functools
+import re
 
 from config import SCRIPTS_DIR, SCRIPTS_LIB_DIR
 
@@ -16,11 +17,15 @@ class ScriptNotFound(ValueError):
 
 
 def _defines(path, function: str) -> bool:
+    """True if `path` defines `function` — as a definition at line start, so
+    `ufw_allow_port` does not match inside `_ufw_allow_port() {` or a call site."""
     try:
         content = path.read_text(encoding="utf-8", errors="ignore")
     except OSError:
         return False
-    return f"{function}()" in content or f"function {function}" in content
+    name = re.escape(function)
+    pattern = rf"^[ \t]*(?:function[ \t]+{name}\b|{name}[ \t]*\(\))"
+    return re.search(pattern, content, re.MULTILINE) is not None
 
 
 @functools.lru_cache(maxsize=256)

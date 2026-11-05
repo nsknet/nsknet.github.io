@@ -10,7 +10,9 @@ import OutputDialog from '@/components/OutputDialog.vue';
 import Badge from '@/components/ui/Badge.vue';
 import Btn from '@/components/ui/Btn.vue';
 import Card from '@/components/ui/Card.vue';
+import EmptyState from '@/components/ui/EmptyState.vue';
 import LIcon from '@/components/ui/LIcon.vue';
+import Skeleton from '@/components/ui/Skeleton.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
 import { useJobRunner } from '@/composables/useJobs';
 import { useServicesStore } from '@/stores/services';
@@ -23,7 +25,7 @@ const router = useRouter();
 const ui = useUiStore();
 const { run } = useJobRunner();
 const servicesStore = useServicesStore();
-const { services } = storeToRefs(servicesStore);
+const { loaded } = storeToRefs(servicesStore);
 const { host } = storeToRefs(useSystemStore());
 
 const isEditingUnit = ref(false);
@@ -35,7 +37,9 @@ const showTunnelDelete = ref(false);
 const tunnelDeleteToken = ref('');
 const tunnelDeleteSubmitting = ref(false);
 
-const service = computed(() => servicesStore.byName(props.name) ?? services.value[0]);
+// Never fall back to another unit: a stale or mistyped URL must not put
+// Stop/Delete buttons in front of a different service.
+const service = computed(() => servicesStore.byName(props.name));
 
 /** Set only for cloudflared.<hostname> units the panel created. */
 const tunnel = computed(() => service.value?.tunnel ?? null);
@@ -503,5 +507,16 @@ const outputFilename = computed(() => {
     />
   </section>
 
-  <section v-else class="text-c-tx2 text-sm-var">Service not found.</section>
+  <section v-else-if="!loaded">
+    <Skeleton variant="cards" :count="3" />
+  </section>
+
+  <section v-else>
+    <EmptyState icon="server" title="Service not found" :hint="`No unit named '${name}' exists.`" />
+    <div class="flex justify-center">
+      <Btn variant="ghost" sm @click="router.push('/services')">
+        <LIcon name="arrow-left" /> Back to services
+      </Btn>
+    </div>
+  </section>
 </template>

@@ -1,6 +1,6 @@
 /** Cross-screen UI state: theme, sidebar, toasts, the command palette and the four modal dialogs. */
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 
 import type { InstallParam, NetworkInterface } from '@/api/types';
 
@@ -58,6 +58,36 @@ function readBool(key: string, fallback: boolean): boolean {
   }
 }
 
+/** The open job dialog survives a reload (F5) through sessionStorage — per tab. */
+const OVERLAY_KEY = 'nspanel.overlay';
+
+function readOverlay(): Overlay | null {
+  try {
+    const raw = sessionStorage.getItem(OVERLAY_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as { jobId?: unknown; title?: unknown };
+    if (typeof saved.jobId !== 'string') return null;
+    return { jobId: saved.jobId, title: String(saved.title ?? 'Running…'), onDone: null };
+  } catch {
+    return null;
+  }
+}
+
+function writeOverlay(overlay: Overlay | null): void {
+  try {
+    if (overlay?.jobId) {
+      sessionStorage.setItem(
+        OVERLAY_KEY,
+        JSON.stringify({ jobId: overlay.jobId, title: overlay.title }),
+      );
+    } else {
+      sessionStorage.removeItem(OVERLAY_KEY);
+    }
+  } catch {
+    /* storage blocked — the dialog simply does not come back after a reload */
+  }
+}
+
 function writeBool(key: string, value: boolean): void {
   try {
     localStorage.setItem(key, value ? '1' : '0');
@@ -70,7 +100,8 @@ export const useUiStore = defineStore('ui', () => {
   const theme = ref<'light' | 'dark'>(readBool('themeDark', false) ? 'dark' : 'light');
   const sidebarOpen = ref(readBool('sidebarOpen', false));
   const toasts = ref<Toast[]>([]);
-  const overlay = ref<Overlay | null>(null);
+  const overlay = ref<Overlay | null>(readOverlay());
+  watch(overlay, writeOverlay);
   const confirm = ref<Confirm | null>(null);
   const installDialog = ref<InstallDialog | null>(null);
   const networkDialog = ref<NetworkDialog | null>(null);

@@ -52,12 +52,19 @@ function formBody(fields: Record<string, unknown>): URLSearchParams {
   return form;
 }
 
+/** Required on every POST: the panel's CSRF guard (see NsPanel/core/auth.py). */
+const CSRF_HEADERS = { 'X-NsPanel': '1' } as const;
+
 /** POST an action endpoint. Throws ApiError with the server's detail message. */
 export async function postAction<T = JobResponse | MessageResponse>(
   path: string,
   fields: Record<string, unknown> = {},
 ): Promise<T> {
-  const response = await fetch(path, { method: 'POST', body: formBody(fields) });
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: CSRF_HEADERS,
+    body: formBody(fields),
+  });
   if (!response.ok) throw new ApiError(await detailOf(response), response.status);
   return (await response.json()) as T;
 }
@@ -76,4 +83,5 @@ export const endpoints = {
   firewall: '/api/v1/firewall',
   logs: '/api/v1/logs',
   processes: '/api/v1/processes',
+  jobs: '/api/v1/jobs',
 } as const;

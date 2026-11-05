@@ -15,7 +15,8 @@ export type StoreKey =
   | 'dns'
   | 'firewall'
   | 'logs'
-  | 'processes';
+  | 'processes'
+  | 'jobs';
 
 export type NavGroup = 'Overview' | 'Hosting' | 'System';
 
@@ -154,8 +155,18 @@ export const router = createRouter({
       component: () => import('@/views/TaskManagerView.vue'),
       meta: {
         nav: { label: 'Task Manager', icon: 'activity', order: 8, group: 'System' },
-        loads: ['processes'],
+        // No `loads`: TaskManagerView fetches with the search term from the URL.
         crumbs: () => [{ label: 'Task manager' }],
+      },
+    },
+    {
+      path: '/jobs',
+      name: 'jobs',
+      component: () => import('@/views/JobsView.vue'),
+      meta: {
+        nav: { label: 'Jobs', icon: 'terminal', order: 9, group: 'System' },
+        loads: ['jobs'],
+        crumbs: () => [{ label: 'Jobs' }],
       },
     },
     {
@@ -163,7 +174,7 @@ export const router = createRouter({
       name: 'logs',
       component: () => import('@/views/LogsView.vue'),
       meta: {
-        nav: { label: 'Audit Logs', icon: 'scroll-text', order: 9, group: 'System' },
+        nav: { label: 'Audit Logs', icon: 'scroll-text', order: 10, group: 'System' },
         loads: ['logs'],
         crumbs: () => [{ label: 'Audit logs' }],
       },

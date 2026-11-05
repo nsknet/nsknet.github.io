@@ -10,6 +10,7 @@ import Btn from '@/components/ui/Btn.vue';
 import Card from '@/components/ui/Card.vue';
 import LIcon from '@/components/ui/LIcon.vue';
 import Skeleton from '@/components/ui/Skeleton.vue';
+import { useQueryRef } from '@/composables/useQueryRef';
 import { useProcessesStore } from '@/stores/misc';
 import { useUiStore } from '@/stores/ui';
 
@@ -23,10 +24,14 @@ type SortColumn = keyof Pick<
   'pid' | 'arguments' | 'threads' | 'user' | 'ram_gb' | 'cpu_percent'
 >;
 
-const filterText = ref('');
-const sortCol = ref<SortColumn>('cpu_percent');
-const sortOrder = ref<'asc' | 'desc' | 'none'>('desc');
-const refreshInterval = ref('5000');
+const SORT_COLUMNS = ['pid', 'arguments', 'threads', 'user', 'ram_gb', 'cpu_percent'] as const;
+const SORT_ORDERS = ['asc', 'desc', 'none'] as const;
+const INTERVALS = ['none', '5000', '10000', '15000', '30000', '60000'] as const;
+
+const filterText = useQueryRef<string>('q', '');
+const sortCol = useQueryRef<SortColumn>('sort', 'cpu_percent', SORT_COLUMNS);
+const sortOrder = useQueryRef<(typeof SORT_ORDERS)[number]>('order', 'desc', SORT_ORDERS);
+const refreshInterval = useQueryRef<(typeof INTERVALS)[number]>('every', '5000', INTERVALS);
 const expandedPids = ref(new Set<number>());
 
 let timer: ReturnType<typeof setInterval> | undefined;
@@ -158,6 +163,8 @@ function setupInterval(): void {
   timer = undefined;
   if (refreshInterval.value === 'none') return;
   timer = setInterval(() => {
+    // Skip while hidden, and never stack a request on one still in flight.
+    if (document.hidden || loading.value) return;
     void processesStore.load(filterText.value);
   }, Number.parseInt(refreshInterval.value, 10));
 }
@@ -170,7 +177,12 @@ watch(filterText, (value) => {
   debounce = setTimeout(() => void processesStore.load(value), 300);
 });
 
-onMounted(setupInterval);
+// This screen loads itself (not via route meta) so the first fetch already uses
+// the search term restored from the URL.
+onMounted(() => {
+  void processesStore.load(filterText.value);
+  setupInterval();
+});
 onUnmounted(() => {
   clearInterval(timer);
   clearTimeout(debounce);

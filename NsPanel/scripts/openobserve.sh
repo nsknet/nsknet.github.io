@@ -20,12 +20,12 @@ install_openobserve() {
 
     apt-get install -y curl tar
     # Get latest version from https://openobserve.ai/downloads/
-    version="0.80.3"
-    
+    local version="0.80.3"
+
     # ── Download binary ───────────────────────────────────────────
     local url="https://downloads.openobserve.ai/releases/openobserve/v${version}/openobserve-v${version}-linux-amd64-musl.tar.gz"
 
-    echo "▶  Downloading ${tarball}..."
+    echo "▶  Downloading ${url}..."
     mkdir -p "$OPENOBSERVE_DIR" "$OPENOBSERVE_DATA" /var/www/services
 
     curl -fsSL "$url" -o /tmp/openobserve.tar.gz
@@ -43,7 +43,7 @@ install_openobserve() {
     # ── Credentials: use the password supplied by the panel, else generate ──
     local admin_email="admin@localhost.local"
     local admin_pass
-    admin_pass="${DB_PASSWORD:-$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 28)}"
+    admin_pass="${DB_PASSWORD:-$(gen_password)}"
 
     # ── systemd service ───────────────────────────────────────────
     echo "▶  Writing systemd service..."
@@ -120,7 +120,7 @@ CRED
     echo "   UI       : http://<server-ip>:5080"
     echo "   Allow    : ${ALLOWED_SUBNETS[*]}"
     echo "   Email    : ${admin_email}"
-    echo "   Password : ${admin_pass}"
+    echo "   Password : saved in ${OPENOBSERVE_CRED_FILE} (mode 600)"
     echo ""
     echo "   Credentials saved to: ${OPENOBSERVE_CRED_FILE}"
     echo "   Data dir  : ${OPENOBSERVE_DATA}"

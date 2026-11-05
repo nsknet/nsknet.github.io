@@ -73,15 +73,22 @@ SOURCES
     # ── Credentials: use the password supplied by the panel, else generate ──
     local admin_user="admin"
     local admin_pass
-    admin_pass="${DB_PASSWORD:-$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 28)}"
+    admin_pass="${DB_PASSWORD:-$(gen_password)}"
 
     # ── Remove default guest user ─────────────────────────────────
     echo "▶  Removing default guest account..."
     rabbitmqctl delete_user guest 2>/dev/null || true
 
     # ── Create admin user ─────────────────────────────────────────
-    echo "▶  Creating admin user '${admin_user}'..."
-    rabbitmqctl add_user "$admin_user" "$admin_pass"
+    # Re-install safe: add_user and add_vhost fail on existing entries.
+    # (grep without -q: under pipefail, -q's early exit can fail the pipeline.)
+    if rabbitmqctl list_users --quiet | awk '{print $1}' | grep -Fx "$admin_user" >/dev/null; then
+        echo "▶  User '${admin_user}' exists — updating its password..."
+        rabbitmqctl change_password "$admin_user" "$admin_pass"
+    else
+        echo "▶  Creating admin user '${admin_user}'..."
+        rabbitmqctl add_user "$admin_user" "$admin_pass"
+    fi
     rabbitmqctl set_user_tags "$admin_user" administrator
 
     # ── Default vhost permissions ─────────────────────────────────
@@ -91,7 +98,8 @@ SOURCES
     # ── Extra vhosts ──────────────────────────────────────────────
     echo "▶  Creating vhosts: /prod /dev /staging..."
     for vhost in /prod /dev /staging; do
-        rabbitmqctl add_vhost "$vhost"
+        rabbitmqctl list_vhosts --quiet | grep -Fx -- "$vhost" >/dev/null \
+            || rabbitmqctl add_vhost "$vhost"
         rabbitmqctl set_permissions -p "$vhost" "$admin_user" ".*" ".*" ".*"
     done
 
@@ -149,7 +157,7 @@ CRED
     echo "   AMQP       : amqp://<server-ip>:5672"
     echo "   Allow      : ${ALLOWED_SUBNETS[*]}"
     echo "   User       : ${admin_user}"
-    echo "   Password   : ${admin_pass}"
+    echo "   Password   : saved in ${RABBITMQ_CRED_FILE} (mode 600)"
     echo "   Vhosts     : / /prod /dev /staging"
     echo ""
     echo "   Credentials saved to: ${RABBITMQ_CRED_FILE}"
@@ -178,8 +186,8 @@ set_rabbitmq_password() {
 
     if [ -f "$RABBITMQ_CRED_FILE" ]; then
         echo "▶  Updating ${RABBITMQ_CRED_FILE}..."
-        sed -i -E "s|^admin_password:.*|admin_password: \"${admin_pass}\"|" "$RABBITMQ_CRED_FILE"
-        sed -i -E "s|^amqp_url:.*|amqp_url: \"amqp://${admin_user}:${admin_pass}@<server-ip>:5672/\"|" "$RABBITMQ_CRED_FILE"
+        cred_set "$RABBITMQ_CRED_FILE" admin_password "${admin_pass}"
+        cred_set "$RABBITMQ_CRED_FILE" amqp_url "amqp://${admin_user}:${admin_pass}@<server-ip>:5672/"
     fi
     echo "✔  RabbitMQ password updated."
 }

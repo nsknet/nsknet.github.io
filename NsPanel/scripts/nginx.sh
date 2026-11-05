@@ -6,7 +6,6 @@
 #  as ALLOWED_SUBNETS that may legitimately be unset.)
 set -eo pipefail
 
-
 # ── Install NGINX ──────────────────────────────────────────────────────────────
 install_nginx() {
     echo "════════════════════════════════════════════════════════════"
@@ -33,7 +32,7 @@ worker_processes auto;
 worker_rlimit_nofile 65535;
 pid /run/nginx.pid;
 
-include /usr/share/nginx/modules/*.conf;
+include /etc/nginx/modules-enabled/*.conf;
 
 events {
     worker_connections 4096;
@@ -179,33 +178,6 @@ _setup_site_permissions() {
     fi
 }
 
-# ── Certbot (Let's Encrypt) ───────────────────────────────────────────────────
-install_certbot() {
-    echo "▶  Installing certbot..."
-    apt-get install -y certbot python3-certbot-nginx
-
-    # Auto-renew twice daily (standard recommendation)
-    systemctl enable --now snap.certbot.renew.timer 2>/dev/null || \
-        (crontab -l 2>/dev/null; echo "0 0,12 * * * certbot renew --quiet") | crontab -
-
-    echo "✔  Certbot installed. Run: certbot --nginx -d your-domain.com"
-}
-
-install_ssl_domain() {
-    echo "════════════════════════════════════════════════════════════"
-    echo "  Setup HTTPS with Let's Encrypt"
-    echo "════════════════════════════════════════════════════════════"
-    read -rp "  Domain name (e.g. example.com): " domain
-
-    # Accept bare domain and add www
-    domain="${domain#www.}"
-    certbot --nginx --non-interactive --agree-tos --register-unsafely-without-email \
-        -d "$domain" -d "www.$domain"
-
-    echo ""
-    echo "✔  SSL certificate issued for ${domain}."
-}
-
 # register_site_ssl <name> <domain>
 # Issues a Let's Encrypt certificate via the certbot nginx plugin (installing
 # certbot on first use) and links the live cert into the site's ssl/ dir.
@@ -221,9 +193,8 @@ register_site_ssl() {
         echo "▶  Installing certbot (first run)..."
         apt-get update -q
         apt-get install -y certbot python3-certbot-nginx
-        # Auto-renew twice daily unless a renew job already exists
-        (crontab -l 2>/dev/null | grep -q 'certbot renew') || \
-            (crontab -l 2>/dev/null; echo "0 0,12 * * * certbot renew --quiet") | crontab -
+        # The apt package ships certbot.timer (twice-daily renew); no cron entry needed.
+        systemctl enable --now certbot.timer 2>/dev/null || true
     elif ! certbot plugins --non-interactive 2>/dev/null | grep -q nginx; then
         # certbot exists (e.g. installed standalone earlier) but lacks the
         # nginx authenticator/installer plugin.
@@ -266,130 +237,6 @@ register_site_ssl() {
     fi
 
     echo "✔  HTTPS enabled for ${domain}."
-}
-
-# ── Add Nginx site ─────────────────────────────────────────────────────────────
-add_nginx_site() {
-    echo "════════════════════════════════════════════════════════════"
-    echo "  Add New Nginx Site"
-    echo "════════════════════════════════════════════════════════════"
-
-    # --- Step 1: access method ---
-    echo ""
-    echo "  How is this site accessed?"
-    echo "   1) Port  (random port, no domain)"
-    echo "   2) Domain"
-    read -rp "  Choice [1/2]: " access_choice
-
-    local service_name server_name external_port use_domain=false
-
-    if [[ "$access_choice" == "2" ]]; then
-        use_domain=true
-        read -rp "  Domain (e.g. example.com): " server_name
-        service_name="$server_name"
-    else
-        read -rp "  Service name (no spaces): " service_name
-        server_name="_"
-        external_port=$(( RANDOM % 45000 + 5000 ))
-        echo "  Assigned port: ${external_port}"
-    fi
-
-    # --- Step 2: backend type ---
-    echo ""
-    echo "  Backend type:"
-    echo "   1) Proxy to existing local port"
-    echo "   2) Static HTML files"
-    echo "   3) New .NET Core service"
-    read -rp "  Choice [1/2/3]: " backend_choice
-
-    local internal_port internal_address dll_name is_static=false is_dotnet=false
-
-    case "$backend_choice" in
-        1)
-            read -rp "  Local port or address (e.g. 5555 or http://127.0.0.1:5555): " raw
-            if [[ "$raw" =~ ^[0-9]+$ ]]; then
-                internal_port="$raw"
-                internal_address="http://127.0.0.1:${raw}"
-            else
-                internal_address="$raw"
-            fi
-            ;;
-        2)
-            is_static=true
-            ;;
-        3)
-            is_dotnet=true
-            read -rp "  DLL name (without .dll): " dll_name
-            dll_name="${dll_name%.dll}"
-
-            if [[ "$use_domain" == false ]]; then
-                internal_port=$(( external_port - 1 ))
-            else
-                internal_port=$(( RANDOM % 45000 + 5000 ))
-            fi
-            echo "  Internal .NET port: ${internal_port}"
-            internal_address="http://127.0.0.1:${internal_port}"
-            ;;
-    esac
-
-    # --- Create directories ---
-    mkdir -p /var/www/nginx/sites/"$service_name"/{public,logs,data}
-
-    # --- Write nginx config ---
-    local conf_path
-    if [[ "$use_domain" == true ]]; then
-        conf_path="/var/www/nginx/conf.d/${service_name}.conf"
-    else
-        conf_path="/var/www/nginx/conf.d/${service_name}-port.conf"
-    fi
-
-    echo "▶  Writing ${conf_path}..."
-
-    if [[ "$is_static" == true ]]; then
-        _write_static_conf "$conf_path" "$service_name" "$server_name" \
-            "$use_domain" "${external_port:-}"
-        _write_sample_html "$service_name" "$server_name"
-    else
-        _write_proxy_conf "$conf_path" "$service_name" "$server_name" \
-            "$internal_address" "$use_domain" "${external_port:-}"
-    fi
-
-    # --- .NET service ---
-    if [[ "$is_dotnet" == true ]]; then
-        _create_dotnet_service "$service_name" "$dll_name" "$internal_port"
-    fi
-
-    # --- Permissions: apply AFTER files are in place so ACLs cover everything.
-    _setup_site_permissions "/var/www/nginx/sites/${service_name}"
-
-    # --- Open port in firewall ---
-    if [[ "$use_domain" == false ]] && command -v ufw &>/dev/null; then
-        ufw allow "${external_port}/tcp" comment "${service_name}"
-    fi
-
-    # --- Reload nginx ---
-    if nginx -t 2>&1; then
-        systemctl reload nginx
-    else
-        echo "✗  nginx config test failed — site NOT activated."
-        return 1
-    fi
-
-    echo ""
-    echo "════════════════════════════════════════════════════════════"
-    echo "✔  Site '${service_name}' created."
-    if [[ "$use_domain" == true ]]; then
-        echo "   URL    : http://${server_name}"
-    else
-        echo "   URL    : http://YOUR_IP:${external_port}"
-    fi
-    echo "   Files  : /var/www/nginx/sites/${service_name}/public/"
-    echo "   Config : ${conf_path}"
-    echo ""
-    echo "   ℹ  To let a dev upload via SFTP/WinSCP, add them to the www-data group:"
-    echo "        sudo usermod -aG www-data <username>"
-    echo "      Then have them log out and back in."
-    echo "════════════════════════════════════════════════════════════"
 }
 
 # --- Helper: static nginx block ---
@@ -663,7 +510,8 @@ YAML
     if nginx -t 2>&1; then
         systemctl reload nginx
     else
-        echo "✗  nginx config test failed — site not activated." >&2
+        mv -f "$conf" "${conf}.failed"
+        echo "✗  nginx config test failed — vhost moved to ${conf}.failed, site not activated." >&2
         return 1
     fi
 
@@ -715,7 +563,8 @@ YAML
     if nginx -t 2>&1; then
         systemctl reload nginx
     else
-        echo "✗  nginx config test failed — site not activated." >&2
+        mv -f "$conf" "${conf}.failed"
+        echo "✗  nginx config test failed — vhost moved to ${conf}.failed, site not activated." >&2
         return 1
     fi
 
@@ -776,7 +625,8 @@ YAML
     if nginx -t 2>&1; then
         systemctl reload nginx
     else
-        echo "✗  nginx config test failed — check above." >&2
+        mv -f "$conf" "${conf}.failed"
+        echo "✗  nginx config test failed — vhost moved to ${conf}.failed, site not activated." >&2
         return 1
     fi
 
@@ -786,45 +636,6 @@ YAML
     fi
 
     echo "✔  .NET site '${name}' ready. Service registered in /var/www/services/."
-}
-
-# ── WordPress + phpMyAdmin ─────────────────────────────────────────────────────
-install_wordpress_phpmyadmin() {
-    echo "════════════════════════════════════════════════════════════"
-    echo "  Install WordPress & phpMyAdmin"
-    echo "════════════════════════════════════════════════════════════"
-    read -rp "  Domain name: " domain
-
-    local site_dir="/var/www/nginx/sites/${domain}/public"
-    mkdir -p "$site_dir"
-
-    echo "▶  Downloading WordPress..."
-    wget -q https://wordpress.org/latest.tar.gz -O /tmp/wp.tar.gz
-    tar -xzf /tmp/wp.tar.gz -C /tmp
-    cp -r /tmp/wordpress/. "$site_dir/"
-    rm -rf /tmp/wordpress /tmp/wp.tar.gz
-
-    echo "▶  Downloading phpMyAdmin..."
-    local pma_ver="5.2.1"
-    wget -q "https://files.phpmyadmin.net/phpMyAdmin/${pma_ver}/phpMyAdmin-${pma_ver}-english.tar.gz" -O /tmp/pma.tar.gz
-    mkdir -p "$site_dir/phpMyAdmin"
-    tar -xzf /tmp/pma.tar.gz -C /tmp
-    cp -r "/tmp/phpMyAdmin-${pma_ver}-english/." "$site_dir/phpMyAdmin/"
-    mkdir -p "$site_dir/phpMyAdmin/tmp"
-    rm -rf "/tmp/phpMyAdmin-${pma_ver}-english" /tmp/pma.tar.gz
-
-    # phpMyAdmin/tmp needs to be writable by php-fpm (www-data) — ACLs already
-    # handle this since the parent site_dir is set up below, but make it
-    # explicit so php-fpm can write session/cache files immediately.
-    _setup_site_permissions "/var/www/nginx/sites/${domain}"
-
-    echo ""
-    echo "════════════════════════════════════════════════════════════"
-    echo "✔  WordPress & phpMyAdmin installed."
-    echo "   WordPress : http://${domain}"
-    echo "   phpMyAdmin: http://${domain}/phpMyAdmin"
-    echo "   Files     : ${site_dir}"
-    echo "════════════════════════════════════════════════════════════"
 }
 
 uninstall_nginx() {

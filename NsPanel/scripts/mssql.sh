@@ -157,7 +157,7 @@ CRED
     echo "   Edition  : ${edition}"
     echo "   Host     : <server-ip>:${MSSQL_PORT}"
     echo "   User     : SA"
-    echo "   Password : ${sa_password}"
+    echo "   Password : saved in ${MSSQL_CRED_FILE} (mode 600)"
     echo "   Memory   : ${mem_limit} MB"
     echo "   Data dir : ${MSSQL_DATA_DIR}"
     echo "   Allow    : ${ALLOWED_SUBNETS[*]}"
@@ -193,8 +193,8 @@ set_mssql_password() {
 
     if [ -f "$MSSQL_CRED_FILE" ]; then
         echo "▶  Updating ${MSSQL_CRED_FILE}..."
-        sed -i -E "s|^admin_password:.*|admin_password: \"${sa_password}\"|" "$MSSQL_CRED_FILE"
-        sed -i -E "s|^connection_string:.*|connection_string: \"Server=127.0.0.1,${MSSQL_PORT};User Id=SA;Password=${sa_password};TrustServerCertificate=True\"|" "$MSSQL_CRED_FILE"
+        cred_set "$MSSQL_CRED_FILE" admin_password "${sa_password}"
+        cred_set "$MSSQL_CRED_FILE" connection_string "Server=127.0.0.1,${MSSQL_PORT};User Id=SA;Password=${sa_password};TrustServerCertificate=True"
     fi
     echo "✔  SQL Server SA password updated."
 }

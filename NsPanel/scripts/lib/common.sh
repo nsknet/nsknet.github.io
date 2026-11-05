@@ -29,6 +29,42 @@ log_warn() {
 }
 
 
+# ── APT ───────────────────────────────────────────────────────────────────────
+# Every script calls apt-get directly; this wrapper makes each call wait for the
+# dpkg lock (held by unattended-upgrades for minutes on a fresh VPS) instead of
+# failing on the spot, and never lets apt stop to ask a question.
+apt-get() {
+    DEBIAN_FRONTEND=noninteractive command apt-get -o DPkg::Lock::Timeout=300 "$@"
+}
+
+
+# ── Secrets ───────────────────────────────────────────────────────────────────
+
+# Random 28-character [0-9a-f] password. Safe under `set -o pipefail`, unlike
+# `tr … </dev/urandom | head`, which dies with SIGPIPE (exit 141).
+gen_password() {
+    openssl rand -hex 14
+}
+
+# Set `key: "value"` in a YAML-ish credentials file, keeping the other lines.
+# Usage: cred_set <file> <key> <value>
+# The value is handed to awk through the environment, so characters that are
+# special to sed (`&`, `|`, `\`) are written verbatim. No-op if the file is missing.
+cred_set() {
+    local file="$1" key="$2" value="$3" tmp
+    [ -f "$file" ] || return 0
+    tmp="$(mktemp "${file}.XXXXXX")"   # mktemp creates it 0600
+    CRED_KEY="$key" CRED_VALUE="$value" awk '
+        index($0, ENVIRON["CRED_KEY"] ":") == 1 {
+            print ENVIRON["CRED_KEY"] ": \"" ENVIRON["CRED_VALUE"] "\""
+            next
+        }
+        { print }
+    ' "$file" > "$tmp"
+    mv -f "$tmp" "$file"
+}
+
+
 # ── UFW ───────────────────────────────────────────────────────────────────────
 # Usage: _ufw_allow_port <port> <comment>
 #

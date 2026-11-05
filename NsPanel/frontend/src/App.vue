@@ -13,6 +13,8 @@ import ToastList from '@/components/ToastList.vue';
 import Btn from '@/components/ui/Btn.vue';
 import LIcon from '@/components/ui/LIcon.vue';
 import { navGroups } from '@/router';
+import { loadRouteData } from '@/composables/useScreenData';
+import { useJobsStore } from '@/stores/jobs';
 import { useSystemStore } from '@/stores/system';
 import { useUiStore } from '@/stores/ui';
 
@@ -20,6 +22,8 @@ const route = useRoute();
 const router = useRouter();
 const ui = useUiStore();
 const system = useSystemStore();
+const jobsStore = useJobsStore();
+const { running: runningJobs } = storeToRefs(jobsStore);
 
 const { sidebarOpen, theme, overlay, confirm, installDialog, networkDialog, paletteOpen } =
   storeToRefs(ui);
@@ -40,6 +44,12 @@ onMounted(() => {
   ui.applyTheme();
   // The header shows the hostname on every screen, not only the ones that load it.
   if (!hostLoaded.value) void system.load();
+  // After a reload: show running jobs in the header, and give a job dialog
+  // restored from sessionStorage the usual refresh-when-done behaviour.
+  void jobsStore.load();
+  if (overlay.value && !overlay.value.onDone) {
+    overlay.value.onDone = () => void loadRouteData(router.currentRoute.value.meta.loads);
+  }
   document.addEventListener('keydown', onGlobalKeydown);
 });
 onUnmounted(() => document.removeEventListener('keydown', onGlobalKeydown));
@@ -180,6 +190,17 @@ function logout(): void {
           >
             <LIcon name="search" is="width:15px;height:15px" />
           </button>
+          <button
+            v-if="runningJobs.length"
+            class="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full border border-c-border bg-c-card text-xs-var text-c-tx2 hover:text-c-tx hover:border-c-bstrong transition-colors"
+            :title="runningJobs.map((job) => job.label).join(', ')"
+            @click="router.push('/jobs')"
+          >
+            <span
+              class="w-3 h-3 rounded-full border-[1.5px] border-c-bstrong border-t-c-accent animate-spin"
+            ></span>
+            <span>{{ runningJobs.length }} running</span>
+          </button>
           <span
             class="inline-flex items-center gap-1.5 py-1 px-2.5 bg-c-subtle border border-c-border rounded-full mono text-xs-var text-c-tx2"
           >
@@ -238,7 +259,8 @@ function logout(): void {
 
   <ToastList />
   <CommandPalette v-if="paletteOpen" @close="paletteOpen = false" />
-  <OverlayModal v-if="overlay" :overlay="overlay" @close="overlay = null" />
+  <!-- Gated on hostLoaded: a dialog restored after a reload waits for the shell. -->
+  <OverlayModal v-if="overlay && hostLoaded" :overlay="overlay" @close="overlay = null" />
   <ConfirmDialog v-if="confirm" :confirm="confirm" @close="confirm = null" />
   <InstallDialog v-if="installDialog" :dialog="installDialog" @close="installDialog = null" />
   <NetworkDialog v-if="networkDialog" :dialog="networkDialog" @close="networkDialog = null" />

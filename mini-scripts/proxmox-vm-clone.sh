@@ -28,11 +28,13 @@ select_template() {
             template_ids+=("$vmid")
             
             # Get template name and other info
-            local vm_info=$(qm list | awk -v id=$vmid '$1==id{print}')
+            local vm_info
+            vm_info=$(qm list | awk -v id="$vmid" '$1==id{print}')
             template_info+=("$vm_info")
             
             # Extract name from vm_info
-            local vm_name=$(echo "$vm_info" | awk '{print $2}')
+            local vm_name
+            vm_name=$(echo "$vm_info" | awk '{print $2}')
             template_names+=("$vm_name")
         fi
     done

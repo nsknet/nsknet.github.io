@@ -5,12 +5,14 @@
  */
 import { ApiError, isJobResponse, postAction } from '@/api/client';
 import type { JobResponse, MessageResponse } from '@/api/types';
+import { useJobsStore } from '@/stores/jobs';
 import { useUiStore } from '@/stores/ui';
 
 import { useReload } from './useScreenData';
 
 export function useJobRunner() {
   const ui = useUiStore();
+  const jobs = useJobsStore();
   const reload = useReload();
 
   /**
@@ -31,9 +33,12 @@ export function useJobRunner() {
           title: options.title || result.title,
           onDone: () => {
             void reload();
+            void jobs.load();
             options.onDone?.();
           },
         });
+        // Puts the job in the header's "N running" chip.
+        void jobs.load();
       } else {
         ui.addToast({
           t: 'Success',

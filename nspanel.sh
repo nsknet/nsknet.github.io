@@ -55,11 +55,14 @@ if [ -d "$REPO_DIR/.git" ]; then
 
     # If branch was not specified via args/env, prompt when running in an interactive terminal
     if [ -z "$TARGET_BRANCH" ]; then
-        RAW_BRANCHES=($(git -C "$REPO_DIR" branch -r 2>/dev/null | sed "s/origin\///" | tr -d " *" | grep -v "HEAD" | sort -u))
+        mapfile -t RAW_BRANCHES < <(git -C "$REPO_DIR" branch -r 2>/dev/null | sed "s/origin\///" | tr -d " *" | grep -v "HEAD" | sort -u)
         BRANCH_LIST=()
-        if [[ " ${RAW_BRANCHES[@]} " =~ " ${DEFAULT_BRANCH} " ]]; then
-            BRANCH_LIST+=("$DEFAULT_BRANCH")
-        fi
+        for b in "${RAW_BRANCHES[@]}"; do
+            if [ "$b" = "$DEFAULT_BRANCH" ]; then
+                BRANCH_LIST+=("$DEFAULT_BRANCH")
+                break
+            fi
+        done
         for b in "${RAW_BRANCHES[@]}"; do
             if [ "$b" != "$DEFAULT_BRANCH" ]; then
                 BRANCH_LIST+=("$b")
@@ -92,11 +95,20 @@ if [ -d "$REPO_DIR/.git" ]; then
     fi
 
     echo "Using branch: $TARGET_BRANCH"
-    git -C "$REPO_DIR" checkout "$TARGET_BRANCH" 2>/dev/null || git -C "$REPO_DIR" checkout -b "$TARGET_BRANCH" "origin/$TARGET_BRANCH" 2>/dev/null || true
-    git -C "$REPO_DIR" pull origin "$TARGET_BRANCH" 2>/dev/null || git -C "$REPO_DIR" pull 2>/dev/null || true
+    git -C "$REPO_DIR" checkout "$TARGET_BRANCH" 2>/dev/null \
+        || git -C "$REPO_DIR" checkout -b "$TARGET_BRANCH" "origin/$TARGET_BRANCH" 2>/dev/null \
+        || echo "⚠  Could not switch to branch '$TARGET_BRANCH' — staying on $(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD)." >&2
+    git -C "$REPO_DIR" pull origin "$TARGET_BRANCH" 2>/dev/null \
+        || git -C "$REPO_DIR" pull 2>/dev/null \
+        || echo "⚠  git pull failed — starting the code already on disk (local changes or no network?)." >&2
 fi
 
 cd "$PANEL_DIR"
 chmod +x run.sh 2>/dev/null || true
-$SUDO ./run.sh "$@"
+# sudo resets the environment; keep the panel settings run.sh reads.
+if [ -n "$SUDO" ]; then
+    $SUDO --preserve-env=PANEL_PASSWORD,PANEL_USERNAME,NSPANEL_HOST,NSPANEL_PORT,NSPANEL_DEV,NSPANEL_AUDIT_LOG ./run.sh "$@"
+else
+    ./run.sh "$@"
+fi
 

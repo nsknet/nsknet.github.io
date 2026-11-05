@@ -7,7 +7,6 @@
 #  as ALLOWED_SUBNETS that may legitimately be unset.)
 set -eo pipefail
 
-
 ES_PORT=9200
 KIBANA_PORT=5601
 
@@ -57,7 +56,6 @@ http.port: ${ES_PORT}
 discovery.type: single-node
 
 indices.query.bool.max_clause_count: 32768
-
 
 # Disable TLS and auth for local/LAN dev use
 xpack.security.enabled: false
@@ -131,12 +129,6 @@ KCONF
     echo "   Note : Elasticsearch must be running for Kibana to connect."
     echo "   Tip  : Check kibana version: /usr/share/kibana/bin/kibana -V"
     echo "════════════════════════════════════════════════════════════"
-}
-
-# Backwards-compatible alias (installs both)
-install_elastic_kibana() {
-    install_elasticsearch
-    install_kibana
 }
 
 uninstall_elasticsearch() {

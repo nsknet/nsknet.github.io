@@ -31,7 +31,10 @@ def isolated_audit_log(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def client() -> TestClient:
     """Authenticated client — Basic Auth header is attached to every request."""
     token = base64.b64encode(f"admin:{auth.get_password()}".encode()).decode()
-    return TestClient(app_module.app, headers={"Authorization": f"Basic {token}"})
+    return TestClient(
+        app_module.app,
+        headers={"Authorization": f"Basic {token}", auth.CSRF_HEADER: "1"},
+    )
 
 
 class FakeRunner:

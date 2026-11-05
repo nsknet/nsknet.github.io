@@ -6,6 +6,7 @@
 import { useRoute } from 'vue-router';
 
 import type { StoreKey } from '@/router';
+import { useJobsStore } from '@/stores/jobs';
 import { useDnsStore, useFirewallStore, useLogsStore, useProcessesStore } from '@/stores/misc';
 import { useServicesStore } from '@/stores/services';
 import { useSitesStore } from '@/stores/sites';
@@ -26,6 +27,7 @@ export function loadersFor(keys: StoreKey[] | undefined): (() => Promise<void>)[
     firewall: () => useFirewallStore().load(),
     logs: () => useLogsStore().load(),
     processes: () => useProcessesStore().load(),
+    jobs: () => useJobsStore().load(),
   };
 
   return keys.map((key) => loaders[key]);

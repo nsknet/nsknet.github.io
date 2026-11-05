@@ -75,7 +75,7 @@ install_redis() {
 
     # ── Password: use the panel-supplied value, else generate one ─────────────
     local password
-    password="${DB_PASSWORD:-$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 28)}"
+    password="${DB_PASSWORD:-$(gen_password)}"
 
     echo "▶  Configuring ${REDIS_CONF} (bind 0.0.0.0, requirepass, port ${REDIS_PORT})..."
     _redis_write_managed_block "$password"
@@ -112,13 +112,13 @@ CRED
     echo "════════════════════════════════════════════════════════════"
     echo "✔  Redis installed."
     echo "   Port     : ${REDIS_PORT}  (bound to 0.0.0.0)"
-    echo "   Password : ${password}"
+    echo "   Password : saved in ${REDIS_CRED_FILE} (mode 600)"
     echo "   Conf     : ${REDIS_CONF}"
     echo "   Data     : /var/lib/redis"
     echo "   Allow    : ${ALLOWED_SUBNETS[*]}"
     echo ""
-    echo "   .NET     : <server-ip>:${REDIS_PORT},password=${password}"
-    echo "   Test     : redis-cli -a '${password}' ping   → PONG"
+    echo "   .NET     : <server-ip>:${REDIS_PORT},password=<password>"
+    echo "   Test     : REDISCLI_AUTH=<password> redis-cli ping   → PONG"
     echo "   Credentials saved to: ${REDIS_CRED_FILE}"
     echo "════════════════════════════════════════════════════════════"
 }
@@ -135,8 +135,8 @@ set_redis_password() {
 
     if [ -f "$REDIS_CRED_FILE" ]; then
         echo "▶  Updating ${REDIS_CRED_FILE}..."
-        sed -i -E "s|^password:.*|password: \"${password}\"|" "$REDIS_CRED_FILE"
-        sed -i -E "s|^dotnet_connection:.*|dotnet_connection: \"<server-ip>:${REDIS_PORT},password=${password}\"|" "$REDIS_CRED_FILE"
+        cred_set "$REDIS_CRED_FILE" password "${password}"
+        cred_set "$REDIS_CRED_FILE" dotnet_connection "<server-ip>:${REDIS_PORT},password=${password}"
     fi
     echo "✔  Redis password updated."
 }

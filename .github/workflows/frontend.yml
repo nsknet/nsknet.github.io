@@ -23,6 +23,9 @@ jobs:
           cache-dependency-path: NsPanel/frontend/package-lock.json
       - run: npm ci
         working-directory: NsPanel/frontend
+      # Never commit a bundle built from code that does not typecheck.
+      - run: npm run typecheck
+        working-directory: NsPanel/frontend
       - run: npm run build
         working-directory: NsPanel/frontend
       - name: Commit the rebuilt bundle

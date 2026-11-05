@@ -6,6 +6,14 @@
 #  as ALLOWED_SUBNETS that may legitimately be unset.)
 set -eo pipefail
 
+# common_configs also installs cloudflared and UFW. The panel sources only
+# lib/*.sh and this file, so pull in the scripts that define those functions.
+_system_dir="$(dirname "${BASH_SOURCE[0]}")"
+# shellcheck source=cloudflared.sh
+source "${_system_dir}/cloudflared.sh"
+# shellcheck source=firewall.sh
+source "${_system_dir}/firewall.sh"
+unset _system_dir
 
 # ── Common configuration ───────────────────────────────────────────────────────
 common_configs() {
@@ -68,7 +76,8 @@ install_virtual_ram() {
     if swapon --show | grep -q "^${swapfile}"; then
         current_active=true
         # Calculate current size in GB from /proc/swaps
-        local size_kb=$(awk -v sf="$swapfile" '$1 == sf {print $3}' /proc/swaps 2>/dev/null)
+        local size_kb
+        size_kb=$(awk -v sf="$swapfile" '$1 == sf {print $3}' /proc/swaps 2>/dev/null)
         if [ -n "$size_kb" ]; then
             current_size_gb=$(( (size_kb + 524288) / 1048576 ))
         fi
@@ -164,11 +173,6 @@ install_virtual_ram() {
     echo "════════════════════════════════════════════════════════════"
 }
 
-# Backwards-compatible alias used by old menu entries
-install_virtual_ram_4g() {
-    install_virtual_ram 4
-}
-
 # ── Individual config functions ───────────────────────────────────────────────
 
 set_timezone() {
@@ -235,7 +239,8 @@ set_network_ip() {
 
     # Back up an existing drop-in before overwriting.
     if [ -f "$target" ]; then
-        local backup="${target}.$(date +%Y%m%d-%H%M%S).bak"
+        local backup
+        backup="${target}.$(date +%Y%m%d-%H%M%S).bak"
         cp -a "$target" "$backup"
         echo "▶  Backed up existing config → ${backup}"
     fi

@@ -11,8 +11,11 @@ install_cloudflared() {
     echo "════════════════════════════════════════════════════════════"
     echo "  Installing cloudflared"
     echo "════════════════════════════════════════════════════════════"
+    # Release assets are named by Debian arch (amd64, arm64, armhf, 386).
+    local arch
+    arch="$(dpkg --print-architecture)"
     wget -q -O /tmp/cloudflared.deb \
-        https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+        "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${arch}.deb"
     dpkg -i /tmp/cloudflared.deb
     rm -f /tmp/cloudflared.deb
     cloudflared --version

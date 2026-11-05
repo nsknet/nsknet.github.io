@@ -57,7 +57,17 @@ GET /stream/{job_id}
 ```
 
 Job state is in memory and capped at `config.MAX_JOBS`; restarting the panel
-loses live logs but not the audit log.
+loses live logs but not the audit log. `GET /api/v1/jobs` lists the jobs still in
+memory (the Jobs screen and the header's "N running" chip), and `/stream/{id}`
+replays a job from its first line, so its output can be reopened after a reload.
+
+## Auth and CSRF
+
+Basic Auth covers everything except `/logout`. Because browsers re-send cached
+Basic credentials on any request — including a form another website submits —
+every non-GET request must also carry `X-NsPanel: 1` (`core/auth.require_csrf_header`),
+and requests marked `Sec-Fetch-Site: cross-site` are refused. The frontend's
+`postAction` sends the header.
 
 ### Calling a bash function
 
@@ -73,7 +83,17 @@ value that slipped past validation still cannot break out of its slot.
 commands. `tests/test_jobs.py` asserts this with hostile inputs.
 
 Everything in `scripts/lib/` is sourced first, so any script may call the shared
-helpers (`log_header`, `log_step`, `_ufw_allow_port`, `_register_panel_service`).
+helpers (`log_header`, `log_step`, `_ufw_allow_port`, `_register_panel_service`,
+`gen_password`, `cred_set`). `lib/common.sh` also wraps `apt-get` so every call
+waits for the dpkg lock instead of failing on a fresh VPS.
+
+Only that one target script is sourced. A function that calls into another
+script must source it itself (see the top of `system.sh`);
+`tests/test_scripts.py` fails when it does not.
+
+Jobs run with stdin closed and `DEBIAN_FRONTEND=noninteractive`: a script must
+never prompt. Passwords go to SQL over stdin or an environment variable and are
+never echoed into the job log — the log only says which file holds them.
 
 Secrets (`DB_PASSWORD`) and firewall scope (`ALLOWED_SUBNETS`) travel through the
 job environment, never argv — argv is echoed into the live log.
@@ -109,8 +129,14 @@ the panel and the shell always agree about what exists.
 
 `frontend/` is a Vue 3 + TypeScript app built by Vite into `static/dist/`, which
 is committed so a VPS can `git clone` and run without Node. `app.py` serves
-`static/dist` with an index.html fallback, and tool icons from `static/logo/`
-under `/logo`.
+`static/dist` with an index.html fallback for client routes (hash history, so a
+reload always requests `/`), real 404s under `/api`, `/stream`, `/logo` and
+`/assets`, `Cache-Control: no-cache` on index.html and `immutable` on the hashed
+bundle. Tool icons come from `static/logo/` under `/logo`.
+
+Screen state worth keeping across a reload (filters, search, sort) lives in the
+URL query via `composables/useQueryRef.ts`; query-only navigations do not
+refetch the screen's stores.
 
 One route table in `frontend/src/router/index.ts` owns the nav rail, the
 breadcrumbs and which stores a screen loads — adding a screen means adding one

@@ -41,6 +41,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Syntax check
-        run: bash -n NsPanel/run.sh nspanel.sh && for f in NsPanel/scripts/*.sh NsPanel/scripts/lib/*.sh; do bash -n "$f"; done
-      - name: ShellCheck (errors only)
-        run: shellcheck -S error NsPanel/run.sh nspanel.sh NsPanel/scripts/*.sh NsPanel/scripts/lib/*.sh
+        run: for f in NsPanel/run.sh nspanel.sh NsPanel/scripts/*.sh NsPanel/scripts/lib/*.sh mini-scripts/*.sh; do bash -n "$f"; done
+      - name: ShellCheck (warnings and errors)
+        run: shellcheck -S warning NsPanel/run.sh nspanel.sh NsPanel/scripts/*.sh NsPanel/scripts/lib/*.sh mini-scripts/*.sh

@@ -6,18 +6,19 @@ session password and binds per NSPANEL_HOST/NSPANEL_PORT. See docs/ARCHITECTURE.
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from config import DIST_DIR, HOST, LOGO_DIR, PORT
 from core import runner
-from core.auth import get_password, require_auth
+from core.auth import get_password, require_auth, require_csrf_header
 from routes import (
     auth,
     dashboard,
     dns,
     firewall,
+    jobs,
     logs,
     processes,
     services,
@@ -41,8 +42,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="NsPanel", lifespan=lifespan)
 
-# Everything except /logout and static assets sits behind one Basic Auth dependency.
-_auth = [Depends(require_auth)]
+# Everything except /logout and static assets sits behind Basic Auth; POSTs also
+# need the X-NsPanel header (CSRF guard, see core/auth.py).
+_auth = [Depends(require_auth), Depends(require_csrf_header)]
 
 # JSON REST API
 app.include_router(dashboard.router, dependencies=_auth)
@@ -54,6 +56,7 @@ app.include_router(sites.router, dependencies=_auth)
 app.include_router(dns.router, dependencies=_auth)
 app.include_router(services.router, dependencies=_auth)
 app.include_router(logs.router, dependencies=_auth)
+app.include_router(jobs.router, dependencies=_auth)
 app.include_router(stream.router, dependencies=_auth)
 app.include_router(auth.router)  # /logout — must work without auth
 
@@ -68,16 +71,29 @@ _MISSING_BUILD_HTML = (
 )
 
 
+# Paths that belong to the server, never to the client router: an unknown one is
+# a real 404, not a reason to hand back index.html.
+_SERVER_ROOTS = {"api", "stream", "logo", "assets"}
+
+# Hashed bundle files never change under the same name; index.html must always be
+# revalidated, or a browser keeps pointing at a bundle a `git pull` deleted.
+_IMMUTABLE = {"Cache-Control": "public, max-age=31536000, immutable"}
+_NO_CACHE = {"Cache-Control": "no-cache"}
+
+
 @app.get("/{full_path:path}", include_in_schema=False, dependencies=_auth)
 def spa(full_path: str):
     """Serve the built Vue SPA, falling back to index.html for client routes."""
     root = DIST_DIR.resolve()
     candidate = (DIST_DIR / full_path).resolve()
     if full_path and candidate.is_file() and candidate.is_relative_to(root):
-        return FileResponse(candidate)
+        headers = _IMMUTABLE if full_path.startswith("assets/") else _NO_CACHE
+        return FileResponse(candidate, headers=headers)
+    if full_path.split("/", 1)[0] in _SERVER_ROOTS:
+        raise HTTPException(status_code=404, detail="Not found")
     index = DIST_DIR / "index.html"
     if index.exists():
-        return FileResponse(index)
+        return FileResponse(index, headers=_NO_CACHE)
     return HTMLResponse(_MISSING_BUILD_HTML, status_code=503)
 
 

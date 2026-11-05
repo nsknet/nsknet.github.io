@@ -17,6 +17,18 @@ export interface MessageResponse {
   message: string;
 }
 
+/** GET /api/v1/jobs row. Timestamps are epoch seconds (server clock). */
+export interface JobSummary {
+  id: string;
+  label: string;
+  status: 'pending' | 'running' | 'done' | 'failed';
+  exit_code: number | null;
+  created_at: number;
+  started_at: number | null;
+  finished_at: number | null;
+  line_count: number;
+}
+
 // --- System -----------------------------------------------------------------
 
 export interface NetworkInterface {

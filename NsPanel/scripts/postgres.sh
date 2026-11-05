@@ -6,9 +6,27 @@
 #  as ALLOWED_SUBNETS that may legitimately be unset.)
 set -eo pipefail
 
-
 PG_VERSION="16"
 PG_CRED_FILE="/etc/postgresql/credentials.yml"
+
+# ALTER USER over stdin, never argv: argv shows up in `ps` and in the job log.
+# Validators keep quotes out of panel passwords; gen_password is hex.
+_pg_set_password() {
+    local sql saved=""
+    sql="$(printf "ALTER USER postgres PASSWORD '%s';" "$1")"
+    if printf '%s\n' "$sql" \
+        | (cd /tmp && runuser -u postgres -- psql -q -v ON_ERROR_STOP=1) 2>/dev/null; then
+        return 0
+    fi
+    # Servers installed by an older panel have `local all all md5`, which also
+    # covers postgres: authenticate with the saved password instead.
+    echo "▶  Peer login refused — using the saved password..."
+    if [ -f "$PG_CRED_FILE" ]; then
+        saved="$(sed -n 's/^admin_password: "\(.*\)"$/\1/p' "$PG_CRED_FILE")"
+    fi
+    printf '%s\n' "$sql" | PGPASSWORD="$saved" \
+        psql -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d postgres
+}
 
 install_postgres() {
     echo "════════════════════════════════════════════════════════════"
@@ -39,14 +57,15 @@ https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
 
     # ── Password: use the one supplied by the panel, else generate one ──────
     local db_password
-    db_password="${DB_PASSWORD:-$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 28)}"
+    db_password="${DB_PASSWORD:-$(gen_password)}"
 
     echo "▶  Setting postgres user password..."
-    su - postgres -c "psql -c \"ALTER USER postgres PASSWORD '${db_password}';\""
+    _pg_set_password "$db_password"
 
     # ── Optimised postgresql.conf ─────────────────────────────────
     echo "▶  Writing postgresql.conf..."
-    cp "${conf_dir}/postgresql.conf" "${conf_dir}/postgresql.conf.bak"
+    # Keep the package's original on re-install instead of backing up our own copy.
+    [ -e "${conf_dir}/postgresql.conf.bak" ] || cp "${conf_dir}/postgresql.conf" "${conf_dir}/postgresql.conf.bak"
     cat > "${conf_dir}/postgresql.conf" <<PGCONF
 # Ubuntu package paths
 data_directory    = '/var/lib/postgresql/${PG_VERSION}/main'
@@ -91,10 +110,13 @@ PGCONF
 
     # ── pg_hba.conf ───────────────────────────────────────────────
     echo "▶  Writing pg_hba.conf..."
-    cp "${conf_dir}/pg_hba.conf" "${conf_dir}/pg_hba.conf.bak"
+    [ -e "${conf_dir}/pg_hba.conf.bak" ] || cp "${conf_dir}/pg_hba.conf" "${conf_dir}/pg_hba.conf.bak"
+    # The first line keeps OS-user `postgres` on peer auth: the panel's own psql
+    # calls (re-install, set_postgres_password) run that way, without a password.
     cat > "${conf_dir}/pg_hba.conf" <<HBACONF
-# TYPE  DATABASE  USER  ADDRESS        METHOD
-local   all       all                  md5
+# TYPE  DATABASE  USER      ADDRESS        METHOD
+local   all       postgres                 peer
+local   all       all                      md5
 host    all       all   127.0.0.1/32   md5
 host    all       all   ::1/128        md5
 # Allow remote (restrict via firewall)
@@ -135,16 +157,12 @@ CRED
     echo "✔  PostgreSQL ${PG_VERSION} installed."
     echo "   Host     : <server-ip>:5432"
     echo "   User     : postgres"
-    echo "   Password : ${db_password}"
+    echo "   Password : saved in ${PG_CRED_FILE} (mode 600)"
     echo "   Allow    : ${ALLOWED_SUBNETS[*]}"
     echo ""
     echo "   Credentials saved to: ${PG_CRED_FILE}"
     echo "════════════════════════════════════════════════════════════"
 }
-
-# Backwards-compatible aliases
-install_postgres_remote()      { install_postgres; }
-install_postgres_remote_auto() { install_postgres; }
 
 uninstall_postgres() {
     echo "════════════════════════════════════════════════════════════"
@@ -163,12 +181,12 @@ uninstall_postgres() {
 set_postgres_password() {
     local db_password="${DB_PASSWORD:?DB_PASSWORD env var required}"
     echo "▶  Updating postgres user password..."
-    su - postgres -c "psql -c \"ALTER USER postgres PASSWORD '${db_password}';\""
+    _pg_set_password "$db_password"
 
     if [ -f "$PG_CRED_FILE" ]; then
         echo "▶  Updating ${PG_CRED_FILE}..."
-        sed -i -E "s|^admin_password:.*|admin_password: \"${db_password}\"|" "$PG_CRED_FILE"
-        sed -i -E "s|^connection_string:.*|connection_string: \"postgresql://postgres:${db_password}@127.0.0.1:5432/postgres\"|" "$PG_CRED_FILE"
+        cred_set "$PG_CRED_FILE" admin_password "${db_password}"
+        cred_set "$PG_CRED_FILE" connection_string "postgresql://postgres:${db_password}@127.0.0.1:5432/postgres"
     fi
     echo "✔  PostgreSQL password updated."
 }

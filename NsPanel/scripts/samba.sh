@@ -163,7 +163,7 @@ set_samba_password() {
     printf '%s\n%s\n' "$password" "$password" | smbpasswd -s "$user"
 
     echo "▶  Updating ${SAMBA_CRED_FILE}..."
-    sed -i -E "s|^password:.*|password: \"${password}\"|" "$SAMBA_CRED_FILE"
+    cred_set "$SAMBA_CRED_FILE" password "${password}"
     echo "✔  Samba password updated for '${user}'."
 }
 

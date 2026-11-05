@@ -27,6 +27,13 @@ let source: EventSource | undefined;
 function dismiss(): void {
   clearInterval(elapsedTimer);
   source?.close();
+  if (statusPhase.value === 'running' && props.overlay.jobId) {
+    ui.addToast({
+      t: 'Still running in the background',
+      d: 'Reopen its output from the Jobs screen.',
+      k: 'info',
+    });
+  }
   emit('close');
 }
 
@@ -53,22 +60,44 @@ function copyLogs(): void {
 onMounted(() => {
   document.addEventListener('keydown', onKeydown);
 
-  const start = performance.now();
-  elapsedTimer = setInterval(() => {
+  // Reset by the stream's `meta` event, so a dialog reopened mid-job (after a
+  // reload or from the Jobs screen) shows the job's real age.
+  let start = performance.now();
+  const tick = (): void => {
     elapsed.value = `${((performance.now() - start) / 1000).toFixed(1)}s`;
-  }, 100);
+  };
+  elapsedTimer = setInterval(tick, 100);
 
   if (!props.overlay.jobId) return;
 
   source = new EventSource(`/stream/${props.overlay.jobId}`);
+
+  source.addEventListener('meta', (event) => {
+    try {
+      const meta = JSON.parse((event as MessageEvent<string>).data) as { elapsed?: number };
+      if (typeof meta.elapsed === 'number') {
+        start = performance.now() - meta.elapsed * 1000;
+        tick();
+      }
+    } catch {
+      /* older panel without meta — keep counting from open */
+    }
+  });
 
   source.addEventListener('line', (event) => {
     lines.value.push({ html: ansiToHtml((event as MessageEvent<string>).data) });
     scrollToEnd();
   });
 
-  source.addEventListener('error', () => {
-    lines.value.push({ html: '\n[SSE connection error / interrupted]' });
+  source.addEventListener('error', (event) => {
+    // A server-sent `error` event carries data (unknown job); a dropped
+    // connection is a bare Event.
+    const unknownJob = typeof (event as MessageEvent<unknown>).data === 'string';
+    lines.value.push({
+      html: unknownJob
+        ? '\n[Job not found — the panel was restarted or the job was evicted]'
+        : '\n[SSE connection error / interrupted]',
+    });
     scrollToEnd();
     statusPhase.value = 'failed';
     exitCode.value = 1;
@@ -80,6 +109,7 @@ onMounted(() => {
     const code = Number.parseInt((event as MessageEvent<string>).data, 10);
     exitCode.value = Number.isNaN(code) ? 0 : code;
     statusPhase.value = exitCode.value === 0 ? 'done' : 'failed';
+    tick();
     clearInterval(elapsedTimer);
     source?.close();
     if (props.overlay.onDone) void nextTick(() => props.overlay.onDone?.());

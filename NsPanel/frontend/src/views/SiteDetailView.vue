@@ -8,7 +8,9 @@ import { fetchData } from '@/api/client';
 import OutputDialog from '@/components/OutputDialog.vue';
 import Btn from '@/components/ui/Btn.vue';
 import Card from '@/components/ui/Card.vue';
+import EmptyState from '@/components/ui/EmptyState.vue';
 import LIcon from '@/components/ui/LIcon.vue';
+import Skeleton from '@/components/ui/Skeleton.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
 import TypeChip from '@/components/ui/TypeChip.vue';
 import { useJobRunner } from '@/composables/useJobs';
@@ -22,7 +24,7 @@ const router = useRouter();
 const ui = useUiStore();
 const { run } = useJobRunner();
 const sitesStore = useSitesStore();
-const { sites } = storeToRefs(sitesStore);
+const { loaded } = storeToRefs(sitesStore);
 const { host } = storeToRefs(useSystemStore());
 
 const showConfig = ref(false);
@@ -30,7 +32,9 @@ const configContent = ref('');
 const showLogs = ref(false);
 const logsContent = ref('');
 
-const site = computed(() => sitesStore.bySlug(props.slug) ?? sites.value[0]);
+// Never fall back to another site: a stale or mistyped URL must not put
+// Start/Stop/Disable buttons in front of a different site.
+const site = computed(() => sitesStore.bySlug(props.slug));
 
 const TYPE_LABEL: Record<string, string> = {
   dotnet: '.NET Core (Kestrel)',
@@ -255,5 +259,16 @@ function siteAction(action: string, title: string): void {
     />
   </section>
 
-  <section v-else class="text-c-tx2 text-sm-var">Site not found.</section>
+  <section v-else-if="!loaded">
+    <Skeleton variant="cards" :count="3" />
+  </section>
+
+  <section v-else>
+    <EmptyState icon="globe" title="Site not found" :hint="`No site named '${slug}' exists.`" />
+    <div class="flex justify-center">
+      <Btn variant="ghost" sm @click="router.push('/sites')">
+        <LIcon name="arrow-left" /> Back to sites
+      </Btn>
+    </div>
+  </section>
 </template>
