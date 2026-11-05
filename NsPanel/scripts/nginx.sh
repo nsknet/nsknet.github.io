@@ -436,10 +436,28 @@ NGINX
     fi
 }
 
+# --- Helper: http-level map for WebSocket-aware Connection header ---
+# Sends "Connection: upgrade" only when the client asked for an upgrade and
+# "close" otherwise. Lives in conf.d (included inside http {}) so it also
+# reaches servers whose nginx.conf predates this helper. Idempotent.
+_ensure_connection_upgrade_map() {
+    local map_conf="/var/www/nginx/conf.d/00-connection-upgrade.conf"
+    [[ -f "$map_conf" ]] && return 0
+    mkdir -p "$(dirname "$map_conf")"
+    cat > "$map_conf" <<'NGINX'
+# Managed by NsPanel (nginx.sh) — used by proxy sites as $connection_upgrade.
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+NGINX
+}
+
 # --- Helper: proxy nginx block ---
 _write_proxy_conf() {
     local conf="$1" name="$2" sname="$3" target="$4" domain="$5" port="$6"
     local listen_line
+    _ensure_connection_upgrade_map
     if [[ "$domain" == true ]]; then
         listen_line="listen 80; server_name ${sname};"
     else
@@ -463,9 +481,17 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_http_version 1.1;
         proxy_set_header Upgrade    \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_read_timeout 300s;
+        proxy_set_header Connection \$connection_upgrade;
+
+        # Stream responses straight through (SSE / token streaming, e.g. LLM
+        # APIs); buffering would hold chunks back until the buffer fills.
+        proxy_buffering off;
+        proxy_cache     off;
+
+        # Long-running requests (LLM generation, reports) must not hit a 504.
         proxy_connect_timeout 60s;
+        proxy_read_timeout    900s;
+        proxy_send_timeout    900s;
     }
 
     error_page 500 502 503 504 /50x.html;
