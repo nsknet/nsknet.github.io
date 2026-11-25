@@ -51,6 +51,7 @@ def describe(module: Module) -> ToolInfo:
         logo=module.logo,
         requires_password=module.requires_password,
         firewall_ports=list(module.firewall_ports or []),
+        allow_public=bool(getattr(module, "allow_public", True)),
         install_params=list(module.install_params or []),
         can_uninstall=bool(module.uninstall_function),
         can_change_password=bool(module.change_password_function),

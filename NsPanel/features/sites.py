@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 
-from config import SITE_LOG_TAIL_LINES, SITES_DIR
+from config import NGINX_CONF_DIR, NGINX_LOG_DIR, SITE_LOG_TAIL_LINES, SITES_DIR
 from features import systemctl
 
 
@@ -104,10 +104,24 @@ def get_site(name: str) -> dict | None:
     return info
 
 
+def _inside(path: Path, root: Path) -> bool:
+    """True when `path` resolves under `root`: info.yml is a file on disk, so the
+    paths it names are only trusted inside the directories the panel owns."""
+    try:
+        return path.resolve().is_relative_to(root.resolve())
+    except (OSError, ValueError):
+        return False
+
+
 def read_config(info: dict) -> str:
     conf = (info.get("paths") or {}).get("nginx_conf")
-    if conf and Path(conf).exists():
-        return Path(conf).read_text(encoding="utf-8", errors="replace")
+    if not conf:
+        return "(nginx config file not found)"
+    path = Path(conf)
+    if not _inside(path, NGINX_CONF_DIR):
+        return f"(refusing to read {conf}: outside {NGINX_CONF_DIR})"
+    if path.exists():
+        return path.read_text(encoding="utf-8", errors="replace")
     return "(nginx config file not found)"
 
 
@@ -124,7 +138,9 @@ def _tail_file(path: Path, n: int) -> str:
 def tail_logs(info: dict, n: int = SITE_LOG_TAIL_LINES) -> dict:
     """Last n lines of each relevant log, keyed by a human label."""
     name = info.get("name")
-    log_dir = Path((info.get("paths") or {}).get("log_dir", "/var/www/nginx/log"))
+    log_dir = Path((info.get("paths") or {}).get("log_dir", str(NGINX_LOG_DIR)))
+    if not _inside(log_dir, NGINX_LOG_DIR):
+        log_dir = NGINX_LOG_DIR
     out = {
         "nginx access": _tail_file(log_dir / f"{name}-access.log", n),
         "nginx error": _tail_file(log_dir / f"{name}-error.log", n),

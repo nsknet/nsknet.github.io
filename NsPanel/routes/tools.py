@@ -2,6 +2,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 
 from core import audit, jobs
 from core.schemas import DataResponse, JobResponse, Tool
@@ -70,6 +71,10 @@ def _resolve_subnets(module: Module, allowed_subnets: str | None) -> str | None:
         return None
     # 0.0.0.0/0 (any) makes every other subnet redundant — collapse to it.
     if "0.0.0.0/0" in requested:
+        if not module.allow_public:
+            raise bad_request(
+                f"{module.display_name} has no login of its own; open it to private subnets only."
+            )
         return "0.0.0.0/0"
     return " ".join(requested)
 
@@ -92,7 +97,8 @@ async def install_tool(
     # Re-install re-runs the installer over an existing install, so it skips the
     # already-installed guard that a fresh install enforces.
     is_reinstall = str(reinstall).lower() in ("1", "true", "yes", "on")
-    if module.is_installed() and not is_reinstall:
+    # is_installed() shells out (dpkg/which): keep it off the event loop.
+    if await run_in_threadpool(module.is_installed) and not is_reinstall:
         audit.log("tool.install_refused", f"name={name} reason=already_installed")
         raise bad_request(f"{module.display_name} is already installed.")
 

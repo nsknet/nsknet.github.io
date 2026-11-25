@@ -1,50 +1,41 @@
-"""HTTP Basic Auth, plus the CSRF guard that Basic Auth needs.
+"""Session auth for every route, plus the CSRF guard.
 
-Password is taken from the PANEL_PASSWORD env var (set by run.sh) or, if
-unset (e.g. uvicorn started directly), generated here. Either way it is
-printed once at startup by app.py's lifespan handler.
+A login (routes/auth.py) sets an HttpOnly, SameSite=Strict session cookie;
+`require_session` admits a request only with a live session. The cookie is
+never readable by script and never sent on cross-site requests.
 
-Browsers re-send cached Basic credentials on *any* request to the panel's
-origin, including a form another website auto-submits. So every state-changing
-request must also carry the `X-NsPanel: 1` header: a custom header cannot be
-set by a plain cross-site form, and from cross-site script it forces a CORS
-preflight the panel never approves.
+SameSite already stops a foreign page from riding the session, but the panel
+keeps a second, independent guard on every state-changing request: it must
+carry the `X-NsPanel: 1` header (a plain cross-site form cannot set it, and
+cross-site script would need a CORS preflight the panel never approves), and
+must not come from another origin.
 """
-import os
-import secrets
+from urllib.parse import urlsplit
 
-from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi import HTTPException, Request, status
 
-from config import USERNAME
-from core import audit
+import config
+from core import audit, session
 
-_security = HTTPBasic()
 CSRF_HEADER = "X-NsPanel"
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
-_PASSWORD = os.environ.get("PANEL_PASSWORD") or secrets.token_urlsafe(16)
-_login_logged = False
 
 
-def get_password() -> str:
-    return _PASSWORD
+def client_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
 
 
-def require_auth(credentials: HTTPBasicCredentials = Depends(_security)) -> str:
-    user_ok = secrets.compare_digest(credentials.username, USERNAME)
-    pass_ok = secrets.compare_digest(credentials.password, _PASSWORD)
-    if not (user_ok and pass_ok):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-    # Single-user panel: log the login once per process.
-    global _login_logged
-    if not _login_logged:
-        _login_logged = True
-        audit.log("login", f"user '{USERNAME}' authenticated")
-    return credentials.username
+async def require_session(request: Request) -> str:
+    """Dependency: the logged-in username, or 401.
+
+    Async on purpose: it runs in the request's own task, so the audit actor it
+    sets is inherited by the (sync, threadpool) route handler that follows.
+    """
+    current = session.get(request.cookies.get(config.SESSION_COOKIE))
+    if current is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not signed in")
+    audit.set_actor(current.username, client_ip(request))
+    return current.username
 
 
 def require_csrf_header(request: Request) -> None:
@@ -53,7 +44,10 @@ def require_csrf_header(request: Request) -> None:
         return
     if request.headers.get("sec-fetch-site") == "cross-site":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cross-site request refused")
+    origin = request.headers.get("origin")
+    if origin and origin != "null":
+        host = request.headers.get("host", "")
+        if urlsplit(origin).netloc.lower() != host.lower():
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cross-origin request refused")
     if request.headers.get(CSRF_HEADER) != "1":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail=f"Missing {CSRF_HEADER} header"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Missing {CSRF_HEADER} header")

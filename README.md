@@ -14,7 +14,7 @@ This repository is two things at once:
 On the Ubuntu VPS you want to manage, as root:
 
 ```bash
-/bin/bash -c "$(curl -fsSL nsknet.github.io/nspanel.sh)"
+/bin/bash -c "$(curl --proto =https -fsSL https://nsknet.github.io/nspanel.sh)"
 ```
 
 Prompts for a branch when several exist, then auto-selects the default after 10s.
@@ -22,9 +22,9 @@ Prompts for a branch when several exist, then auto-selects the default after 10s
 Pick a branch explicitly:
 
 ```bash
-/bin/bash -c "$(curl -fsSL nsknet.github.io/nspanel.sh)" dev
-# or: BRANCH=dev /bin/bash -c "$(curl -fsSL nsknet.github.io/nspanel.sh)"
-# or: NSPANEL_HOST=0.0.0.0 /bin/bash -c "$(curl -fsSL nsknet.github.io/nspanel.sh)" dev
+/bin/bash -c "$(curl --proto =https -fsSL https://nsknet.github.io/nspanel.sh)" dev
+# or: BRANCH=dev /bin/bash -c "$(curl --proto =https -fsSL https://nsknet.github.io/nspanel.sh)"
+# or: NSPANEL_HOST=0.0.0.0 /bin/bash -c "$(curl --proto =https -fsSL https://nsknet.github.io/nspanel.sh)" dev
 ```
 
 Or clone and run it yourself:

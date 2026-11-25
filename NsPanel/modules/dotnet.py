@@ -5,7 +5,7 @@ from modules.base import Module
 class DotnetModule(Module):
     name = "dotnet"
     display_name = ".NET SDK"
-    description = "Installs the .NET SDK 6/7/8/9/10 — needed for .NET Core sites."
+    description = "Installs the .NET SDK (10.0 by default; DOTNET_VERSIONS adds others) for .NET sites."
     script = "netcore.sh"
     bash_function = "install_netcore"
     uninstall_function = "uninstall_netcore"

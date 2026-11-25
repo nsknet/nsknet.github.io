@@ -16,10 +16,12 @@ import { loadRouteData } from './composables/useScreenData';
 import { START_LOCATION } from 'vue-router';
 
 import { router } from './router';
+import { useAuthStore } from './stores/auth';
 
 const app = createApp(App);
 app.use(createPinia());
 app.use(router);
+const auth = useAuthStore();
 
 // Screens declare what they need in their route meta. The load is fired after
 // navigation, never awaited: a slow probe must not freeze the UI on the old
@@ -30,6 +32,8 @@ app.use(router);
 router.afterEach((to, from, failure) => {
   if (failure) return;
   if (from !== START_LOCATION && to.path === from.path) return;
+  // Before sign-in there is nothing to load; App.vue loads the route after login.
+  if (auth.status !== 'signed-in') return;
   void loadRouteData(to.meta.loads);
 });
 

@@ -5,11 +5,20 @@ these. Keeping the patterns in one module means a route cannot accidentally use
 a laxer rule than its neighbour for the same kind of value.
 """
 import re
+from typing import Annotated
 
 from fastapi import HTTPException
+from fastapi import Path as PathParam
 
 # Unit / site names — also used as filenames under /var/www.
 NAME = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$")
+# A `{name}` in a URL path: same rule, checked before the handler runs, so a
+# value like `..` or `-foo` never reaches a path join or a systemctl argv.
+ResourceName = Annotated[str, PathParam(pattern=NAME.pattern, max_length=128)]
+# One `Environment=` entry of a unit: KEY=value on a single line.
+ENV_ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=[^\r\n]*$")
+# Unix user names (useradd's default rule).
+UNIX_USER = re.compile(r"^[a-z_][a-z0-9_-]{0,31}\$?$")
 DOMAIN = re.compile(r"^[a-zA-Z0-9.-]+$")
 DLL = re.compile(r"^[a-zA-Z0-9._-]+$")
 PROXY_TARGET = re.compile(r"^https?://[a-zA-Z0-9.\-:/]+$")

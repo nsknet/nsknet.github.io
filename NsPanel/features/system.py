@@ -16,8 +16,13 @@ except ImportError:  # pragma: no cover - yaml is a declared dependency
     yaml = None
 
 
+# Primed at import so the first non-blocking reading is meaningful.
+psutil.cpu_percent(interval=None)
+
+
 def get_stats() -> dict:
-    cpu = psutil.cpu_percent(interval=0.3)
+    # Non-blocking: utilisation since the previous call (dashboard polls every few seconds).
+    cpu = psutil.cpu_percent(interval=None)
     vm = psutil.virtual_memory()
     disk = psutil.disk_usage("/")
     uptime_s = int(time.time() - psutil.boot_time())
@@ -47,6 +52,11 @@ def get_full_info() -> dict:
     cpu_physical = psutil.cpu_count(logical=False)
 
     netplan = _read_netplan_config()
+    live_gateways = _default_gateways()
+    try:
+        link_stats = psutil.net_if_stats()
+    except OSError:
+        link_stats = {}
     ips: list[dict] = []
     for iface, addrs in psutil.net_if_addrs().items():
         for addr in addrs:
@@ -59,8 +69,13 @@ def get_full_info() -> dict:
                     "prefix": prefix,
                     "cidr": f"{addr.address}/{prefix}" if prefix is not None else addr.address,
                     "method": cfg.get("method", "unknown"),
-                    "gateway": cfg.get("gateway", ""),
+                    # DHCP-assigned gateways are not in netplan; fall back to the kernel route.
+                    "gateway": cfg.get("gateway") or live_gateways.get(iface, ""),
                     "dns": cfg.get("dns", []),
+                    # Real link state instead of assuming "up".
+                    "up": bool(getattr(link_stats.get(iface), "isup", False)),
+                    "speed_mbps": getattr(link_stats.get(iface), "speed", 0) or None,
+                    "mtu": getattr(link_stats.get(iface), "mtu", None),
                 })
 
     return {
@@ -79,6 +94,25 @@ def get_full_info() -> dict:
         "ips": ips,
         "timezone": _read_timezone(),
     }
+
+
+def _default_gateways() -> dict[str, str]:
+    """Interface -> IPv4 default gateway, from the live routing table."""
+    if not shutil.which("ip"):
+        return {}
+    try:
+        out = subprocess.run(
+            ["ip", "-4", "route", "show", "default"], capture_output=True, text=True, timeout=5
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    gateways: dict[str, str] = {}
+    for line in out.splitlines():
+        words = line.split()
+        if "via" in words and "dev" in words:
+            dev = words[words.index("dev") + 1]
+            gateways.setdefault(dev, words[words.index("via") + 1])
+    return gateways
 
 
 def _netmask_to_prefix(netmask: str | None) -> int | None:
@@ -148,6 +182,39 @@ def _read_timezone() -> str:
     except Exception:
         pass
     return "unknown"
+
+
+def ssh_ports() -> list[int]:
+    """Ports sshd listens on (effective config), falling back to 22."""
+    ports: set[int] = set()
+    if shutil.which("sshd"):
+        try:
+            out = subprocess.run(["sshd", "-T"], capture_output=True, text=True, timeout=5).stdout
+            ports = {int(line.split()[1]) for line in out.splitlines()
+                     if line.startswith("port ") and line.split()[1].isdigit()}
+        except (OSError, subprocess.SubprocessError):
+            ports = set()
+    return sorted(ports) or [22]
+
+
+def ufw_defaults() -> dict[str, str]:
+    """`{incoming, outgoing, routed}` default policies, empty when unknown."""
+    if not shutil.which("ufw"):
+        return {}
+    try:
+        out = subprocess.run(["ufw", "status", "verbose"], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    match = re.search(r"Default:\s*(.+)", out)
+    if not match:
+        return {}
+    defaults: dict[str, str] = {}
+    for part in match.group(1).split(","):
+        words = part.strip().split()
+        if len(words) >= 2:
+            direction = words[1].strip("()")
+            defaults[direction] = words[0]
+    return defaults
 
 
 def get_ufw_info() -> dict:

@@ -1,10 +1,19 @@
 <script setup lang="ts">
-/** DHCP or a static IPv4 address for one interface. */
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+/** DHCP or a static IPv4 address for one interface.
+ *
+ * Opened through `ui.openNetworkDialog`. `onConfirm` may return a promise of
+ * the action's result: the dialog stays open while it runs and when it
+ * resolves to null/false (the request failed), and closes otherwise.
+ * A static change is confirmed first: it can drop the session.
+ */
+import { computed, reactive, ref } from 'vue';
 
 import { useUiStore, type NetworkDialog } from '@/stores/ui';
+import { cidr, IPV4, ipv4, sameSubnet } from '@/utils/validate';
 
+import BaseDialog from './ui/BaseDialog.vue';
 import Btn from './ui/Btn.vue';
+import Field from './ui/Field.vue';
 import LIcon from './ui/LIcon.vue';
 
 const props = defineProps<{ dialog: NetworkDialog }>();
@@ -15,221 +24,256 @@ const ui = useUiStore();
 const iface = props.dialog.iface;
 const current = props.dialog.current;
 
-const mode = ref<'dhcp' | 'manual'>(current.method === 'dhcp' ? 'dhcp' : 'manual');
-const address = ref(
-  current.cidr || (current.ip ? (current.prefix != null ? `${current.ip}/${current.prefix}` : current.ip) : ''),
-);
-const gateway = ref(current.gateway || '');
-const dns = ref(Array.isArray(current.dns) ? current.dns.join(', ') : current.dns || '1.1.1.1');
+const initial = {
+  mode: (current.method === 'dhcp' ? 'dhcp' : 'manual') as 'dhcp' | 'manual',
+  address: current.cidr || (current.ip && current.prefix != null ? `${current.ip}/${current.prefix}` : current.ip || ''),
+  gateway: current.gateway || '',
+  dns: (Array.isArray(current.dns) ? current.dns : []).join(', '),
+};
+const form = reactive({ ...initial });
+const submitted = ref(false);
+const touched = reactive({ address: false, gateway: false, dns: false });
+const pending = ref(false);
 
-// Mirrors the backend's checks so mistakes are flagged before submitting.
-const IPV4 = /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/;
-
-function validIp(value: string): boolean {
-  return IPV4.test(value.trim());
-}
-
-function validCidr(value: string): boolean {
-  const match = value.trim().match(/^(.+)\/(\d{1,2})$/);
-  if (!match) return false;
-  const prefix = Number(match[2]);
-  return IPV4.test(match[1]) && prefix >= 0 && prefix <= 32;
-}
-
-const addressError = computed(
-  () => mode.value === 'manual' && !!address.value.trim() && !validCidr(address.value),
-);
-const gatewayError = computed(
-  () => mode.value === 'manual' && !!gateway.value.trim() && !validIp(gateway.value),
-);
-
-function dismiss(): void {
-  emit('close');
-}
-
-function onKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Escape') dismiss();
-}
-
-onMounted(() => document.addEventListener('keydown', onKeydown));
-onUnmounted(() => document.removeEventListener('keydown', onKeydown));
-
-function confirm(): void {
-  if (mode.value === 'dhcp') {
-    dismiss();
-    props.dialog.onConfirm({ iface, method: 'dhcp' });
-    return;
-  }
-
-  if (!validCidr(address.value)) {
-    ui.addToast({
-      t: 'Invalid IP address',
-      d: 'Use CIDR notation, e.g. 192.168.1.50/24',
-      k: 'warn',
-    });
-    return;
-  }
-  if (gateway.value.trim() && !validIp(gateway.value)) {
-    ui.addToast({ t: 'Invalid gateway', d: 'Enter a valid IPv4 address.', k: 'warn' });
-    return;
-  }
-
-  const servers = dns.value
+const dnsServers = computed(() =>
+  form.dns
     .split(/[,\s]+/)
     .map((server) => server.trim())
-    .filter(Boolean);
-  for (const server of servers) {
-    if (!validIp(server)) {
-      ui.addToast({ t: 'Invalid DNS server', d: server, k: 'warn' });
-      return;
-    }
+    .filter(Boolean),
+);
+
+const addressError = computed(() => {
+  if (form.mode !== 'manual') return '';
+  if (!form.address.trim()) return 'Enter the address with its prefix, e.g. 192.168.1.50/24.';
+  if (cidr(form.address)) return 'Use CIDR notation, e.g. 192.168.1.50/24.';
+  const prefix = Number(form.address.split('/')[1]);
+  return prefix < 8 ? 'A prefix shorter than /8 is almost certainly a mistake.' : '';
+});
+
+const gatewayError = computed(() => {
+  if (form.mode !== 'manual') return '';
+  if (!form.gateway.trim()) return 'A gateway is required: without it the host loses its default route.';
+  if (ipv4(form.gateway)) return ipv4(form.gateway);
+  if (addressError.value) return '';
+  const [address, prefix] = form.address.trim().split('/');
+  if (form.gateway.trim() === address) return 'The gateway cannot be this interface’s own address.';
+  if (Number(prefix) < 32 && !sameSubnet(form.address, form.gateway)) {
+    return `The gateway must be inside ${networkOf(form.address)}.`;
+  }
+  return '';
+});
+
+const dnsError = computed(() => {
+  if (form.mode !== 'manual') return '';
+  const bad = dnsServers.value.find((server) => !IPV4.test(server));
+  return bad ? `${bad} is not an IPv4 address.` : '';
+});
+
+const show = (key: keyof typeof touched, message: string) => (submitted.value || touched[key] ? message : '');
+
+const dirty = computed(
+  () =>
+    form.mode !== initial.mode ||
+    form.address !== initial.address ||
+    form.gateway !== initial.gateway ||
+    form.dns !== initial.dns,
+);
+
+function networkOf(address: string): string {
+  const [ip, prefixText] = address.trim().split('/');
+  const prefix = Number(prefixText);
+  const value = ip.split('.').reduce((acc, part) => (acc << 8) + Number(part), 0) >>> 0;
+  const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0;
+  const net = (value & mask) >>> 0;
+  return `${[24, 16, 8, 0].map((shift) => (net >>> shift) & 255).join('.')}/${prefix}`;
+}
+
+async function apply(values: Record<string, string>): Promise<void> {
+  pending.value = true;
+  let ok = true;
+  try {
+    const result: unknown = await Promise.resolve(props.dialog.onConfirm(values) as unknown);
+    ok = result !== null && result !== false;
+  } catch {
+    ok = false;
+  } finally {
+    pending.value = false;
+  }
+  if (ok) emit('close');
+}
+
+function submit(): void {
+  submitted.value = true;
+  if (form.mode === 'dhcp') {
+    ui.confirmThen(
+      `Switch ${iface} to DHCP?`,
+      'The address may change to whatever the network’s DHCP server assigns.',
+      () => void apply({ iface, method: 'dhcp' }),
+      {
+        danger: true,
+        confirmLabel: 'Switch to DHCP',
+        details: [
+          'If you reach the panel through this interface, reconnect on the new address.',
+          'The server rolls back automatically if the interface gets no address.',
+        ],
+      },
+    );
+    return;
   }
 
-  dismiss();
-  props.dialog.onConfirm({
-    iface,
-    method: 'manual',
-    address: address.value.trim(),
-    // A manual config with no gateway would leave the host without a default
-    // route, so fall back rather than silently dropping it off the network.
-    gateway: gateway.value.trim() || '192.168.1.1',
-    dns: servers.join(','),
-  });
+  if (addressError.value || gatewayError.value || dnsError.value) return;
+  const address = form.address.trim();
+  const gateway = form.gateway.trim();
+  ui.confirmThen(
+    `Apply ${address} to ${iface}?`,
+    'netplan applies the change immediately. If you are connected through this interface, your session may drop.',
+    () =>
+      void apply({
+        iface,
+        method: 'manual',
+        address,
+        gateway,
+        dns: dnsServers.value.join(','),
+      }),
+    {
+      danger: true,
+      confirmLabel: 'Apply static address',
+      details: [
+        `Address ${address}, gateway ${gateway}${dnsServers.value.length ? `, DNS ${dnsServers.value.join(', ')}` : ''}.`,
+        'If the gateway does not answer within about 10 seconds, the server restores the previous configuration by itself.',
+        address.split('/')[0] !== current.ip
+          ? `The address changes from ${current.ip || 'none'}: reconnect to the panel on ${address.split('/')[0]}.`
+          : 'The address stays the same.',
+      ],
+    },
+  );
 }
 </script>
 
 <template>
-  <div
-    class="fixed inset-0 z-[200] grid place-items-center p-10 px-6 bg-black/40 backdrop-blur-[4px] animate-fade"
-    @click.self="dismiss"
+  <BaseDialog
+    :title="`Configure ${iface}`"
+    description="IPv4 addressing for this interface, applied with netplan."
+    icon="network"
+    tone="accent"
+    :dirty="dirty"
+    :closable="!pending"
+    @close="emit('close')"
   >
-    <div
-      class="w-full max-w-[460px] bg-c-card border border-c-border rounded-theme-lg shadow-lg p-5 animate-pop"
-      role="dialog"
-      aria-modal="true"
-    >
-      <div class="flex items-center gap-3 mb-4">
-        <div
-          class="w-10 h-10 rounded-[10px] bg-c-acsoft text-c-actx grid place-items-center shrink-0"
-        >
-          <LIcon name="network" is="width:20px;height:20px" />
-        </div>
-        <div class="min-w-0">
-          <h3 class="m-0 text-base font-semibold tracking-[-0.01em] truncate">
-            Edit <span class="mono">{{ iface }}</span>
-          </h3>
-          <p class="m-0 text-c-tx2 text-xs-var">Configure IPv4 addressing for this interface.</p>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-2 gap-1.5 mb-4">
-        <button
-          type="button"
-          :class="[
-            'flex flex-col items-start gap-0.5 px-3 py-2.5 rounded-theme border text-left transition-colors',
-            mode === 'dhcp'
-              ? 'border-c-accent bg-c-acsoft text-c-tx'
-              : 'border-c-border bg-c-elev text-c-tx2 hover:bg-c-hover',
-          ]"
-          @click="mode = 'dhcp'"
-        >
-          <span class="flex items-center gap-1.5 text-sm-var font-medium">
-            <LIcon name="zap" is="width:14px;height:14px" /> Automatic
-          </span>
-          <span class="text-[11px] text-c-tx3">DHCP — assigned by the network</span>
-        </button>
-        <button
-          type="button"
-          :class="[
-            'flex flex-col items-start gap-0.5 px-3 py-2.5 rounded-theme border text-left transition-colors',
-            mode === 'manual'
-              ? 'border-c-accent bg-c-acsoft text-c-tx'
-              : 'border-c-border bg-c-elev text-c-tx2 hover:bg-c-hover',
-          ]"
-          @click="mode = 'manual'"
-        >
-          <span class="flex items-center gap-1.5 text-sm-var font-medium">
-            <LIcon name="pencil" is="width:14px;height:14px" /> Manual
-          </span>
-          <span class="text-[11px] text-c-tx3">Static IP address</span>
-        </button>
-      </div>
-
-      <div v-if="mode === 'manual'" class="flex flex-col gap-3">
-        <div>
-          <label class="block text-xs-var text-c-tx2 mb-1.5">
-            <span class="uppercase tracking-[0.05em] text-[10px] font-medium"
-              >IP address (CIDR)</span
-            >
+    <form id="network-form" class="flex flex-col gap-4" novalidate @submit.prevent="submit">
+      <fieldset class="m-0 p-0 border-0 min-w-0">
+        <legend class="text-sm-var font-medium text-c-tx mb-1.5 p-0">Addressing</legend>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <label
+            v-for="option in [
+              { value: 'dhcp', title: 'Automatic (DHCP)', hint: 'Assigned by the network', icon: 'zap' },
+              { value: 'manual', title: 'Static', hint: 'An address you choose', icon: 'pencil' },
+            ]"
+            :key="option.value"
+            :class="[
+              'flex items-start gap-2.5 px-3 py-2.5 rounded-theme border cursor-pointer transition-colors',
+              form.mode === option.value
+                ? 'border-c-accent bg-c-acsoft text-c-tx'
+                : 'border-c-border bg-c-elev text-c-tx2 hover:bg-c-hover',
+            ]"
+          >
+            <input
+              v-model="form.mode"
+              type="radio"
+              name="network-mode"
+              :value="option.value"
+              class="mt-0.5 w-4 h-4 accent-c-accent shrink-0"
+              :data-autofocus="form.mode === option.value ? '' : undefined"
+            />
+            <span class="flex flex-col gap-0.5 min-w-0">
+              <span class="flex items-center gap-1.5 text-sm-var font-medium">
+                <LIcon :name="option.icon" is="width:14px;height:14px" /> {{ option.title }}
+              </span>
+              <span class="text-xs-var text-c-tx2">{{ option.hint }}</span>
+            </span>
           </label>
+        </div>
+      </fieldset>
+
+      <template v-if="form.mode === 'manual'">
+        <Field
+          v-slot="f"
+          label="Address (CIDR)"
+          required
+          :error="show('address', addressError)"
+          help="The address and its prefix length, e.g. 192.168.1.50/24."
+        >
           <input
-            v-model="address"
-            class="input mono w-full"
-            :class="addressError ? 'border-c-danger' : ''"
+            :id="f.id"
+            v-model="form.address"
+            class="input mono"
+            inputmode="decimal"
+            autocomplete="off"
+            spellcheck="false"
             placeholder="192.168.1.50/24"
-            spellcheck="false"
-            autocomplete="off"
+            :aria-describedby="f.describedBy"
+            :aria-invalid="f.invalid"
+            @blur="touched.address = true"
           />
-          <div v-if="addressError" class="text-[11px] text-c-danger mt-1">
-            Enter an address in CIDR notation, e.g. 192.168.1.50/24.
-          </div>
-        </div>
-        <div>
-          <label class="block text-xs-var text-c-tx2 mb-1.5">
-            <span class="uppercase tracking-[0.05em] text-[10px] font-medium">
-              Gateway
-              <span class="text-c-tx3 normal-case tracking-normal"
-                >(optional, defaults to 192.168.1.1)</span
-              >
-            </span>
-          </label>
+        </Field>
+        <Field
+          v-slot="f"
+          label="Gateway"
+          required
+          :error="show('gateway', gatewayError)"
+          help="The router on the same subnet. Required for a static address."
+        >
           <input
-            v-model="gateway"
-            class="input mono w-full"
-            :class="gatewayError ? 'border-c-danger' : ''"
+            :id="f.id"
+            v-model="form.gateway"
+            class="input mono"
+            inputmode="decimal"
+            autocomplete="off"
+            spellcheck="false"
             placeholder="192.168.1.1"
-            spellcheck="false"
-            autocomplete="off"
+            :aria-describedby="f.describedBy"
+            :aria-invalid="f.invalid"
+            @blur="touched.gateway = true"
           />
-          <div v-if="gatewayError" class="text-[11px] text-c-danger mt-1">
-            Enter a valid IPv4 address.
-          </div>
-        </div>
-        <div>
-          <label class="block text-xs-var text-c-tx2 mb-1.5">
-            <span class="uppercase tracking-[0.05em] text-[10px] font-medium">
-              DNS servers
-              <span class="text-c-tx3 normal-case tracking-normal">(optional, comma-separated)</span>
-            </span>
-          </label>
+        </Field>
+        <Field
+          v-slot="f"
+          label="DNS servers"
+          :error="show('dns', dnsError)"
+          help="Optional. IPv4 addresses separated by commas or spaces."
+        >
           <input
-            v-model="dns"
-            class="input mono w-full"
-            placeholder="1.1.1.1, 8.8.8.8"
-            spellcheck="false"
+            :id="f.id"
+            v-model="form.dns"
+            class="input mono"
             autocomplete="off"
+            spellcheck="false"
+            placeholder="1.1.1.1, 8.8.8.8"
+            :aria-describedby="f.describedBy"
+            :aria-invalid="f.invalid"
+            @blur="touched.dns = true"
           />
-        </div>
-      </div>
+        </Field>
+      </template>
 
-      <div v-else class="text-xs-var text-c-tx2 border border-c-border rounded-theme p-3 bg-c-elev">
-        The interface will request its address, gateway and DNS automatically from the network's
-        DHCP server.
-      </div>
+      <p v-else class="m-0 text-sm-var text-c-tx2 border border-c-border rounded-theme p-3 bg-c-elev">
+        The interface asks the network’s DHCP server for its address, gateway and DNS servers.
+      </p>
 
-      <div class="flex items-start gap-1.5 text-[11px] text-c-warn mt-3">
-        <LIcon name="triangle-alert" is="width:12px;height:12px;margin-top:1px;flex-shrink:0" />
+      <p class="m-0 flex items-start gap-1.5 text-xs-var text-c-warn">
+        <LIcon name="triangle-alert" is="width:13px;height:13px;margin-top:2px;flex-shrink:0" />
         <span>
-          Applies via <span class="mono">netplan</span>. If you are connected over
-          <span class="mono">{{ iface }}</span
-          >, your session may briefly drop.
+          If you are connected through <span class="mono">{{ iface }}</span>, your session may drop
+          while the change applies.
         </span>
-      </div>
+      </p>
+    </form>
 
-      <div class="flex justify-end gap-1.5 mt-5">
-        <Btn @click="dismiss">Cancel</Btn>
-        <Btn variant="primary" @click="confirm"><LIcon name="check" /> Apply</Btn>
-      </div>
-    </div>
-  </div>
+    <template #footer>
+      <Btn :disabled="pending" @click="emit('close')">Cancel</Btn>
+      <Btn type="submit" form="network-form" variant="primary" :loading="pending">
+        <LIcon name="check" /> Apply
+      </Btn>
+    </template>
+  </BaseDialog>
 </template>

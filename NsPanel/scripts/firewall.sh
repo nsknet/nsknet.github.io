@@ -20,9 +20,17 @@ install_ufw() {
         log_step "UFW is already installed."
     fi
 
-    # Allow SSH before enabling, or enabling locks the operator out.
-    log_step "Allowing OpenSSH (port 22)..."
-    ufw allow OpenSSH >/dev/null 2>&1 || ufw allow 22/tcp >/dev/null
+    # Allow SSH (on its real port) and the panel before enabling, or enabling
+    # locks the operator out.
+    local ssh_port
+    for ssh_port in $(_ssh_ports); do
+        log_step "Allowing SSH on tcp/${ssh_port}..."
+        ufw allow "${ssh_port}/tcp" comment "SSH" >/dev/null
+    done
+    if [ -n "${NSPANEL_PORT:-}" ]; then
+        log_step "Allowing the panel on tcp/${NSPANEL_PORT}..."
+        ufw allow "${NSPANEL_PORT}/tcp" comment "NsPanel" >/dev/null
+    fi
 
     log_step "Setting defaults: deny incoming, allow outgoing..."
     ufw default deny incoming >/dev/null
@@ -99,8 +107,18 @@ ufw_allow_port() {
 
 ufw_delete_port() {
     local rule_num="${1:?Rule number required}"
-    echo "▶  Deleting rule #${rule_num}..."
-    echo "y" | ufw delete "$rule_num"
+    local expected_to="${2:?Rule target required}"
+
+    # Re-check right before deleting: UFW renumbers rules after every delete.
+    local line
+    line="$(ufw status numbered | grep -E "^\[ *${rule_num}\] " || true)"
+    if [ -z "$line" ] || [[ "$line" != *"$expected_to"* ]]; then
+        echo "❌  Rule #${rule_num} is no longer '${expected_to}'. Nothing was deleted; reload and retry."
+        return 1
+    fi
+
+    echo "▶  Deleting rule #${rule_num}: ${line#*] }"
+    ufw --force delete "$rule_num"
     echo ""
     ufw status numbered
     echo "✔  Rule #${rule_num} deleted."

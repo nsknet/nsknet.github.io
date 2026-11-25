@@ -42,6 +42,7 @@ class JobSummary(BaseModel):
     started_at: float | None = None
     finished_at: float | None = None
     line_count: int = 0
+    cancelled: bool = False
 
 
 class MessageResponse(BaseModel):
@@ -60,6 +61,7 @@ class ToolInfo(BaseModel):
     logo: str | None = None
     requires_password: bool = False
     firewall_ports: list[int] = Field(default_factory=list)
+    allow_public: bool = True
     install_params: list[dict[str, Any]] = Field(default_factory=list)
     can_uninstall: bool = False
     can_change_password: bool = False

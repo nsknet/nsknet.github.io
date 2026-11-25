@@ -4,7 +4,7 @@ import re
 from typing import Annotated, Any
 from zoneinfo import available_timezones
 
-from fastapi import APIRouter, Form
+from fastapi import APIRouter, Form, HTTPException, status
 from pydantic import BaseModel, field_validator
 
 from core import jobs
@@ -44,6 +44,12 @@ def install_utils() -> JobResponse:
         title="Installing Common Utilities",
         audit_action="system.install_utils",
     )
+
+
+@router.get("/timezones")
+def list_timezones() -> DataResponse[list[str]]:
+    """Every IANA zone this host knows, for the searchable picker."""
+    return DataResponse(data=sorted(z for z in available_timezones() if "/" in z or z == "UTC"))
 
 
 @router.post("/set-timezone")
@@ -104,13 +110,19 @@ class NetworkConfig(BaseModel):
         except ValueError as exc:
             raise bad_request("Address must be IPv4 in CIDR notation, e.g. 192.168.1.50/24") from exc
 
+        # A static address without the right default route takes the host off
+        # the network, so the gateway is mandatory and must be on-link.
         gateway = self.gateway.strip()
-        if gateway:
-            try:
-                if ipaddress.ip_address(gateway).version != 4:
-                    raise ValueError
-            except ValueError as exc:
-                raise bad_request(f"Invalid gateway: {gateway}") from exc
+        if not gateway:
+            raise bad_request("A gateway is required for a static address.")
+        try:
+            gw = ipaddress.ip_address(gateway)
+            if gw.version != 4:
+                raise ValueError
+        except ValueError as exc:
+            raise bad_request(f"Invalid gateway: {gateway}") from exc
+        if gw not in iface_addr.network and iface_addr.network.prefixlen < 32:
+            raise bad_request(f"Gateway {gateway} is not inside {iface_addr.network}.")
 
         servers = [s.strip() for s in re.split(r"[,\s]+", self.dns) if s.strip()]
         for server in servers:
@@ -235,6 +247,9 @@ def format_disk(
     label = label.strip()
     if label and not _LABEL_RE.match(label):
         raise bad_request("Label may only contain letters, digits, '.', '_' and '-' (max 32).")
+    in_use = disks_feature.device_in_use(device)
+    if in_use:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"Refusing to format: {in_use}.")
     title = f"Format {device} as {fstype}"
     return jobs.launch_bash(
         "format_disk",

@@ -31,6 +31,9 @@ class Module(ABC):
     # the install dialog lets the user choose which subnets to expose them to
     # (class A/B/C private + loopback, or 0.0.0.0/0). Empty = no firewall prompt.
     firewall_ports: list[int] = []
+    # False for services with no login of their own (an open DNS resolver, a
+    # dashboard without auth): the install refuses to open them to 0.0.0.0/0.
+    allow_public: bool = True
 
     # Extra install-time inputs the dialog renders dynamically. Each spec is a
     # dict: {name, env, type, label, default, options?, help?, min?, max?} where

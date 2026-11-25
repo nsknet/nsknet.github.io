@@ -4,24 +4,20 @@ Service files are stored in SERVICES_DIR (/var/www/services/) and registered
 with systemd via `systemctl enable <path>`. This module handles reading,
 writing, and querying those service files.
 """
+import os
+import re
+import shutil
 import subprocess
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
-from config import SERVICES_DIR
-from features.systemctl import get_process_stats, main_pid
+from config import SERVICES_DIR, TUNNEL_ENV_DIR
+from features.systemctl import get_process_stats, main_pid, service_enabled, service_state
 
 
 def _svc_path(name: str) -> Path:
     return SERVICES_DIR / f"{name}.service"
-
-
-def _run_silent(cmd: list[str], timeout: int = 5) -> str:
-    try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        return r.stdout.strip()
-    except Exception:
-        return "unknown"
 
 
 def list_services() -> list[dict]:
@@ -50,6 +46,7 @@ def write_service(
     user: str,
     env_vars: list[str],
     unit_extra: list[str] | None = None,
+    env_file: Path | None = None,
 ) -> Path:
     """Write a unit file. `unit_extra` lines are appended to the [Unit]
     section verbatim (e.g. After=…, or X-NsPanel-* metadata keys)."""
@@ -69,6 +66,8 @@ def write_service(
         f"SyslogIdentifier={name}",
         f"User={user or 'root'}",
     ]
+    if env_file is not None:
+        lines.append(f"EnvironmentFile={env_file.as_posix()}")
     for ev in env_vars:
         ev = ev.strip()
         if ev:
@@ -78,12 +77,82 @@ def write_service(
     return path
 
 
-def read_service(name: str) -> str:
-    return _svc_path(name).read_text()
+def tunnel_env_path(name: str) -> Path:
+    return TUNNEL_ENV_DIR / f"{name}.env"
 
 
-def write_service_raw(name: str, content: str) -> None:
-    _svc_path(name).write_text(content)
+def write_tunnel_env(name: str, token: str) -> Path:
+    """Store a tunnel token in a root-only EnvironmentFile; return its path.
+
+    cloudflared reads TUNNEL_TOKEN from the environment, so the token never
+    appears in the unit file, in argv, or in `ps`/`systemctl status` output.
+    """
+    TUNNEL_ENV_DIR.mkdir(parents=True, exist_ok=True)
+    os.chmod(TUNNEL_ENV_DIR, 0o700)
+    path = tunnel_env_path(name)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(f"TUNNEL_TOKEN={token}\n")
+    return path
+
+
+# Legacy tunnel units carry the token inline as `--token <value>`.
+_INLINE_TOKEN = re.compile(r"(--token[= ])(\S+)")
+REDACTED = "***"
+
+
+def redact(text: str) -> str:
+    """Mask inline tunnel tokens before unit content or status leaves the server."""
+    return _INLINE_TOKEN.sub(rf"\g<1>{REDACTED}", text)
+
+
+class UnitInvalid(ValueError):
+    """`systemd-analyze verify` rejected an edited unit; the message is its output."""
+
+
+def _verify_unit(name: str, content: str) -> str | None:
+    """systemd-analyze's complaints about `content`, or None when it is clean
+    (or when systemd-analyze is unavailable, e.g. off-Linux)."""
+    if not shutil.which("systemd-analyze"):
+        return None
+    with tempfile.TemporaryDirectory(prefix="nspanel-verify-") as tmp:
+        candidate = Path(tmp) / f"{name}.service"
+        candidate.write_text(content)
+        try:
+            result = subprocess.run(
+                ["systemd-analyze", "verify", str(candidate)], capture_output=True, text=True, timeout=20
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        output = (result.stdout + result.stderr).replace(str(candidate), f"{name}.service").strip()
+        if result.returncode == 0:
+            return None
+        return output or f"systemd-analyze verify failed (exit {result.returncode})"
+
+
+def write_service_raw(name: str, content: str, *, verify: bool = True) -> None:
+    """Save an edited unit: verified, backed up to `<unit>.bak`, then swapped in atomically.
+
+    A redacted inline token is put back from the file on disk, so editing a
+    legacy tunnel unit in the UI does not break it. Raises UnitInvalid when
+    `systemd-analyze verify` rejects the content (unless `verify` is False).
+    """
+    path = _svc_path(name)
+    if f"--token {REDACTED}" in content or f"--token={REDACTED}" in content:
+        match = _INLINE_TOKEN.search(path.read_text()) if path.exists() else None
+        if match:
+            content = content.replace(f"{match.group(1)}{REDACTED}", match.group(0))
+    if not content.endswith("\n"):
+        content += "\n"
+    if verify:
+        problems = _verify_unit(name, content)
+        if problems:
+            raise UnitInvalid(problems)
+    if path.exists():
+        shutil.copy2(path, path.with_name(path.name + ".bak"))
+    tmp = path.with_name(f".{path.name}.tmp")
+    tmp.write_text(content)
+    os.replace(tmp, path)
 
 
 def get_status_output(name: str) -> str:
@@ -92,7 +161,7 @@ def get_status_output(name: str) -> str:
             ["systemctl", "status", "--no-pager", name],
             capture_output=True, text=True, timeout=10,
         )
-        return (r.stdout + r.stderr).strip() or "(no output)"
+        return redact((r.stdout + r.stderr).strip()) or "(no output)"
     except Exception as exc:
         return str(exc)
 
@@ -183,10 +252,10 @@ def get_service(name: str) -> dict | None:
     path = _svc_path(name)
     if not path.exists():
         return None
-    content = path.read_text()
+    content = redact(path.read_text())
     mtime = datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
-    state = _run_silent(["systemctl", "is-active", name]) or "unknown"
-    enabled = _run_silent(["systemctl", "is-enabled", name]) or "unknown"
+    state = service_state(name)
+    enabled = service_enabled(name)
     memory_mb = None
     cpu_percent = None
     pid = None

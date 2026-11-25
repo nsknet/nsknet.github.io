@@ -13,6 +13,10 @@ set -eo pipefail
 
 
 COREDNS_VERSION="1.14.4"
+# SHA-256 of the v1.14.4 release tarballs (from the release's .sha256 files).
+# Update together with COREDNS_VERSION.
+COREDNS_SHA256_AMD64="5b0e6a6a8b97bdcaec65baa70e83ca88ce03ab852355c656e3f7953405cfe36e"
+COREDNS_SHA256_ARM64="b3491ed0fbe530a549640a4073d90037ffafa483f007936e1943c1ae0def7325"
 COREDNS_BIN="/usr/local/bin/coredns"
 COREDNS_DIR="/etc/coredns"
 COREDNS_CONF="${COREDNS_DIR}/Corefile"
@@ -28,7 +32,9 @@ _coredns_ufw_allow_udp() {
     local comment="$2"
 
     command -v ufw >/dev/null 2>&1 || return 0
-    ufw status | grep -q "inactive" && return 0
+    # Like the TCP helper, store the rules even while UFW is inactive, so DNS
+    # over UDP keeps working once the operator enables the firewall. ufw itself
+    # skips a rule that already exists, so a re-install adds no duplicates.
 
     local subnets
     if [ -n "${ALLOWED_SUBNETS// /}" ]; then
@@ -47,7 +53,7 @@ _coredns_ufw_allow_udp() {
             ufw allow from "$cidr" to any port "$port" proto udp comment "$comment" >/dev/null
         fi
     done
-    ufw reload >/dev/null
+    ufw reload >/dev/null 2>&1 || true
 }
 
 # If systemd-resolved holds port 53 (its stub listener binds 127.0.0.53:53),
@@ -81,27 +87,53 @@ install_coredns() {
 
     export DEBIAN_FRONTEND=noninteractive
 
+    # A resolver open to the internet is a DNS amplification source, and
+    # CoreDNS has no login of its own: never expose it to 0.0.0.0/0.
+    _forbid_public_access "CoreDNS"
+
     # ── Dependencies (download + extract + port check) ────────────
     command -v wget   >/dev/null 2>&1 || apt-get install -y wget
     command -v tar    >/dev/null 2>&1 || apt-get install -y tar
     command -v ss     >/dev/null 2>&1 || apt-get install -y iproute2
 
-    # ── Download + install the CoreDNS binary ─────────────────────
-    local arch tgz url tmpdir
-    case "$(uname -m)" in
-        x86_64)  arch="amd64" ;;
-        aarch64) arch="arm64" ;;
-        armv7l)  arch="arm" ;;
-        *)       arch="amd64" ;;
+    # ── Download, verify and install the CoreDNS binary ───────────
+    local arch tgz url tmpdir published expected
+    arch="$(_os_arch)"
+    case "$arch" in
+        amd64) expected="$COREDNS_SHA256_AMD64" ;;
+        arm64) expected="$COREDNS_SHA256_ARM64" ;;
+        *)
+            echo "✗  CoreDNS: architecture ${arch} is not supported here (amd64, arm64)." >&2
+            return 1
+            ;;
     esac
     tgz="coredns_${COREDNS_VERSION}_linux_${arch}.tgz"
     url="https://github.com/coredns/coredns/releases/download/v${COREDNS_VERSION}/${tgz}"
     tmpdir="$(mktemp -d)"
 
     echo "▶  Downloading ${url}..."
-    wget -q -O "${tmpdir}/${tgz}" "$url"
+    if ! wget -q --timeout=60 --tries=3 -O "${tmpdir}/${tgz}" "$url" \
+        || ! wget -q --timeout=60 --tries=3 -O "${tmpdir}/${tgz}.sha256" "${url}.sha256"; then
+        rm -rf "$tmpdir"
+        echo "✗  Could not download CoreDNS ${COREDNS_VERSION} from GitHub." >&2
+        return 1
+    fi
+
+    # The release's own .sha256 must agree with the hash pinned in this script
+    # (so a tampered release is caught too), and the tarball must match it.
+    published="$(awk 'NR == 1 { print $1 }' "${tmpdir}/${tgz}.sha256")"
+    if [[ "${published,,}" != "${expected,,}" ]]; then
+        rm -rf "$tmpdir"
+        echo "✗  The published checksum of ${tgz} (${published:-none}) does not match the pinned one (${expected})." >&2
+        return 1
+    fi
+    if ! _verify_sha256 "${tmpdir}/${tgz}" "$expected"; then
+        rm -rf "$tmpdir"
+        return 1
+    fi
+
     echo "▶  Extracting binary to ${COREDNS_BIN}..."
-    tar -xzf "${tmpdir}/${tgz}" -C "$tmpdir"
+    tar --no-same-owner -xzf "${tmpdir}/${tgz}" -C "$tmpdir" coredns
     install -m 0755 "${tmpdir}/coredns" "$COREDNS_BIN"
     rm -rf "$tmpdir"
 

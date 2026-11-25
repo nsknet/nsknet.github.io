@@ -1,267 +1,276 @@
 <script setup lang="ts">
-/** The shell: nav rail, breadcrumb header, routed screen, the palette and the dialogs. */
+/** The shell: navigation (rail on desktop, drawer on mobile), the header
+ *  (breadcrumbs, search, running jobs, connection state), the routed screen,
+ *  and the app-wide dialogs. Shows the login screen while signed out. */
 import { storeToRefs } from 'pinia';
-import { computed, onMounted, onUnmounted } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { RouterLink, useRoute, useRouter } from 'vue-router';
 
+import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue';
 import CommandPalette from '@/components/CommandPalette.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import InstallDialog from '@/components/InstallDialog.vue';
+import NavRail from '@/components/NavRail.vue';
 import NetworkDialog from '@/components/NetworkDialog.vue';
 import OverlayModal from '@/components/OverlayModal.vue';
 import ToastList from '@/components/ToastList.vue';
 import Btn from '@/components/ui/Btn.vue';
 import LIcon from '@/components/ui/LIcon.vue';
-import { navGroups } from '@/router';
+import { dialogOpen } from '@/composables/useDialog';
+import { useHealth } from '@/composables/useHealth';
 import { loadRouteData } from '@/composables/useScreenData';
+import { useAuthStore } from '@/stores/auth';
 import { useJobsStore } from '@/stores/jobs';
 import { useSystemStore } from '@/stores/system';
 import { useUiStore } from '@/stores/ui';
+import LoginView from '@/views/LoginView.vue';
 
 const route = useRoute();
 const router = useRouter();
 const ui = useUiStore();
 const system = useSystemStore();
 const jobsStore = useJobsStore();
+const auth = useAuthStore();
 const { running: runningJobs } = storeToRefs(jobsStore);
-
-const { sidebarOpen, theme, overlay, confirm, installDialog, networkDialog, paletteOpen } =
+const { sidebarOpen, overlay, confirm, installDialog, networkDialog, paletteOpen, mobileNavOpen } =
   storeToRefs(ui);
 const { host, hostLoaded } = storeToRefs(system);
+const health = useHealth();
+
+const passwordDialog = ref(false);
 
 const crumbs = computed(() => route.meta.crumbs?.(route) ?? [{ label: String(route.name ?? '') }]);
-const railKey = computed(() => route.meta.rail ?? String(route.name ?? ''));
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+const signedIn = computed(() => auth.status === 'signed-in');
 
 function onGlobalKeydown(event: KeyboardEvent): void {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
     event.preventDefault();
-    if (hostLoaded.value) paletteOpen.value = !paletteOpen.value;
+    if (!signedIn.value || !hostLoaded.value) return;
+    // The palette is itself a dialog: the shortcut closes it, and opens it
+    // only when no other dialog is up.
+    if (paletteOpen.value) paletteOpen.value = false;
+    else if (!dialogOpen()) paletteOpen.value = true;
   }
 }
 
-onMounted(() => {
-  ui.applyTheme();
+/** Everything the shell needs once a session exists (first load, or right after login). */
+function startSession(): void {
   // The header shows the hostname on every screen, not only the ones that load it.
-  if (!hostLoaded.value) void system.load();
+  void system.load();
   // After a reload: show running jobs in the header, and give a job dialog
   // restored from sessionStorage the usual refresh-when-done behaviour.
   void jobsStore.load();
+  void loadRouteData(router.currentRoute.value.meta.loads);
   if (overlay.value && !overlay.value.onDone) {
     overlay.value.onDone = () => void loadRouteData(router.currentRoute.value.meta.loads);
   }
+}
+
+// A job that finished while its dialog was closed still changes what the
+// current screen shows: reload it.
+jobsStore.onJobFinished((job) => {
+  void loadRouteData(router.currentRoute.value.meta.loads);
+  if (job.status === 'failed' && !overlay.value) {
+    ui.addToast({ t: 'Job failed', d: job.label, k: 'danger' });
+  }
+});
+
+watch(
+  () => auth.status,
+  (status, previous) => {
+    if (status === 'signed-in' && previous !== 'signed-in') startSession();
+    if (status === 'anonymous') {
+      paletteOpen.value = false;
+      passwordDialog.value = false;
+      mobileNavOpen.value = false;
+    }
+  },
+);
+
+// The drawer closes when the route changes (a link inside it was used).
+watch(() => route.fullPath, () => (mobileNavOpen.value = false));
+
+onMounted(() => {
+  ui.applyTheme();
+  void auth.check();
   document.addEventListener('keydown', onGlobalKeydown);
 });
 onUnmounted(() => document.removeEventListener('keydown', onGlobalKeydown));
 
-function logout(): void {
-  window.location.href = '/logout';
+function reloadPage(): void {
+  window.location.reload();
 }
 </script>
 
 <template>
   <div
-    v-if="hostLoaded"
-    class="grid h-screen overflow-hidden bg-c-bg sidebar-grid"
-    :style="{ '--rail-w': sidebarOpen ? '220px' : '56px' }"
+    v-if="signedIn && hostLoaded"
+    class="h-[100dvh] overflow-hidden bg-c-canvas md:grid sidebar-grid"
+    :style="{ '--rail-w': sidebarOpen ? '232px' : '60px' }"
   >
-    <nav
-      :class="[
-        'border-r border-c-border bg-c-elev flex flex-col py-3 gap-1',
-        sidebarOpen ? 'items-stretch px-3' : 'items-center',
-      ]"
-      aria-label="Primary"
+    <a
+      href="#main"
+      class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[400] focus:px-3 focus:py-2 focus:bg-c-card focus:rounded-theme focus:shadow-md"
+      >Skip to content</a
     >
-      <div :class="['flex items-center mb-3', sidebarOpen ? 'gap-2.5 px-1' : 'justify-center']">
-        <div
-          class="w-9 h-9 shrink-0 rounded-theme bg-gradient-to-tr from-[#f59e0b] to-[#ea580c] text-white grid place-items-center font-bold text-sm tracking-[-0.04em] shadow-sm ring-1 ring-inset ring-white/15 cursor-pointer hover:scale-105 active:scale-95 transition-transform duration-150"
-          title="NsPanel"
-          @click="router.push('/')"
-        >
-          N
-        </div>
-        <span
-          v-if="sidebarOpen"
-          class="font-semibold text-sm tracking-[-0.02em] text-c-tx whitespace-nowrap overflow-hidden"
-          >NsPanel</span
-        >
-      </div>
 
-      <template v-for="(section, sectionIndex) in navGroups" :key="section.group">
-        <div
-          v-if="sidebarOpen"
-          :class="[
-            'px-2.5 pb-1 text-[10px] uppercase tracking-[0.08em] font-semibold text-c-tx3 whitespace-nowrap',
-            sectionIndex ? 'pt-3' : 'pt-0',
-          ]"
-        >
-          {{ section.group }}
-        </div>
-        <div v-else-if="sectionIndex" class="w-6 h-px bg-c-border my-1.5" aria-hidden="true"></div>
-        <button
-          v-for="item in section.items"
-          :key="item.key"
-          :class="['rail-btn', { active: railKey === item.key, 'rail-btn--wide': sidebarOpen }]"
-          :data-tip="sidebarOpen ? null : item.label"
-          :aria-label="item.label"
-          @click="router.push(item.path)"
-        >
-          <LIcon :name="item.icon" />
-          <span v-if="sidebarOpen" class="rail-label">{{ item.label }}</span>
-        </button>
-      </template>
+    <!-- Desktop rail -->
+    <aside class="hidden md:block border-r border-c-border bg-c-elev min-h-0">
+      <NavRail :wide="sidebarOpen" />
+    </aside>
 
-      <div class="flex-1"></div>
-
-      <button
-        :class="['rail-btn', { 'rail-btn--wide': sidebarOpen }]"
-        :data-tip="sidebarOpen ? null : 'Toggle theme'"
-        aria-label="Toggle theme"
-        @click="ui.toggleTheme()"
+    <!-- Mobile drawer -->
+    <div v-if="mobileNavOpen" class="md:hidden fixed inset-0 z-[150]">
+      <div class="absolute inset-0 bg-c-overlay animate-fade" @click="mobileNavOpen = false"></div>
+      <aside
+        class="absolute inset-y-0 left-0 w-[260px] max-w-[85vw] bg-c-elev border-r border-c-border shadow-lg animate-slidein"
       >
-        <LIcon :name="theme === 'dark' ? 'moon' : 'sun'" />
-        <span v-if="sidebarOpen" class="rail-label">Theme</span>
-      </button>
-      <button
-        :class="['rail-btn', { 'rail-btn--wide': sidebarOpen }]"
-        :data-tip="sidebarOpen ? null : 'Log out'"
-        aria-label="Log out"
-        @click="logout"
-      >
-        <LIcon name="log-out" />
-        <span v-if="sidebarOpen" class="rail-label">Log out</span>
-      </button>
-      <button
-        :class="['rail-btn', { 'rail-btn--wide': sidebarOpen }]"
-        :data-tip="sidebarOpen ? null : 'Expand'"
-        :aria-label="sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'"
-        @click="ui.toggleSidebar()"
-      >
-        <LIcon :name="sidebarOpen ? 'panel-left-close' : 'panel-left-open'" />
-        <span v-if="sidebarOpen" class="rail-label">Collapse</span>
-      </button>
-    </nav>
+        <NavRail wide :show-collapse="false" @navigate="mobileNavOpen = false" />
+      </aside>
+    </div>
 
-    <div class="flex flex-col min-w-0 h-screen overflow-hidden bg-c-canvas">
+    <div class="flex flex-col min-w-0 h-[100dvh] overflow-hidden">
       <header
-        class="h-12 border-b border-c-border flex items-center px-[var(--pad-x)] gap-3 shrink-0 bg-c-bg/80 backdrop-blur-md backdrop-saturate-150 relative z-10"
+        class="h-14 md:h-12 border-b border-c-border flex items-center px-[var(--pad-x)] gap-2 md:gap-3 shrink-0 bg-c-bg/85 backdrop-blur-md relative z-10"
       >
-        <nav class="flex items-center gap-2 text-sm-var text-c-tx2" aria-label="Breadcrumb">
-          <a
-            class="inline-flex items-center cursor-pointer text-c-tx3 hover:text-c-tx transition-colors"
-            aria-label="Dashboard"
-            title="Dashboard"
-            @click="router.push('/')"
-          >
-            <LIcon name="house" is="width:14px;height:14px" />
-          </a>
-          <span class="text-c-tx3">/</span>
-          <template v-for="(crumb, index) in crumbs" :key="index">
-            <template v-if="index < crumbs.length - 1">
-              <a
-                v-if="crumb.to"
-                class="cursor-pointer hover:text-c-tx hover:underline underline-offset-2 transition-colors"
-                @click="router.push(crumb.to)"
-                >{{ crumb.label }}</a
+        <button
+          type="button"
+          class="md:hidden -ml-1.5 w-9 h-9 grid place-items-center rounded-lg text-c-tx2 hover:bg-c-hover"
+          aria-label="Open navigation"
+          :aria-expanded="mobileNavOpen"
+          @click="mobileNavOpen = true"
+        >
+          <LIcon name="menu" is="width:18px;height:18px" />
+        </button>
+
+        <nav class="min-w-0 flex items-center gap-1.5 text-sm-var text-c-tx2" aria-label="Breadcrumb">
+          <ol class="m-0 p-0 list-none flex items-center gap-1.5 min-w-0">
+            <li
+              v-for="(crumb, index) in crumbs"
+              :key="index"
+              :class="['flex items-center gap-1.5 min-w-0', index < crumbs.length - 1 ? 'hidden sm:flex' : '']"
+            >
+              <RouterLink
+                v-if="crumb.to && index < crumbs.length - 1"
+                :to="crumb.to"
+                class="text-c-tx2 no-underline hover:text-c-tx hover:underline underline-offset-2"
+                >{{ crumb.label }}</RouterLink
               >
-              <span v-else>{{ crumb.label }}</span>
-              <span class="text-c-tx3">/</span>
-            </template>
-            <span v-else class="text-c-tx font-medium">{{ crumb.label }}</span>
-          </template>
+              <span
+                v-else
+                :class="index === crumbs.length - 1 ? 'text-c-tx font-medium truncate' : ''"
+                :aria-current="index === crumbs.length - 1 ? 'page' : undefined"
+                >{{ crumb.label }}</span
+              >
+              <span v-if="index < crumbs.length - 1" class="text-c-tx3" aria-hidden="true">/</span>
+            </li>
+          </ol>
         </nav>
-        <div class="ml-auto flex items-center gap-2">
+
+        <div class="ml-auto flex items-center gap-1.5 md:gap-2">
           <button
-            class="hidden sm:inline-flex items-center gap-2 h-8 pl-2.5 pr-1.5 min-w-[220px] rounded-lg border border-c-border bg-c-card text-c-tx3 text-xs-var shadow-card hover:border-c-bstrong hover:text-c-tx2 transition-colors"
-            aria-label="Open command palette"
+            v-if="health.restartedOnNewCode.value || auth.bundleStale"
+            type="button"
+            class="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full border border-c-border bg-c-warnsoft text-xs-var text-c-warn"
+            title="The panel runs newer code than this page. Reload to get the current UI."
+            @click="reloadPage"
+          >
+            <LIcon name="refresh-cw" is="width:14px;height:14px" />
+            <span class="hidden sm:inline">New version — reload</span>
+          </button>
+          <button
+            type="button"
+            class="hidden sm:inline-flex items-center gap-2 h-8 pl-2.5 pr-1.5 min-w-[200px] rounded-lg border border-c-border bg-c-card text-c-tx3 text-xs-var shadow-card hover:border-c-bstrong hover:text-c-tx2 transition-colors"
+            aria-label="Search and jump (command palette)"
             @click="paletteOpen = true"
           >
             <LIcon name="search" is="width:14px;height:14px" />
             <span>Search…</span>
-            <kbd
-              class="ml-auto mono text-[10px] px-1.5 py-0.5 rounded border border-c-border bg-c-subtle text-c-tx3"
+            <kbd class="ml-auto mono text-2xs-var px-1.5 py-0.5 rounded border border-c-border bg-c-subtle text-c-tx3"
               >{{ isMac ? '⌘' : 'Ctrl' }} K</kbd
             >
           </button>
           <button
-            class="sm:hidden inline-flex items-center justify-center w-8 h-8 rounded-lg border border-c-border bg-c-card text-c-tx2"
-            aria-label="Open command palette"
+            type="button"
+            class="sm:hidden w-9 h-9 grid place-items-center rounded-lg border border-c-border bg-c-card text-c-tx2"
+            aria-label="Search and jump"
             @click="paletteOpen = true"
           >
-            <LIcon name="search" is="width:15px;height:15px" />
+            <LIcon name="search" is="width:16px;height:16px" />
           </button>
-          <button
+          <RouterLink
             v-if="runningJobs.length"
-            class="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full border border-c-border bg-c-card text-xs-var text-c-tx2 hover:text-c-tx hover:border-c-bstrong transition-colors"
+            to="/activity/jobs"
+            class="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full border border-c-border bg-c-card text-xs-var text-c-tx2 no-underline hover:text-c-tx hover:border-c-bstrong transition-colors"
             :title="runningJobs.map((job) => job.label).join(', ')"
-            @click="router.push('/jobs')"
           >
             <span
               class="w-3 h-3 rounded-full border-[1.5px] border-c-bstrong border-t-c-accent animate-spin"
+              aria-hidden="true"
             ></span>
-            <span>{{ runningJobs.length }} running</span>
-          </button>
+            <span>{{ runningJobs.length }}<span class="hidden sm:inline"> running</span></span>
+          </RouterLink>
           <span
-            class="inline-flex items-center gap-1.5 py-1 px-2.5 bg-c-subtle border border-c-border rounded-full mono text-xs-var text-c-tx2"
+            class="inline-flex items-center gap-1.5 h-8 px-2.5 bg-c-subtle border border-c-border rounded-full mono text-xs-var text-c-tx2 max-w-[180px]"
+            :title="health.online.value ? `Connected to ${host.hostname}` : 'The panel is not answering'"
+            role="status"
           >
-            <span class="w-[6px] h-[6px] rounded-full bg-c-ok shadow-[0_0_0_3px_var(--ok-soft)]"></span>
-            <span>{{ host.hostname }}</span>
+            <span
+              :class="[
+                'w-[7px] h-[7px] rounded-full shrink-0',
+                health.online.value ? 'bg-c-ok shadow-[0_0_0_3px_var(--ok-soft)]' : 'bg-c-danger shadow-[0_0_0_3px_var(--danger-soft)]',
+              ]"
+              aria-hidden="true"
+            ></span>
+            <span class="truncate">{{ health.online.value ? host.hostname : 'Disconnected' }}</span>
           </span>
         </div>
       </header>
 
-      <main class="content flex-1 overflow-y-auto py-[var(--pad-y)] px-[var(--pad-x)]">
-        <RouterView v-slot="{ Component, route: viewRoute }">
-          <Transition name="page" mode="out-in">
-            <component :is="Component" :key="viewRoute.path" />
-          </Transition>
-        </RouterView>
+      <main id="main" class="content flex-1 overflow-y-auto py-[var(--pad-y)] px-[var(--pad-x)]" tabindex="-1">
+        <div class="mx-auto max-w-[1400px]">
+          <RouterView v-slot="{ Component, route: viewRoute }">
+            <Transition name="page" mode="out-in">
+              <component :is="Component" :key="viewRoute.path" />
+            </Transition>
+          </RouterView>
+        </div>
       </main>
     </div>
   </div>
 
-  <!-- Shown until the first /api/v1/system call succeeds, i.e. until Basic Auth passes. -->
-  <div
-    v-else
-    class="h-screen w-screen flex flex-col items-center justify-center bg-[#09090b] text-[#f4f4f5] select-none font-sans"
-  >
-    <div class="relative flex items-center justify-center mb-8">
-      <div
-        class="absolute w-24 h-24 rounded-2xl bg-gradient-to-tr from-[#f59e0b] to-[#ea580c] opacity-25 blur-2xl animate-pulse"
-      ></div>
-      <div
-        class="relative w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#f59e0b] to-[#ea580c] text-white flex items-center justify-center font-bold text-2xl tracking-[-0.05em] shadow-lg shadow-amber-500/20 border border-white/10"
-      >
-        N
-      </div>
+  <LoginView v-else-if="auth.status === 'anonymous'" />
+
+  <!-- Checking the session, loading the host, or the panel is unreachable. -->
+  <div v-else class="h-[100dvh] w-screen flex flex-col items-center justify-center bg-c-canvas text-c-tx select-none">
+    <div
+      class="w-14 h-14 rounded-2xl brand-mark text-white flex items-center justify-center font-bold text-xl tracking-[-0.05em] shadow-lg ring-1 ring-inset ring-white/15 mb-5"
+      aria-hidden="true"
+    >
+      N
     </div>
-    <h2 class="text-xl font-semibold tracking-[-0.02em] mb-1.5 text-white/90">NsPanel</h2>
-    <div class="flex items-center gap-2 text-xs-var text-zinc-400 mono mt-2">
-      <svg
-        class="animate-spin h-3.5 w-3.5 text-amber-500"
-        xmlns="http://www.w3.org/2000/svg"
-        fill="none"
-        viewBox="0 0 24 24"
-      >
-        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-        <path
-          class="opacity-75"
-          fill="currentColor"
-          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-        />
-      </svg>
-      <span>Awaiting authentication…</span>
+    <div class="flex items-center gap-2 text-sm-var text-c-tx2" role="status">
+      <span
+        v-if="auth.status !== 'unreachable'"
+        class="w-3.5 h-3.5 rounded-full border-2 border-c-bstrong border-t-c-accent animate-spin"
+        aria-hidden="true"
+      ></span>
+      <span>{{ auth.status === 'unreachable' ? 'Cannot reach the panel.' : 'Loading…' }}</span>
     </div>
-    <Btn class="mt-6" variant="ghost" @click="system.load()">
-      <LIcon name="refresh-cw" /> Retry
+    <Btn v-if="auth.status === 'unreachable'" class="mt-5" @click="auth.check()">
+      <LIcon name="refresh-cw" /> Try again
     </Btn>
   </div>
 
   <ToastList />
-  <CommandPalette v-if="paletteOpen" @close="paletteOpen = false" />
-  <!-- Gated on hostLoaded: a dialog restored after a reload waits for the shell. -->
-  <OverlayModal v-if="overlay && hostLoaded" :overlay="overlay" @close="overlay = null" />
+  <template v-if="signedIn">
+    <CommandPalette v-if="paletteOpen" @close="paletteOpen = false" />
+    <ChangePasswordDialog v-if="passwordDialog" @close="passwordDialog = false" />
+    <!-- Gated on hostLoaded: a dialog restored after a reload waits for the shell. -->
+    <OverlayModal v-if="overlay && hostLoaded" :overlay="overlay" @close="overlay = null" />
+    <InstallDialog v-if="installDialog" :dialog="installDialog" @close="installDialog = null" />
+    <NetworkDialog v-if="networkDialog" :dialog="networkDialog" @close="networkDialog = null" />
+  </template>
   <ConfirmDialog v-if="confirm" :confirm="confirm" @close="confirm = null" />
-  <InstallDialog v-if="installDialog" :dialog="installDialog" @close="installDialog = null" />
-  <NetworkDialog v-if="networkDialog" :dialog="networkDialog" @close="networkDialog = null" />
 </template>

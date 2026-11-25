@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# redis.sh — Redis server on Ubuntu 24.04 (Noble)
+# redis.sh — Redis server on Ubuntu 22.04 (Jammy) / 24.04 (Noble)
 # Official method: Redis Inc. APT repo (packages.redis.io), falls back to the
 # distro package if the repo cannot be added.
 # Docs: https://redis.io/docs/latest/operate/oss_and_stack/install/install-redis/install-redis-on-linux/
@@ -42,17 +42,24 @@ install_redis() {
     echo "  Installing Redis"
     echo "════════════════════════════════════════════════════════════"
 
-    apt-get install -y curl gpg lsb-release
+    # packages.redis.io serves jammy and noble for amd64 and arm64 (and the
+    # Ubuntu fallback below exists on both as well).
+    _require_platform "Redis" "22.04 24.04" "amd64 arm64"
+
+    # A broken redis.list from an earlier attempt is handled below; do not let it
+    # stop the prerequisites here.
+    apt-get update -q || true
+    apt-get install -y curl gpg
 
     # ── APT repository (official Redis Inc. build) ────────────────────────────
     # If anything about adding the repo fails, fall back to the distro package so
     # the install still succeeds on a current Ubuntu.
     local use_official=true
     echo "▶  Adding Redis APT repository..."
-    if curl -fsSL https://packages.redis.io/gpg \
+    if curl -fsSL --max-time 60 --retry 3 https://packages.redis.io/gpg \
         | gpg --batch --yes --dearmor -o /usr/share/keyrings/redis-archive-keyring.gpg; then
         chmod 644 /usr/share/keyrings/redis-archive-keyring.gpg
-        echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb $(lsb_release -cs) main" \
+        echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb $(_os_codename) main" \
             > /etc/apt/sources.list.d/redis.list
     else
         echo "⚠  Could not import Redis signing key — falling back to the Ubuntu package."
@@ -83,6 +90,8 @@ install_redis() {
     # ── Save credentials ──────────────────────────────────────────────────────
     echo "▶  Saving credentials to ${REDIS_CRED_FILE}..."
     mkdir -p "$(dirname "$REDIS_CRED_FILE")"
+    # Create it 0600 first: a later chmod leaves a window where the file is world-readable.
+    install -m 600 /dev/null "$REDIS_CRED_FILE"
     cat > "$REDIS_CRED_FILE" <<CRED
 # Redis credentials
 # Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")

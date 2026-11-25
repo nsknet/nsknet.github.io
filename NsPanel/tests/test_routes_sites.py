@@ -118,3 +118,42 @@ def test_service_actions_only_apply_to_dotnet_sites(client, stub_sites, fake_run
     assert client.post("/api/v1/sites/ghost/restart").status_code == 404
     assert client.post("/api/v1/sites/app/restart").json()["title"] == "Restarting 'app'"
     assert fake_runner.last_cmd == ["systemctl", "restart", "app"]
+
+
+def _port_site(**extra):
+    form = {"access_kind": "port", "access_value": "8081", "backend_type": "static", "name": "demo"}
+    form.update(extra)
+    return form
+
+
+def test_port_sites_are_public_unless_subnets_are_chosen(client, fake_runner, audit_log, monkeypatch):
+    from features import sites as sites_feature
+
+    monkeypatch.setattr(sites_feature, "read_info", lambda name: None)
+    client.post("/api/v1/sites/create", data=_port_site())
+    assert fake_runner.last["env"]["ALLOWED_SUBNETS"] == "0.0.0.0/0"
+    client.post("/api/v1/sites/create", data=_port_site(allowed_subnets="10.0.0.0/8,192.168.0.0/16"))
+    assert fake_runner.last["env"]["ALLOWED_SUBNETS"] == "10.0.0.0/8 192.168.0.0/16"
+
+
+def test_port_site_subnets_are_validated(client, fake_runner, monkeypatch):
+    from features import sites as sites_feature
+
+    monkeypatch.setattr(sites_feature, "read_info", lambda name: None)
+    response = client.post("/api/v1/sites/create", data=_port_site(allowed_subnets="8.8.8.0/24"))
+    assert response.status_code == 400
+    assert not fake_runner.jobs
+
+
+def test_certbot_email_reaches_the_job_env(client, fake_runner, audit_log, monkeypatch):
+    from features import sites as sites_feature
+
+    monkeypatch.setattr(sites_feature, "read_info", lambda name: None)
+    form = {
+        "access_kind": "domain", "access_value": "example.com", "backend_type": "static",
+        "auto_ssl": "true", "ssl_email": "ops@example.com",
+    }
+    client.post("/api/v1/sites/create", data=form)
+    assert fake_runner.last["env"] == {"CERTBOT_EMAIL": "ops@example.com"}
+    bad = client.post("/api/v1/sites/create", data={**form, "ssl_email": "not-an-email"})
+    assert bad.status_code == 422

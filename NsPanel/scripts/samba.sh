@@ -73,6 +73,10 @@ install_samba() {
     chmod 2770 "$share_dir"
 
     # ── Panel-managed share block (idempotent: remove old, append fresh) ──
+    # Keep the current file so a block testparm rejects can be undone.
+    local conf_prev
+    conf_prev="$(mktemp)"
+    cp -p "$SAMBA_CONF" "$conf_prev"
     if grep -qF "$begin" "$SAMBA_CONF"; then
         echo "▶  Replacing existing panel-managed [${share}] block..."
         sed -i "\|${begin}|,\|${end}|d" "$SAMBA_CONF"
@@ -95,7 +99,13 @@ EOF
 
     # ── Validate config before restarting ─────────────────────────
     echo "▶  Validating config (testparm)..."
-    testparm -s "$SAMBA_CONF" >/dev/null
+    if ! testparm -s "$SAMBA_CONF" >/dev/null; then
+        cp -p "$conf_prev" "$SAMBA_CONF"
+        rm -f "$conf_prev"
+        echo "✗  testparm rejected ${SAMBA_CONF} — the previous file was restored." >&2
+        return 1
+    fi
+    rm -f "$conf_prev"
 
     systemctl enable smbd
     systemctl restart smbd
@@ -111,6 +121,8 @@ EOF
     local ip
     ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
     ip="${ip:-<server-ip>}"
+    # Create it 0600 first: a later chmod leaves a window where the file is world-readable.
+    install -m 600 /dev/null "$SAMBA_CRED_FILE"
     cat > "$SAMBA_CRED_FILE" <<CRED
 # Samba credentials (panel-managed)
 # Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -131,13 +143,13 @@ CRED
     echo "   Share    : [${share}]"
     echo "   Path     : ${share_dir}"
     echo "   Login    : ${user} / (the password you set)"
-    echo "   Access   : Windows  \\\\${ip}\\${share}"
+    printf '%s\n' "   Access   : Windows  \\\\${ip}\\${share}"
     echo "              macOS    smb://${ip}/${share}"
     echo "   Allow    : ${ALLOWED_SUBNETS[*]}"
     echo ""
     echo "   Map a drive on Windows (run in a NON-admin terminal, else"
     echo "   the drive won't show in Explorer):"
-    echo "     net use Z: \\\\${ip}\\${share} /user:${user} *"
+    printf '%s\n' "     net use Z: \\\\${ip}\\${share} /user:${user} *"
     echo ""
     echo "   Credentials saved to: ${SAMBA_CRED_FILE}"
     echo "   On Windows, enter '${user}' and the password when prompted."

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# mssql.sh — Microsoft SQL Server 2025 (Ubuntu 24.04) via APT
+# mssql.sh — Microsoft SQL Server 2025 (Ubuntu 22.04 / 24.04, amd64) via APT
 # Installs onto the package default data dir /var/opt/mssql on the existing
 # filesystem — no separate disk/XFS provisioning (a VPS usually has one disk).
 
@@ -18,6 +18,9 @@ install_mssql() {
     echo "════════════════════════════════════════════════════════════"
     echo "  Installing SQL Server 2025"
     echo "════════════════════════════════════════════════════════════"
+
+    # Microsoft publishes SQL Server 2025 for Ubuntu 22.04 and 24.04, x64 only.
+    _require_platform "SQL Server 2025" "22.04 24.04" "amd64"
 
     export DEBIAN_FRONTEND=noninteractive
 
@@ -57,12 +60,20 @@ install_mssql() {
 
     # ── Microsoft SQL Server 2025 repository ──────────────────────
     echo "▶  Adding Microsoft SQL Server 2025 repository..."
-    curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
-        | gpg --dearmor --yes -o /usr/share/keyrings/microsoft-prod.gpg
-    curl -fsSL https://packages.microsoft.com/config/ubuntu/24.04/mssql-server-2025.list \
-        > /etc/apt/sources.list.d/mssql-server-2025.list
-    curl -fsSL https://packages.microsoft.com/config/ubuntu/24.04/prod.list \
-        > /etc/apt/sources.list.d/mssql-release.list
+    # Microsoft's .list files reference this keyring via signed-by=.
+    local ms_config ver server_list prod_list
+    ver="$(_os_version)"
+    ms_config="https://packages.microsoft.com/config/ubuntu/${ver}"
+    curl -fsSL --max-time 60 --retry 3 https://packages.microsoft.com/keys/microsoft.asc \
+        | gpg --batch --dearmor --yes -o /usr/share/keyrings/microsoft-prod.gpg
+    # Fetch both lists before writing either, so a failed download never leaves
+    # an empty or half-written source behind.
+    server_list="$(curl -fsSL --max-time 60 --retry 3 "${ms_config}/mssql-server-2025.list")" \
+        || { echo "✗  No SQL Server 2025 repository for Ubuntu ${ver} at ${ms_config}"; return 1; }
+    prod_list="$(curl -fsSL --max-time 60 --retry 3 "${ms_config}/prod.list")" \
+        || { echo "✗  No Microsoft prod repository for Ubuntu ${ver} at ${ms_config}"; return 1; }
+    printf '%s\n' "$server_list" > /etc/apt/sources.list.d/mssql-server-2025.list
+    printf '%s\n' "$prod_list" > /etc/apt/sources.list.d/mssql-release.list
 
     apt-get update -q
     # The mssql-server engine is a few hundred MB from packages.microsoft.com.
@@ -126,6 +137,8 @@ install_mssql() {
     # ── Save credentials ──────────────────────────────────────────
     echo "▶  Saving credentials to ${MSSQL_CRED_FILE}..."
     mkdir -p "$(dirname "$MSSQL_CRED_FILE")"
+    # Create it 0600 first: a later chmod leaves a window where the file is world-readable.
+    install -m 600 /dev/null "$MSSQL_CRED_FILE"
     cat > "$MSSQL_CRED_FILE" <<CRED
 # SQL Server 2025 credentials
 # Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -147,7 +160,8 @@ CRED
     # ── Smoke test (best-effort; the service may still be warming up) ─────────
     echo "▶  Smoke test..."
     sleep 8
-    "${MSSQL_TOOLS_BIN}/sqlcmd" -S "localhost,${MSSQL_PORT}" -U SA -P "$sa_password" -C -h -1 -W \
+    # SQLCMDPASSWORD keeps the password out of argv (and so out of `ps`).
+    SQLCMDPASSWORD="$sa_password" "${MSSQL_TOOLS_BIN}/sqlcmd" -S "localhost,${MSSQL_PORT}" -U SA -C -h -1 -W \
         -Q "SET NOCOUNT ON; PRINT @@VERSION;" \
         || echo "⚠  Smoke test did not return yet — the service may still be starting."
 
@@ -187,9 +201,17 @@ uninstall_mssql() {
 set_mssql_password() {
     local sa_password="${DB_PASSWORD:?DB_PASSWORD env var required}"
     echo "▶  Updating SQL Server SA password..."
+    # set-sa-password needs the engine stopped. Start it again whatever happens,
+    # so a rejected password (complexity policy) never leaves the server down.
     systemctl stop mssql-server
-    MSSQL_SA_PASSWORD="$sa_password" /opt/mssql/bin/mssql-conf set-sa-password
+    local rc=0
+    MSSQL_SA_PASSWORD="$sa_password" /opt/mssql/bin/mssql-conf set-sa-password </dev/null || rc=$?
+    echo "▶  Starting mssql-server..."
     systemctl start mssql-server
+    if [ "$rc" -ne 0 ]; then
+        echo "✗  mssql-conf set-sa-password failed (exit ${rc}); the SA password is unchanged."
+        return "$rc"
+    fi
 
     if [ -f "$MSSQL_CRED_FILE" ]; then
         echo "▶  Updating ${MSSQL_CRED_FILE}..."

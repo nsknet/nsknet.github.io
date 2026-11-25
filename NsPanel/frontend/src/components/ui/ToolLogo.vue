@@ -20,7 +20,7 @@ withDefaults(defineProps<{ logo: string; name: string; color?: string; size?: 's
     <img v-if="logo.endsWith('.png')" :src="logo" :alt="name" class="w-full h-full object-contain" />
     <span
       v-else
-      :class="['font-bold mono tracking-[-0.02em]', size === 'sm' ? 'text-[11px]' : 'text-[13px]']"
+      :class="['font-bold mono tracking-[-0.02em]', size === 'sm' ? 'text-2xs-var' : 'text-sm-var']"
       :style="{ color }"
       >{{ logo }}</span
     >

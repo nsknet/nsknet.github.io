@@ -66,11 +66,16 @@ mount_disk() {
         uuid="$(blkid -o value -s UUID "$device" 2>/dev/null || true)"
         if [ -n "$uuid" ]; then
             echo "▶  Persisting to /etc/fstab (UUID=${uuid})..."
+            local backup errors_before
+            errors_before="$(_fstab_error_count)"
+            backup="$(_fstab_backup)"
+            echo "   backup: ${backup}"
             # Drop any prior entry for this UUID or mount point, then append fresh.
-            sed -i "\#UUID=${uuid}[[:space:]]#d" /etc/fstab 2>/dev/null || true
-            sed -i "\# ${mountpoint}[[:space:]]#d" /etc/fstab 2>/dev/null || true
+            _fstab_remove_field 1 "UUID=${uuid}"
+            _fstab_remove_field 2 "$mountpoint"
             echo "UUID=${uuid} ${mountpoint} ${fstype} defaults,nofail 0 2" >> /etc/fstab
-            echo "   → Entry persisted."
+            _fstab_verify_or_restore "$backup" "$errors_before" || return 1
+            echo "   → Entry persisted and verified."
         else
             echo "⚠  Could not read UUID — skipping fstab persistence."
         fi
@@ -118,8 +123,14 @@ unmount_disk() {
 
     if [ "$remove_fstab" = "1" ]; then
         echo "▶  Removing /etc/fstab entries..."
-        [ -n "$uuid" ] && sed -i "\#UUID=${uuid}[[:space:]]#d" /etc/fstab 2>/dev/null || true
-        [ -n "$mp" ] && sed -i "\# ${mp}[[:space:]]#d" /etc/fstab 2>/dev/null || true
+        local backup errors_before
+        errors_before="$(_fstab_error_count)"
+        backup="$(_fstab_backup)"
+        echo "   backup: ${backup}"
+        if [ -n "$uuid" ]; then _fstab_remove_field 1 "UUID=${uuid}"; fi
+        if [ -n "$mp" ]; then _fstab_remove_field 2 "$mp"; fi
+        if [[ "$target" == /dev/* ]]; then _fstab_remove_field 1 "$target"; fi
+        _fstab_verify_or_restore "$backup" "$errors_before" || return 1
         echo "   → fstab cleaned."
     fi
 
@@ -153,9 +164,26 @@ format_disk() {
         return 1
     fi
 
-    # Refuse to format anything that is currently mounted — a strong safety net.
-    if findmnt -n -S "$device" >/dev/null 2>&1; then
-        echo "❌  Error: '${device}' is mounted. Unmount it before formatting."
+    # Refuse to format anything in use: the device or any partition under it
+    # mounted, used as swap, or part of LVM/RAID/LUKS. A whole disk such as
+    # /dev/sda counts as in use when /dev/sda1 is mounted.
+    local in_use
+    # -P prints KEY="value" pairs, so empty columns cannot shift the fields.
+    in_use="$(lsblk -nP -p -o PATH,TYPE,FSTYPE,MOUNTPOINT "$device" 2>/dev/null | awk '
+        function col(key,   m) { return match($0, key "=\"[^\"]*\"") ? substr($0, RSTART + length(key) + 2, RLENGTH - length(key) - 3) : "" }
+        { path = col("PATH"); type = col("TYPE"); fs = col("FSTYPE"); mnt = col("MOUNTPOINT") }
+        mnt != ""                                                         { print path " is mounted on " mnt; exit }
+        fs ~ /^(swap|LVM2_member|linux_raid_member|crypto_LUKS|zfs_member)$/ { print path " is in use as " fs; exit }
+        type ~ /^(lvm|crypt|raid[0-9]+)$/                                  { print path " holds a " type " volume"; exit }
+    ')"
+    if [ -z "$in_use" ] && grep -q "^${device}[[:space:]]" /proc/swaps 2>/dev/null; then
+        in_use="${device} is active swap"
+    fi
+    if [ -z "$in_use" ] && [ -n "$(ls -A "/sys/class/block/$(basename "$device")/holders" 2>/dev/null)" ]; then
+        in_use="${device} is held by another device (LVM/RAID/dm)"
+    fi
+    if [ -n "$in_use" ]; then
+        echo "❌  Refusing to format: ${in_use}."
         return 1
     fi
 

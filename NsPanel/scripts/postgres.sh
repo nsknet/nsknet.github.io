@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# postgres.sh — PostgreSQL 16 via PGDG (Ubuntu 24.04+)
+# postgres.sh — PostgreSQL (default 16) via PGDG (Ubuntu 22.04 / 24.04)
 
 # Fail fast: abort on the first error and on failures anywhere in a pipeline.
 # (-u is intentionally omitted: some functions reference optional env vars such
 #  as ALLOWED_SUBNETS that may legitimately be unset.)
 set -eo pipefail
 
-PG_VERSION="16"
+# Major version from PGDG; override with POSTGRES_VERSION (e.g. 17). The panel's
+# module detects the default package name, so keep 16 unless you also update it.
+PG_VERSION="${POSTGRES_VERSION:-16}"
 PG_CRED_FILE="/etc/postgresql/credentials.yml"
 
 # ALTER USER over stdin, never argv: argv shows up in `ps` and in the job log.
@@ -33,19 +35,25 @@ install_postgres() {
     echo "  Installing PostgreSQL ${PG_VERSION}"
     echo "════════════════════════════════════════════════════════════"
 
+    if [[ ! "$PG_VERSION" =~ ^[0-9]{2}$ ]]; then
+        echo "❌  POSTGRES_VERSION must be a major version such as 16 or 17 (got '${PG_VERSION}')."
+        return 1
+    fi
+    # PGDG publishes every supported Ubuntu LTS for these architectures.
+    _require_platform "PostgreSQL" "22.04 24.04" "amd64 arm64 ppc64el"
+
     local conf_dir="/etc/postgresql/${PG_VERSION}/main"
 
     # ── PGDG repository ───────────────────────────────────────────
     echo "▶  Adding PGDG APT repository..."
+    apt-get update -q
     apt-get install -y curl ca-certificates
     install -d /usr/share/postgresql-common/pgdg
-    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+    curl -fsSL --max-time 60 --retry 3 https://www.postgresql.org/media/keys/ACCC4CF8.asc \
         -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
 
-    # shellcheck disable=SC1091
-    . /etc/os-release
     echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
-https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+https://apt.postgresql.org/pub/repos/apt $(_os_codename)-pgdg main" \
         > /etc/apt/sources.list.d/pgdg.list
 
     apt-get update -q
@@ -62,8 +70,24 @@ https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
     echo "▶  Setting postgres user password..."
     _pg_set_password "$db_password"
 
+    # ── Server timezone and locale ────────────────────────────────
+    # Follow the host's timezone (UTC when it cannot be read, e.g. in a container
+    # without systemd). The value lands inside a quoted config string, so accept
+    # only tz-database characters.
+    local tz
+    tz="$(timedatectl show -p Timezone --value 2>/dev/null || true)"
+    if [[ ! "$tz" =~ ^[A-Za-z0-9/_+-]+$ ]]; then
+        tz="UTC"
+    fi
+    # A minimal VPS image may lack en_US.UTF-8; an unknown lc_* value stops the
+    # server from starting, so fall back to C.UTF-8, which always exists.
+    local pg_locale="C.UTF-8"
+    if locale -a 2>/dev/null | grep -Fix 'en_US.utf8' >/dev/null; then
+        pg_locale="en_US.UTF-8"
+    fi
+
     # ── Optimised postgresql.conf ─────────────────────────────────
-    echo "▶  Writing postgresql.conf..."
+    echo "▶  Writing postgresql.conf (timezone ${tz}, locale ${pg_locale})..."
     # Keep the package's original on re-install instead of backing up our own copy.
     [ -e "${conf_dir}/postgresql.conf.bak" ] || cp "${conf_dir}/postgresql.conf" "${conf_dir}/postgresql.conf.bak"
     cat > "${conf_dir}/postgresql.conf" <<PGCONF
@@ -96,15 +120,15 @@ log_truncate_on_rotation = on
 log_rotation_age         = 1d
 log_rotation_size        = 0
 log_line_prefix          = '%m [%p] '
-log_timezone             = 'Asia/Ho_Chi_Minh'
+log_timezone             = '${tz}'
 
 # Locale
 datestyle                  = 'iso, mdy'
-timezone                   = 'Asia/Ho_Chi_Minh'
-lc_messages                = 'en_US.UTF-8'
-lc_monetary                = 'en_US.UTF-8'
-lc_numeric                 = 'en_US.UTF-8'
-lc_time                    = 'en_US.UTF-8'
+timezone                   = '${tz}'
+lc_messages                = '${pg_locale}'
+lc_monetary                = '${pg_locale}'
+lc_numeric                 = '${pg_locale}'
+lc_time                    = '${pg_locale}'
 default_text_search_config = 'pg_catalog.english'
 PGCONF
 
@@ -132,6 +156,8 @@ HBACONF
     # ── Save credentials ──────────────────────────────────────────
     echo "▶  Saving credentials to ${PG_CRED_FILE}..."
     mkdir -p "$(dirname "$PG_CRED_FILE")"
+    # Create it 0600 first: a later chmod leaves a window where the file is world-readable.
+    install -m 600 /dev/null "$PG_CRED_FILE"
     cat > "$PG_CRED_FILE" <<CRED
 # PostgreSQL credentials
 # Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
