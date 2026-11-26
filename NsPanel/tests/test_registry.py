@@ -3,6 +3,7 @@
 This is the test that catches the common mistake when adding a tool: declaring
 `bash_function = "install_foo"` and forgetting to write `install_foo()`.
 """
+
 import pytest
 
 from core import bash_invoker

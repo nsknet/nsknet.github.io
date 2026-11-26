@@ -1,15 +1,18 @@
 """Tools API: install, re-install, uninstall and password changes for tool modules."""
+
 from typing import Annotated
 
 from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 
 from core import audit, jobs
 from core.schemas import DataResponse, JobResponse, Tool
-from core.validators import ALLOWED_SUBNET_CHOICES, bad_request, require_password
+from core.validators import ALLOWED_SUBNET_CHOICES, ANY_SUBNET, bad_request, parse_subnets, require_password
 from modules import registry
 from modules.base import Module
 
 router = APIRouter(prefix="/api/v1/tools")
+
 
 def _module_or_404(name: str) -> Module:
     module = registry.get_module(name)
@@ -60,18 +63,13 @@ def _collect_install_params(module: Module, form) -> dict[str, str]:
 
 
 def _resolve_subnets(module: Module, allowed_subnets: str | None) -> str | None:
-    if not module.firewall_ports or not allowed_subnets:
+    """None keeps the script's default scope (private subnets)."""
+    if not module.firewall_ports:
         return None
-    requested = [s.strip() for s in allowed_subnets.split(",") if s.strip()]
-    invalid = [s for s in requested if s not in ALLOWED_SUBNET_CHOICES]
-    if invalid:
-        raise bad_request(f"Invalid subnet(s): {', '.join(invalid)}")
-    if not requested:
-        return None
-    # 0.0.0.0/0 (any) makes every other subnet redundant — collapse to it.
-    if "0.0.0.0/0" in requested:
-        return "0.0.0.0/0"
-    return " ".join(requested)
+    subnets = parse_subnets(allowed_subnets, ALLOWED_SUBNET_CHOICES)
+    if subnets == [ANY_SUBNET] and not module.allow_public:
+        raise bad_request(f"{module.display_name} has no login of its own; open it to private subnets only.")
+    return " ".join(subnets) or None
 
 
 @router.get("")
@@ -92,7 +90,8 @@ async def install_tool(
     # Re-install re-runs the installer over an existing install, so it skips the
     # already-installed guard that a fresh install enforces.
     is_reinstall = str(reinstall).lower() in ("1", "true", "yes", "on")
-    if module.is_installed() and not is_reinstall:
+    # is_installed() shells out (dpkg/which): keep it off the event loop.
+    if await run_in_threadpool(module.is_installed) and not is_reinstall:
         audit.log("tool.install_refused", f"name={name} reason=already_installed")
         raise bad_request(f"{module.display_name} is already installed.")
 

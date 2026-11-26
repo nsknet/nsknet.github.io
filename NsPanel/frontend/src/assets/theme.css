@@ -5,8 +5,8 @@
 
   /* Light theme (default) */
   --bg: #ffffff;
-  --bg-canvas: #fafaf9;   /* page background, behind cards */
-  --bg-card: #ffffff;     /* raised surfaces: cards, tables, dialogs */
+  --bg-canvas: #fafaf9; /* page background, behind cards */
+  --bg-card: #ffffff; /* raised surfaces: cards, tables, dialogs */
   --bg-elev: #fafafa;
   --bg-subtle: #f5f5f4;
   --bg-hover: #f5f5f4;
@@ -14,8 +14,9 @@
   --border-strong: #d4d4d8;
   --text: #0c0a09;
   --text-2: #57534e;
-  --text-3: #a8a29e;
+  --text-3: #78716c;
   --text-inv: #fafaf9;
+  --focus: color-mix(in oklab, var(--accent) 35%, transparent);
 
   --accent: #f59e0b;
   --accent-hover: #d97706;
@@ -32,6 +33,16 @@
   --info: #2563eb;
   --info-soft: #dbeafe;
   --muted-soft: #f5f5f4;
+  --violet: #7c3aed;
+  --violet-soft: #ede9fe;
+  --teal: #0d9488;
+  --teal-soft: #ccfbf1;
+
+  /* Terminal (job output, logs, the unit editor) is dark in both themes. */
+  --term-bg: #0b0b0e;
+  --term-fg: #d4d4d8;
+  --term-dim: #71717a;
+  --overlay: rgb(9 9 11 / 0.45);
 
   --elev-sm: 0 1px 2px 0 rgb(0 0 0 / 0.04);
   --elev-md: 0 4px 14px -2px rgb(0 0 0 / 0.06), 0 2px 4px -2px rgb(0 0 0 / 0.04);
@@ -50,6 +61,7 @@
   --fs-base: 14px;
   --fs-sm: 13px;
   --fs-xs: 12px;
+  --fs-2xs: 12px; /* the floor: labels and table headers never go smaller */
 }
 
 .theme-dark {
@@ -63,7 +75,7 @@
   --border-strong: #3f3f46;
   --text: #fafafa;
   --text-2: #a1a1aa;
-  --text-3: #71717a;
+  --text-3: #8f8f99;
   --text-inv: #0a0a0a;
 
   --accent-soft: rgba(245, 158, 11, 0.12);
@@ -75,6 +87,12 @@
   --danger-soft: rgba(220, 38, 38, 0.14);
   --info-soft: rgba(37, 99, 235, 0.14);
   --muted-soft: rgba(255, 255, 255, 0.06);
+  --violet: #a78bfa;
+  --violet-soft: rgba(124, 58, 237, 0.16);
+  --teal: #2dd4bf;
+  --teal-soft: rgba(13, 148, 136, 0.16);
+  --term-bg: #060608;
+  --overlay: rgb(0 0 0 / 0.6);
 
   --elev-sm: 0 1px 2px 0 rgb(0 0 0 / 0.5);
   --elev-md: 0 4px 14px -2px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.4);
@@ -85,34 +103,31 @@
 }
 
 /* density variants */
-.density-compact {
-  --row-h: 34px;
-  --pad-x: 18px;
-  --pad-y: 14px;
-  --fs-base: 13px;
-  --fs-sm: 12px;
-  --fs-xs: 11px;
-}
-.density-comfortable {
-  --row-h: 52px;
-  --pad-x: 32px;
-  --pad-y: 28px;
-  --fs-base: 15px;
-  --fs-sm: 14px;
-  --fs-xs: 13px;
+@media (max-width: 767px) {
+  :root {
+    --pad-x: 16px;
+    --pad-y: 16px;
+  }
 }
 
 /* ===== Base ===== */
 /* Preflight is disabled, so replicate its border reset: without this, Tailwind's
    `border` utilities set width but leave border-style at the UA default (none /
    button outset), so card borders vanish and buttons render a beveled edge. */
-*, ::before, ::after {
+*,
+::before,
+::after {
   box-sizing: border-box;
   border-width: 0;
   border-style: solid;
   border-color: var(--border);
 }
-html, body { margin: 0; padding: 0; height: 100%; }
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
 body {
   font-family: var(--ff-sans);
   font-size: var(--fs-base);
@@ -130,19 +145,40 @@ body.theme-switching,
 body.theme-switching *,
 body.theme-switching *::before,
 body.theme-switching *::after {
-  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease !important;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease !important;
 }
 @media (prefers-reduced-motion: reduce) {
-  *, ::before, ::after {
+  *,
+  ::before,
+  ::after {
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
   }
 }
-.mono { font-family: var(--ff-mono); font-feature-settings: normal; }
-button { font-family: inherit; cursor: pointer; }
-input, textarea, select { font-family: inherit; font-size: inherit; color: inherit; }
-::selection { background: var(--accent); color: var(--accent-fg); }
+.mono {
+  font-family: var(--ff-mono);
+  font-feature-settings: normal;
+}
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+input,
+textarea,
+select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+::selection {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
 
 /* ===== Sidebar (collapsible rail) ===== */
 /* The rail width is a variable the layout reads, set inline by App.vue.
@@ -156,6 +192,7 @@ input, textarea, select { font-family: inherit; font-size: inherit; color: inher
 
 /* ===== Rail buttons (pseudo-element tooltip + active marker — not expressible as utilities) ===== */
 .rail-btn {
+  text-decoration: none;
   position: relative;
   width: 38px;
   height: 38px;
@@ -166,7 +203,10 @@ input, textarea, select { font-family: inherit; font-size: inherit; color: inher
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 120ms, color 120ms, border-color 120ms;
+  transition:
+    background 120ms,
+    color 120ms,
+    border-color 120ms;
 }
 /* Expanded (wide) rail — icon + label aligned left, label fades in */
 .rail-btn--wide {
@@ -183,8 +223,14 @@ input, textarea, select { font-family: inherit; font-size: inherit; color: inher
   animation: rail-label-in 160ms ease;
 }
 @keyframes rail-label-in {
-  from { opacity: 0; transform: translateX(-4px); }
-  to   { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 .rail-btn:hover {
   background: var(--bg-hover);
@@ -209,7 +255,10 @@ input, textarea, select { font-family: inherit; font-size: inherit; color: inher
 .rail-btn--wide.active::before {
   left: 0;
 }
-.rail-btn svg { width: 18px; height: 18px; }
+.rail-btn svg {
+  width: 18px;
+  height: 18px;
+}
 .rail-btn[data-tip]:hover::after {
   content: attr(data-tip);
   position: absolute;
@@ -236,16 +285,32 @@ input, textarea, select { font-family: inherit; font-size: inherit; color: inher
   padding: 0 12px;
   color: var(--text);
   outline: none;
-  transition: border-color 120ms, box-shadow 120ms;
+  transition:
+    border-color 120ms,
+    box-shadow 120ms;
   width: 100%;
 }
 .input:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent);
 }
-textarea.input { padding: 10px 12px; height: auto; resize: vertical; min-height: 100px; }
-.input.mono { font-family: var(--ff-mono); }
-select.input { appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a8a29e' stroke-width='2'><polyline points='6 9 12 15 18 9'/></svg>"); background-repeat: no-repeat; background-position: right 10px center; background-size: 14px; padding-right: 30px; }
+textarea.input {
+  padding: 10px 12px;
+  height: auto;
+  resize: vertical;
+  min-height: 100px;
+}
+.input.mono {
+  font-family: var(--ff-mono);
+}
+select.input {
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a8a29e' stroke-width='2'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 14px;
+  padding-right: 30px;
+}
 
 /* ===== Tables (descendant selectors — putting utilities on every cell would be worse) ===== */
 .tbl {
@@ -256,8 +321,8 @@ select.input { appearance: none; background-image: url("data:image/svg+xml;utf8,
 .tbl th {
   text-align: left;
   font-weight: 500;
-  color: var(--text-3);
-  font-size: var(--fs-xs);
+  color: var(--text-2);
+  font-size: var(--fs-2xs);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 10px 14px;
@@ -276,15 +341,37 @@ select.input { appearance: none; background-image: url("data:image/svg+xml;utf8,
   white-space: nowrap;
   color: var(--text);
 }
-.tbl tr:last-child td { border-bottom: 0; }
-.tbl tr.row-click { cursor: pointer; }
-.tbl tr.row-click:hover { background: var(--bg-hover); }
+.tbl tr:last-child td {
+  border-bottom: 0;
+}
+.tbl tr.row-click {
+  cursor: pointer;
+}
+.tbl tr.row-click:hover {
+  background: var(--bg-hover);
+}
 /* Row affordance (chevron etc.) that only surfaces on hover */
-.tbl .row-hint { opacity: 0; transform: translateX(-2px); transition: opacity 120ms, transform 120ms; }
-.tbl tr:hover .row-hint { opacity: 1; transform: none; }
-.tbl td.num { font-variant-numeric: tabular-nums; }
-.tbl td.muted { color: var(--text-2); }
-.tbl td.mono { font-family: var(--ff-mono); font-size: var(--fs-xs); }
+.tbl .row-hint {
+  opacity: 0;
+  transform: translateX(-2px);
+  transition:
+    opacity 120ms,
+    transform 120ms;
+}
+.tbl tr:hover .row-hint {
+  opacity: 1;
+  transform: none;
+}
+.tbl td.num {
+  font-variant-numeric: tabular-nums;
+}
+.tbl td.muted {
+  color: var(--text-2);
+}
+.tbl td.mono {
+  font-family: var(--ff-mono);
+  font-size: var(--fs-xs);
+}
 
 /* ===== Progress bar (child selector + transition) ===== */
 .bar {
@@ -302,14 +389,33 @@ select.input { appearance: none; background-image: url("data:image/svg+xml;utf8,
   border-radius: 999px;
   transition: width 240ms ease;
 }
-.bar.bar-ok > span { background: var(--ok); }
-.bar.bar-warn > span { background: var(--warn); }
-.bar.bar-danger > span { background: var(--danger); }
+.bar.bar-ok > span {
+  background: var(--ok);
+}
+.bar.bar-warn > span {
+  background: var(--warn);
+}
+.bar.bar-danger > span {
+  background: var(--danger);
+}
 
 /* ===== Sparkline (SVG descendants) ===== */
-.spark { width: 100%; height: 32px; margin-top: 12px; }
-.spark path { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-.spark .area { fill: var(--accent); opacity: 0.10; stroke: none; }
+.spark {
+  width: 100%;
+  height: 32px;
+  margin-top: 12px;
+}
+.spark path {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.spark .area {
+  fill: var(--accent);
+  opacity: 0.1;
+  stroke: none;
+}
 
 /* ===== Skeleton (loading placeholder) ===== */
 .skeleton {
@@ -319,19 +425,30 @@ select.input { appearance: none; background-image: url("data:image/svg+xml;utf8,
   animation: skeleton-shimmer 1.4s ease-in-out infinite;
 }
 @keyframes skeleton-shimmer {
-  from { background-position: 100% 0; }
-  to   { background-position: -100% 0; }
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
 }
 
 /* ===== Route transition ===== */
-.page-enter-active { transition: opacity 160ms ease, transform 160ms ease; }
-.page-enter-from { opacity: 0; transform: translateY(4px); }
+.page-enter-active {
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
 
 /* ===== Terminal (dark content surface with per-token colors) ===== */
 .term {
   flex: 1;
-  background: #08080a;
-  color: #d4d4d8;
+  background: var(--term-bg);
+  color: var(--term-fg);
   font-family: var(--ff-mono);
   font-size: 12.5px;
   line-height: 1.55;
@@ -340,16 +457,70 @@ select.input { appearance: none; background-image: url("data:image/svg+xml;utf8,
   white-space: pre-wrap;
   word-break: break-word;
 }
-.theme-dark .term { background: #050507; }
-.term .ln { display: block; min-height: 1.55em; }
-.term .info { color: #a1a1aa; }
-.term .ok { color: #4ade80; }
-.term .warn { color: #fbbf24; }
-.term .err { color: #fb7185; }
-.term .cmd { color: var(--accent); }
-.term .dim { color: #52525b; }
+.term .ln {
+  display: block;
+  min-height: 1.55em;
+}
+.term .info {
+  color: #a1a1aa;
+}
+.term .ok {
+  color: #4ade80;
+}
+.term .warn {
+  color: #fbbf24;
+}
+.term .err {
+  color: #fb7185;
+}
+.term .cmd {
+  color: var(--accent);
+}
+.term .dim {
+  color: var(--term-dim);
+}
+
+/* ===== Focus ===== */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.input:focus-visible {
+  outline: none;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 
 /* ===== Scrollbars ===== */
-.term::-webkit-scrollbar, .content::-webkit-scrollbar { width: 10px; height: 10px; }
-.term::-webkit-scrollbar-thumb, .content::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; }
-.term::-webkit-scrollbar-track, .content::-webkit-scrollbar-track { background: transparent; }
+.term::-webkit-scrollbar,
+.content::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.term::-webkit-scrollbar-thumb,
+.content::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
+.term::-webkit-scrollbar-track,
+.content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ===== Brand mark (the "N" tile) ===== */
+:root {
+  --brand-from: #f59e0b;
+  --brand-to: #ea580c;
+}
+.brand-mark {
+  background-image: linear-gradient(to top right, var(--brand-from), var(--brand-to));
+}

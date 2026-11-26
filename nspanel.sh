@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -eo pipefail
 
 [ "$EUID" -eq 0 ] && SUDO="" || SUDO="sudo"
 
@@ -18,7 +18,7 @@ else
     PANEL_DIR="nsknet.github.io/NsPanel"
     if [ ! -d "$REPO_DIR" ]; then
         echo "Cloning NsPanel repository..."
-        git clone https://github.com/nsknet/nsknet.github.io.git "$REPO_DIR"
+        git clone --filter=blob:none https://github.com/nsknet/nsknet.github.io.git "$REPO_DIR"
     fi
 fi
 
@@ -42,6 +42,27 @@ if [ -z "$TARGET_BRANCH" ]; then
             ;;
         *)
             TARGET_BRANCH="$0"
+            ;;
+    esac
+fi
+
+# Continue with the code already on disk only when the operator asked for it.
+offline_or_exit() {
+    if [ "${NSPANEL_OFFLINE:-}" != "1" ]; then
+        echo "   Set NSPANEL_OFFLINE=1 to start the code on disk anyway." >&2
+        exit 1
+    fi
+}
+
+# Only ever run run.sh as root from a clone of this repository.
+EXPECTED_ORIGIN="https://github.com/nsknet/nsknet.github.io"
+if [ -d "$REPO_DIR/.git" ]; then
+    ORIGIN_URL="$(git -C "$REPO_DIR" remote get-url origin 2>/dev/null || true)"
+    case "${ORIGIN_URL%.git}" in
+        "$EXPECTED_ORIGIN" | "git@github.com:nsknet/nsknet.github.io") ;;
+        *)
+            echo "✗  $REPO_DIR is not a clone of $EXPECTED_ORIGIN (origin: ${ORIGIN_URL:-none})." >&2
+            exit 1
             ;;
     esac
 fi
@@ -95,12 +116,17 @@ if [ -d "$REPO_DIR/.git" ]; then
     fi
 
     echo "Using branch: $TARGET_BRANCH"
-    git -C "$REPO_DIR" checkout "$TARGET_BRANCH" 2>/dev/null \
-        || git -C "$REPO_DIR" checkout -b "$TARGET_BRANCH" "origin/$TARGET_BRANCH" 2>/dev/null \
-        || echo "⚠  Could not switch to branch '$TARGET_BRANCH' — staying on $(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD)." >&2
-    git -C "$REPO_DIR" pull origin "$TARGET_BRANCH" 2>/dev/null \
-        || git -C "$REPO_DIR" pull 2>/dev/null \
-        || echo "⚠  git pull failed — starting the code already on disk (local changes or no network?)." >&2
+    # Never run code as root that is not what was asked for: a failed switch or
+    # pull stops here unless the operator explicitly opts into the code on disk.
+    if ! git -C "$REPO_DIR" checkout "$TARGET_BRANCH" 2>/dev/null \
+        && ! git -C "$REPO_DIR" checkout -b "$TARGET_BRANCH" "origin/$TARGET_BRANCH" 2>/dev/null; then
+        echo "✗  Could not switch to branch '$TARGET_BRANCH'." >&2
+        offline_or_exit
+    fi
+    if ! git -C "$REPO_DIR" pull --ff-only origin "$TARGET_BRANCH" 2>/dev/null; then
+        echo "✗  git pull failed (local changes or no network?)." >&2
+        offline_or_exit
+    fi
 fi
 
 cd "$PANEL_DIR"

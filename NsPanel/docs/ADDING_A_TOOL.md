@@ -39,6 +39,20 @@ uninstall_mytool() {
 `_register_panel_service` and `_unregister_panel_service` come from
 `scripts/lib/common.sh`, which is sourced automatically before your script.
 
+Also from `common.sh`, and expected in a production-quality install:
+
+| Helper | Use it to |
+|---|---|
+| `_require_platform "My Tool" "22.04 24.04" "amd64 arm64"` | fail fast on an Ubuntu release or CPU the vendor repo does not serve |
+| `_os_codename`, `_os_version`, `_os_arch` | build repo lines and download names (never hard-code `noble` or `amd64`) |
+| `_verify_sha256 <file> <hex>` | check every downloaded binary against the vendor's published checksum |
+| `_apt_install_optional pkg…` | install nice-to-have packages without failing when one is missing |
+| `_forbid_public_access "My Tool"` | refuse `0.0.0.0/0` for a service with no login of its own |
+| `install -m 600 /dev/null "$FILE"` | create a credentials file before writing to it (never `chmod` afterwards) |
+
+Secrets never go on a command line (it shows in `ps` and in the job log): pass
+them on stdin, in an environment variable or in a 0600 file.
+
 ## 2. The module — `modules/mytool.py`
 
 ```python
@@ -50,8 +64,8 @@ class MyToolModule(Module):
     name = "mytool"
     display_name = "My Tool"
     description = "Does something useful."
-    logo = "mytool.png"                  # file in static/logo/
-    script = "mytool.sh"                 # optional — defaults to "<name>.sh"
+    logo = "mytool.png"  # file in static/logo/
+    script = "mytool.sh"  # optional — defaults to "<name>.sh"
     bash_function = "install_mytool"
     uninstall_function = "uninstall_mytool"
 
@@ -77,24 +91,25 @@ dashboard URL); the Tools screen shows it as key/value rows.
 |---|---|
 | `requires_password = True` | The install dialog asks for a password, passed as `DB_PASSWORD`. |
 | `firewall_ports = [1234]` | The dialog lets the operator choose which subnets to expose; arrives as `ALLOWED_SUBNETS`. |
+| `allow_public = False` | The tool has no login of its own: "Any IP" is not offered and `0.0.0.0/0` is refused. |
 | `change_password_function` | Adds a "change password" action. |
 | `install_params = [...]` | Extra form fields — see below. |
 
 ```python
-    install_params = [
-        {
-            "name": "edition",          # form field name
-            "env": "MYTOOL_EDITION",    # env var the script reads
-            "type": "select",           # string | number | checkbox | select
-            "label": "Edition",
-            "default": "free",
-            "help": "Free is fine for most setups.",
-            "options": [
-                {"value": "free", "label": "Free"},
-                {"value": "pro", "label": "Pro — licensed"},
-            ],
-        },
-    ]
+install_params = [
+    {
+        "name": "edition",  # form field name
+        "env": "MYTOOL_EDITION",  # env var the script reads
+        "type": "select",  # string | number | checkbox | select
+        "label": "Edition",
+        "default": "free",
+        "help": "Free is fine for most setups.",
+        "options": [
+            {"value": "free", "label": "Free"},
+            {"value": "pro", "label": "Pro — licensed"},
+        ],
+    },
+]
 ```
 
 All of these reach the script as **environment variables**, never as arguments,
@@ -105,7 +120,10 @@ so they never appear in the live log. `number` accepts `min`/`max`.
 ```bash
 pytest tests/test_registry.py   # every declared bash function must exist
 bash -n scripts/mytool.sh
-shellcheck -S error scripts/mytool.sh
+shellcheck -S warning scripts/mytool.sh
 ```
 
-Then install it once from the Tools screen and watch the live output.
+Then install it once from the Tools screen on a throwaway host and watch the live
+output. If the install can run on a stock GitHub runner, add a case to
+`tests/integration/test_real_install.py` (install, check from the outside,
+uninstall) so CI keeps it working on every supported Ubuntu release.

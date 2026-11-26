@@ -56,18 +56,50 @@ GET /stream/{job_id}
   `- routes/stream.py -> runner.stream_job() -> SSE `line` events, then `done`
 ```
 
-Job state is in memory and capped at `config.MAX_JOBS`; restarting the panel
-loses live logs but not the audit log. `GET /api/v1/jobs` lists the jobs still in
+Job state is in memory and capped at `config.MAX_JOBS` (output at
+`config.MAX_JOB_LINES` per job, oldest lines dropped). Each job runs in its own
+process group: `POST /api/v1/jobs/{id}/cancel`, the per-job timeout and panel
+shutdown stop the whole tree. Install/uninstall functions (`core/jobs._EXCLUSIVE`)
+queue behind each other instead of fighting over the dpkg lock. A finished job's
+summary is appended to `jobs.jsonl`, so the list survives a restart; its output
+does not. `GET /api/v1/jobs` lists the jobs still in
 memory (the Jobs screen and the header's "N running" chip), and `/stream/{id}`
 replays a job from its first line, so its output can be reopened after a reload.
 
 ## Auth and CSRF
 
-Basic Auth covers everything except `/logout`. Because browsers re-send cached
-Basic credentials on any request — including a form another website submits —
-every non-GET request must also carry `X-NsPanel: 1` (`core/auth.require_csrf_header`),
-and requests marked `Sec-Fetch-Site: cross-site` are refused. The frontend's
-`postAction` sends the header.
+One admin account. The password is stored only as a scrypt hash
+(`core/passwords.py`, `/etc/nspanel/auth.json`, 0600), shared by every panel on the
+host. `POST /api/v1/auth/login` creates a server-side session (`core/session.py`,
+in memory: a restart signs everyone out) and sets an HttpOnly, SameSite=Strict
+cookie. Sessions end after 30 minutes idle or 12 hours. Five failed logins from one
+IP within 15 minutes lock that IP out for 15 minutes; every attempt is audited with
+the client IP.
+
+Everything under `/api` and `/stream` needs a session (`core/auth.require_session`).
+Public: the login route, `/healthz`, the SPA shell and static assets — the shell asks
+`/api/v1/auth/me` and shows the login screen on 401.
+
+On top of SameSite, every non-GET request must carry `X-NsPanel: 1`
+(`core/auth.require_csrf_header`); requests marked `Sec-Fetch-Site: cross-site` or
+with a foreign `Origin` are refused. The frontend's `postAction` sends the header.
+Responses carry a CSP with `frame-ancestors 'none'` and `X-Frame-Options: DENY`.
+
+Every error is `{status: "error", code, message, detail}`.
+
+## Version
+
+`core/version.py` reports the package version plus the git commit the process
+started from (`GET /healthz`, `GET /api/v1/version`). The build writes
+`static/dist/version.json` with the last commit that touched `frontend/`. The UI
+shows "UI out of date" in two cases:
+
+- the backend's checkout has newer `frontend/` commits than that file, so `static/dist` is stale;
+- the page booted with a different `version.json` than the server now serves, because the
+  tab stayed open across an update.
+
+The commit is only in `version.json`, never compiled into the JS, so the same sources
+always build the same bundle and CI can compare it byte for byte.
 
 ### Calling a bash function
 
@@ -84,8 +116,16 @@ commands. `tests/test_jobs.py` asserts this with hostile inputs.
 
 Everything in `scripts/lib/` is sourced first, so any script may call the shared
 helpers (`log_header`, `log_step`, `_ufw_allow_port`, `_register_panel_service`,
-`gen_password`, `cred_set`). `lib/common.sh` also wraps `apt-get` so every call
-waits for the dpkg lock instead of failing on a fresh VPS.
+`gen_password`, `cred_set`, `_require_platform`, `_verify_sha256`, the `_fstab_*`
+helpers; see docs/ADDING_A_TOOL.md). `lib/common.sh` also wraps `apt-get`, `dpkg -i`
+and `add-apt-repository` so every call waits for the dpkg lock instead of failing on
+a fresh VPS, and never stops at a "keep your modified config file?" prompt.
+
+`/etc/fstab` is only edited through `_fstab_backup` / `_fstab_remove_field` /
+`_fstab_verify_or_restore`: a change that makes `findmnt --verify` report new errors
+is rolled back, so the panel cannot leave a host that fails to boot. `_ufw_allow_port`
+never enables UFW; only `install_ufw` does, after allowing the real SSH port(s) and
+the panel's port.
 
 Only that one target script is sourced. A function that calls into another
 script must source it itself (see the top of `system.sh`);
@@ -108,7 +148,9 @@ Environment overrides, all set by `run.sh`:
 | `NSPANEL_HOST` | `127.0.0.1` | Bind address. The panel is meant to be reached over an SSH tunnel. |
 | `NSPANEL_PORT` | `7777` | Bind port. |
 | `NSPANEL_DEV` | unset | `1` enables uvicorn auto-reload. |
-| `PANEL_PASSWORD` | random per launch | Basic Auth password. Printed at startup only when the panel generated it. |
+| `PANEL_PASSWORD` | unset | Pins the admin password: re-hashed on every start while set. |
+| `NSPANEL_AUTH_FILE` | `/etc/nspanel/auth.json` | The password hash. |
+| `NSPANEL_STATE_DIR` | `/var/lib/nspanel` | Job history (`jobs.jsonl`). |
 | `NSPANEL_SERVICE` | unset | `1` when running as the systemd service (set in its env file). |
 | `NSPANEL_AUDIT_LOG` | `/var/log/nspanel/audit.log` | Falls back next to the code when that path is not writable. |
 
@@ -122,8 +164,9 @@ Environment overrides, all set by `run.sh`:
 | `/var/www/services/` | Panel-managed systemd units (and symlinks to APT ones) |
 | `/etc/coredns/hosts` | CoreDNS records |
 | `/var/log/nspanel/audit.log` | Append-only action log |
-| `/opt/nspanel` | The panel service's own sparse clone (`scripts/panel_service.sh`) |
-| `/etc/nspanel/` | Service env file (password, 0600) and `state.json` (install/update times, last update check) |
+| `/opt/nspanel` | The panel service's clone; `releases/<sha>/` worktrees and the `current` symlink (`scripts/panel_service.sh`) |
+| `/etc/nspanel/` | `auth.json` (password hash), service env file (0600, no secrets), `state.json` (install/update times, last update check), `tunnels/*.env` (Cloudflare tunnel tokens, 0600) |
+| `/var/lib/nspanel/jobs.jsonl` | Finished-job history shown on the Jobs screen after a restart |
 
 No database. Sites and services are discovered by scanning those directories, so
 the panel and the shell always agree about what exists.
@@ -135,16 +178,34 @@ panel itself under systemd, from its own clone in `/opt/nspanel`. That clone is 
 from the checkout `run.sh` uses, so pulling or editing that checkout never changes what
 the service runs.
 
-- The **update check** (`POST /api/v1/panel/check`) runs `git fetch`. It counts only the
-  commits that touch `config.SERVICE_UPDATE_PATHS`, then caches the result in `state.json`
-  together with the HEAD it was made against. Once HEAD moves, the cached result is
-  marked `stale` and the page checks again.
-- **Restarts** are scheduled with `systemd-run --on-active=3`. A job that runs inside the
-  service shares its cgroup, so a direct `systemctl restart` would kill the job before
-  its exit status reached the browser. After the job ends, the page polls
-  `GET /api/v1/panel` until the panel has gone down and come back, then reloads to pick
-  up the new bundle.
+- **Releases.** Each commit the service runs is a git worktree,
+  `releases/<sha>/NsPanel` (sparse: only `NsPanel/`), with its own `.venv` built from
+  `requirements.lock`. It is smoke-tested (imports, built frontend) and marked
+  `.release-ok` before use. `current` is a symlink to the active release, swapped
+  atomically (`ln -sfn` + `mv -T`); the unit runs `current`. `state.json` records the
+  current and previous release. Older releases are pruned, keeping three. Installs made
+  before releases existed ran `/opt/nspanel/NsPanel`; that directory stays as the
+  previous release on their first update.
+- The **update check** (`POST /api/v1/panel/check`) runs `git fetch`, counts only the
+  commits after the current release that touch `config.SERVICE_UPDATE_PATHS`, and asks
+  GitHub for the check runs of the branch tip (walking back past `[skip ci]` commits).
+  The result is cached in `state.json` with the commit it was made against; once the
+  release changes it is marked `stale` and the page checks again.
+- **Update** re-checks, refuses while CI is red or running (unless `force`), and passes
+  the exact commit it checked as `SVC_TARGET`, so the job never installs a newer commit
+  nobody looked at.
+- **Restarts and rollback.** After switching `current`, the service must answer
+  `/healthz` within 60 s; otherwise `current` goes back to the previous release and the
+  service is restarted (`panel_service_watchdog`). A job running inside the service
+  shares its cgroup, so there the restart and the watchdog run in a transient unit
+  (`systemd-run --on-active=3`) instead. The page then polls `GET /api/v1/panel` until
+  the panel has gone down and come back, and reloads.
+- Update, restart and rollback are refused while any job runs (a restart would stop
+  it), and the script takes `/run/nspanel-service.lock` so two never overlap.
+- **HTTPS** (default on): a self-signed certificate in `/etc/nspanel/tls/`; uvicorn
+  serves it directly and the session cookie becomes `Secure`.
 - The service **cannot uninstall itself**: the route refuses when `is_self` is true.
+  Uninstalling never removes `auth.json` or `tunnels/`.
 
 ## Frontend
 
@@ -161,11 +222,28 @@ refetch the screen's stores.
 
 One route table in `frontend/src/router/index.ts` owns the nav rail, the
 breadcrumbs and which stores a screen loads — adding a screen means adding one
-route, not editing five parallel tables.
+route, not editing five parallel tables. Paths from the earlier layout
+(`/sites`, `/services`, `/firewall`, …) redirect to their new place.
+
+How screens are built — data states, forms, dialogs, confirmations and the
+shared components — is in [FRONTEND.md](FRONTEND.md). The theme (system, light or
+dark) is applied before the first paint by `public/theme-init.js`, a file rather
+than an inline script so it fits the Content-Security-Policy.
 
 ## Tests
+
+`npm test` (vitest, in `frontend/`) covers the input rules, formatting, the data
+store behaviour (errors, silent polls, stale responses), the dialog stack, the
+confirm dialog, the data table and the firewall lockout logic.
 
 `pytest` runs on any OS: `tests/conftest.py` fakes the job runner and stubs the
 status probes, so nothing calls systemctl. The suite protects three things:
 input validation, that values never reach the shell as text, and that every tool
 module points at a bash function that actually exists.
+
+`tests/integration/` is the exception: it runs real installs through
+`bash_invoker.build_cmd`, exactly as a job would, and checks the result from the
+outside (service active, Redis refuses a client without the password, UFW kept
+SSH and the panel open). It changes the machine, so it is skipped unless
+`NSPANEL_INTEGRATION=1` and running as root on Linux; CI runs it on throwaway
+Ubuntu 22.04 and 24.04 runners when `scripts/` changes.

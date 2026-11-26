@@ -4,6 +4,7 @@ Backs the Disks section of the System page. Read-only: enumeration is done with
 `lsblk` (JSON output) enriched with live usage figures from psutil. Mutating
 operations (mount / unmount / format) run as streamed jobs via scripts/disks.sh.
 """
+
 import json
 import shutil
 import subprocess
@@ -30,7 +31,9 @@ def list_disks() -> list[dict]:
     try:
         result = subprocess.run(
             ["lsblk", "-J", "-b", "-o", cols],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode != 0:
             return []
@@ -74,7 +77,29 @@ def list_disks() -> list[dict]:
         out["children"] = [transform(c) for c in children]
         return out
 
-    return [transform(dev) for dev in data.get("blockdevices", [])]
+    return [_annotate_in_use(transform(dev)) for dev in data.get("blockdevices", [])]
+
+
+def _annotate_in_use(node: dict) -> dict:
+    """Set `in_use` (a reason, or "") on every node: a disk is in use when it or
+    any partition under it is mounted, swap, or an LVM/RAID/LUKS member. The
+    Storage screen locks Format on those; the backend checks again anyway."""
+    children = [_annotate_in_use(child) for child in node.get("children", [])]
+    node["children"] = children
+    reason = ""
+    if node.get("mountpoint"):
+        reason = f"mounted on {node['mountpoint']}"
+    elif node.get("fstype") in _MEMBER_FSTYPES:
+        reason = f"in use as {node['fstype']}"
+    elif node.get("type") in ("lvm", "crypt") or str(node.get("type", "")).startswith("raid"):
+        reason = f"holds a {node['type']} volume"
+    else:
+        reason = next((f"{c['path']} {c['in_use']}" for c in children if c.get("in_use")), "")
+    node["in_use"] = reason
+    node["system"] = node.get("mountpoint") in ("/", "/boot", "/boot/efi", "[SWAP]") or any(
+        c.get("system") for c in children
+    )
+    return node
 
 
 def _usage_by_mountpoint() -> dict[str, dict]:
@@ -97,3 +122,50 @@ def _to_int(value) -> int:
         return int(value)
     except (TypeError, ValueError):
         return 0
+
+
+# Filesystem signatures that mean "this device belongs to something else".
+_MEMBER_FSTYPES = {"swap", "LVM2_member", "linux_raid_member", "crypto_LUKS", "zfs_member"}
+
+
+def device_in_use(device: str) -> str | None:
+    """Why <device> must not be formatted, or None when it looks free.
+
+    Walks the device and every descendant in `lsblk` (a whole disk is "in use"
+    when any of its partitions is mounted, is swap, or is an LVM/RAID member).
+    Returns None off-Linux, where lsblk is missing; the bash side checks again.
+    """
+    if not shutil.which("lsblk"):
+        return None
+    try:
+        result = subprocess.run(
+            ["lsblk", "-J", "-o", "PATH,TYPE,FSTYPE,MOUNTPOINT", device],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            return f"{device} was not found"
+        nodes = json.loads(result.stdout or "{}").get("blockdevices", [])
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return "could not inspect the device"
+
+    def walk(node: dict) -> str | None:
+        path = node.get("path") or device
+        if node.get("mountpoint"):
+            return f"{path} is mounted on {node['mountpoint']}"
+        if node.get("fstype") in _MEMBER_FSTYPES:
+            return f"{path} is in use as {node['fstype']}"
+        if node.get("type") in ("lvm", "raid0", "raid1", "raid5", "raid6", "raid10", "crypt"):
+            return f"{path} holds a {node['type']} volume"
+        for child in node.get("children") or []:
+            reason = walk(child)
+            if reason:
+                return reason
+        return None
+
+    for node in nodes:
+        reason = walk(node)
+        if reason:
+            return reason
+    return None

@@ -13,7 +13,7 @@ withDefaults(defineProps<{ title: string; count?: string | number | null; first?
     </h2>
     <span
       v-if="count !== null"
-      class="inline-flex items-center h-[18px] px-1.5 rounded-full bg-c-subtle border border-c-border text-[11px] text-c-tx2 mono tabular-nums"
+      class="inline-flex items-center h-[18px] px-1.5 rounded-full bg-c-subtle border border-c-border text-2xs-var text-c-tx2 mono tabular-nums"
       >{{ count }}</span
     >
     <div v-if="$slots.default" class="ml-auto flex items-center gap-2">

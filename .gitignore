@@ -26,3 +26,9 @@ obj/
 # IDEs and editors
 .vscode/
 .idea/
+
+# NsPanel local state when run off-Linux / without root (password hash, audit, jobs)
+.nspanel-dev/
+# Environment files may hold secrets
+.env
+*.env

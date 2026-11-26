@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# rabbitmq.sh — RabbitMQ 4.x on Ubuntu 24.04 (Noble)
+# rabbitmq.sh — RabbitMQ 4.x on Ubuntu 22.04 (Jammy) / 24.04 (Noble), amd64
 # Official method: Team RabbitMQ Cloudsmith repos
 # Docs: https://www.rabbitmq.com/docs/install-debian
 
@@ -16,36 +16,40 @@ install_rabbitmq() {
     echo "  Installing RabbitMQ"
     echo "════════════════════════════════════════════════════════════"
 
+    # Team RabbitMQ's modern Erlang builds (RabbitMQ 4.x needs Erlang 26+, newer
+    # than Ubuntu ships) are published for jammy and noble on amd64. arm64 is
+    # left out until verified against the Erlang repository.
+    _require_platform "RabbitMQ" "22.04 24.04" "amd64"
+    local codename arch
+    codename="$(_os_codename)"
+    arch="$(_os_arch)"
+
+    apt-get update -q
     apt-get install -y curl gnupg apt-transport-https
 
     # ── Signing keys ──────────────────────────────────────────────
     echo "▶  Importing signing keys..."
 
     # Team RabbitMQ main key
-    curl -1sLf "https://keys.openpgp.org/vks/v1/by-fingerprint/0A9AF2115F4687BD29803A206B73A36E6026DFCA" \
-        | gpg --dearmor \
-        | tee /usr/share/keyrings/com.rabbitmq.team.gpg > /dev/null
+    curl -1sLf --max-time 60 --retry 3 "https://keys.openpgp.org/vks/v1/by-fingerprint/0A9AF2115F4687BD29803A206B73A36E6026DFCA" \
+        | gpg --batch --yes --dearmor -o /usr/share/keyrings/com.rabbitmq.team.gpg
 
     # Cloudsmith: Erlang repo key
-    curl -1sLf "https://github.com/rabbitmq/signing-keys/releases/download/3.0/cloudsmith.rabbitmq-erlang.E495BB49CC4BBE5B.key" \
-        | gpg --dearmor \
-        | tee /usr/share/keyrings/rabbitmq.E495BB49CC4BBE5B.gpg > /dev/null
+    curl -1sLf --max-time 60 --retry 3 "https://github.com/rabbitmq/signing-keys/releases/download/3.0/cloudsmith.rabbitmq-erlang.E495BB49CC4BBE5B.key" \
+        | gpg --batch --yes --dearmor -o /usr/share/keyrings/rabbitmq.E495BB49CC4BBE5B.gpg
 
     # Cloudsmith: RabbitMQ server repo key
-    curl -1sLf "https://github.com/rabbitmq/signing-keys/releases/download/3.0/cloudsmith.rabbitmq-server.9F4587F226208342.key" \
-        | gpg --dearmor \
-        | tee /usr/share/keyrings/rabbitmq.9F4587F226208342.gpg > /dev/null
+    curl -1sLf --max-time 60 --retry 3 "https://github.com/rabbitmq/signing-keys/releases/download/3.0/cloudsmith.rabbitmq-server.9F4587F226208342.key" \
+        | gpg --batch --yes --dearmor -o /usr/share/keyrings/rabbitmq.9F4587F226208342.gpg
 
     # ── APT repositories ──────────────────────────────────────────
-    echo "▶  Adding Erlang + RabbitMQ repositories..."
-    tee /etc/apt/sources.list.d/rabbitmq.list > /dev/null <<'SOURCES'
+    echo "▶  Adding Erlang + RabbitMQ repositories (${codename}, ${arch})..."
+    cat > /etc/apt/sources.list.d/rabbitmq.list <<SOURCES
 ## Erlang (Team RabbitMQ modern Erlang builds)
-deb [arch=amd64 signed-by=/usr/share/keyrings/rabbitmq.E495BB49CC4BBE5B.gpg] https://ppa1.rabbitmq.com/rabbitmq/rabbitmq-erlang/deb/ubuntu noble main
-deb-src [arch=amd64 signed-by=/usr/share/keyrings/rabbitmq.E495BB49CC4BBE5B.gpg] https://ppa1.rabbitmq.com/rabbitmq/rabbitmq-erlang/deb/ubuntu noble main
+deb [arch=${arch} signed-by=/usr/share/keyrings/rabbitmq.E495BB49CC4BBE5B.gpg] https://ppa1.rabbitmq.com/rabbitmq/rabbitmq-erlang/deb/ubuntu ${codename} main
 
 ## RabbitMQ server
-deb [arch=amd64 signed-by=/usr/share/keyrings/rabbitmq.9F4587F226208342.gpg] https://ppa1.rabbitmq.com/rabbitmq/rabbitmq-server/deb/ubuntu noble main
-deb-src [arch=amd64 signed-by=/usr/share/keyrings/rabbitmq.9F4587F226208342.gpg] https://ppa1.rabbitmq.com/rabbitmq/rabbitmq-server/deb/ubuntu noble main
+deb [arch=${arch} signed-by=/usr/share/keyrings/rabbitmq.9F4587F226208342.gpg] https://ppa1.rabbitmq.com/rabbitmq/rabbitmq-server/deb/ubuntu ${codename} main
 SOURCES
 
     apt-get update -q
@@ -84,10 +88,12 @@ SOURCES
     # (grep without -q: under pipefail, -q's early exit can fail the pipeline.)
     if rabbitmqctl list_users --quiet | awk '{print $1}' | grep -Fx "$admin_user" >/dev/null; then
         echo "▶  User '${admin_user}' exists — updating its password..."
-        rabbitmqctl change_password "$admin_user" "$admin_pass"
+        # Password on stdin (RabbitMQ 3.11+ reads it there when omitted), not argv.
+        printf '%s\n' "$admin_pass" | rabbitmqctl change_password "$admin_user"
     else
         echo "▶  Creating admin user '${admin_user}'..."
-        rabbitmqctl add_user "$admin_user" "$admin_pass"
+        # Password on stdin, not argv, so it never shows up in `ps`.
+        printf '%s\n' "$admin_pass" | rabbitmqctl add_user "$admin_user"
     fi
     rabbitmqctl set_user_tags "$admin_user" administrator
 
@@ -123,6 +129,8 @@ CONF
     # ── Save credentials ──────────────────────────────────────────
     echo "▶  Saving credentials to ${RABBITMQ_CRED_FILE}..."
     mkdir -p "$(dirname "$RABBITMQ_CRED_FILE")"
+    # Create it 0600 first: a later chmod leaves a window where the file is world-readable.
+    install -m 600 /dev/null "$RABBITMQ_CRED_FILE"
     cat > "$RABBITMQ_CRED_FILE" <<CRED
 # RabbitMQ credentials
 # Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -182,7 +190,8 @@ set_rabbitmq_password() {
     local admin_user="admin"
     local admin_pass="${DB_PASSWORD:?DB_PASSWORD env var required}"
     echo "▶  Updating RabbitMQ password for '${admin_user}'..."
-    rabbitmqctl change_password "$admin_user" "$admin_pass"
+    # Password on stdin (RabbitMQ 3.11+ reads it there when omitted), not argv.
+    printf '%s\n' "$admin_pass" | rabbitmqctl change_password "$admin_user"
 
     if [ -f "$RABBITMQ_CRED_FILE" ]; then
         echo "▶  Updating ${RABBITMQ_CRED_FILE}..."

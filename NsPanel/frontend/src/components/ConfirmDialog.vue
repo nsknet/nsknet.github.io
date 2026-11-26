@@ -1,48 +1,67 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue';
+/** Confirmation for any consequential action.
+ *
+ * `danger` actions get a red verb button ("Delete rule", not "Continue"), and
+ * `typeToConfirm` makes the operator type a name (a disk, a rule, a service)
+ * before the button enables — for things that cannot be undone.
+ */
+import { computed, ref } from 'vue';
 
 import type { Confirm } from '@/stores/ui';
 
+import BaseDialog from './ui/BaseDialog.vue';
 import Btn from './ui/Btn.vue';
-import LIcon from './ui/LIcon.vue';
 
 const props = defineProps<{ confirm: Confirm }>();
 const emit = defineEmits<{ close: [] }>();
 
-function dismiss(): void {
-  emit('close');
-}
+const typed = ref('');
+const needsTyping = computed(() => !!props.confirm.typeToConfirm);
+const canConfirm = computed(() => !needsTyping.value || typed.value.trim() === props.confirm.typeToConfirm);
 
 function onYes(): void {
-  dismiss();
+  if (!canConfirm.value) return;
+  emit('close');
   props.confirm.onYes?.();
 }
-
-function onKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Escape') dismiss();
-}
-
-onMounted(() => document.addEventListener('keydown', onKeydown));
-onUnmounted(() => document.removeEventListener('keydown', onKeydown));
 </script>
 
 <template>
-  <div
-    class="fixed inset-0 z-[200] grid place-items-center p-10 px-6 bg-black/40 backdrop-blur-[4px] animate-fade"
-    @click.self="dismiss"
+  <BaseDialog
+    :title="confirm.title"
+    size="sm"
+    :icon="confirm.danger ? 'triangle-alert' : 'info'"
+    :tone="confirm.danger ? 'danger' : 'accent'"
+    @close="emit('close')"
   >
-    <div class="max-w-[420px] bg-c-card border border-c-border rounded-theme-lg shadow-lg p-5">
-      <div
-        class="w-10 h-10 rounded-[10px] bg-c-dngsoft text-c-danger grid place-items-center mb-3.5"
+    <p class="m-0 text-sm-var text-c-tx2 whitespace-pre-line">{{ confirm.body }}</p>
+    <ul v-if="confirm.details?.length" class="mt-3 mb-0 pl-5 text-sm-var text-c-tx2 flex flex-col gap-1">
+      <li v-for="detail in confirm.details" :key="detail">{{ detail }}</li>
+    </ul>
+    <form v-if="needsTyping" class="mt-4" @submit.prevent="onYes">
+      <label for="confirm-typed" class="block text-sm-var text-c-tx mb-1.5">
+        Type <span class="mono font-semibold select-all">{{ confirm.typeToConfirm }}</span> to confirm
+      </label>
+      <input
+        id="confirm-typed"
+        v-model="typed"
+        class="input mono"
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck="false"
+        data-autofocus
+      />
+    </form>
+    <template #footer>
+      <Btn @click="emit('close')">Cancel</Btn>
+      <Btn
+        :variant="confirm.danger ? 'danger-solid' : 'primary'"
+        :disabled="!canConfirm"
+        :data-autofocus="needsTyping ? undefined : ''"
+        @click="onYes"
       >
-        <LIcon name="triangle-alert" is="width:20px;height:20px" />
-      </div>
-      <h3 class="m-0 mb-1.5 text-base font-semibold tracking-[-0.01em]">{{ confirm.title }}</h3>
-      <p class="m-0 mb-4 text-c-tx2 text-sm-var">{{ confirm.body }}</p>
-      <div class="flex justify-end gap-1.5">
-        <Btn @click="dismiss">Cancel</Btn>
-        <Btn variant="primary" @click="onYes">Continue</Btn>
-      </div>
-    </div>
-  </div>
+        {{ confirm.confirmLabel || 'Continue' }}
+      </Btn>
+    </template>
+  </BaseDialog>
 </template>

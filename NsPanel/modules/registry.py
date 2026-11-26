@@ -4,6 +4,7 @@ Every .py file in modules/ (except base/registry/__init__) is imported and
 scanned for Module subclasses. Adding a tool requires no edits here — see
 docs/ADDING_A_TOOL.md.
 """
+
 import importlib
 import pkgutil
 from pathlib import Path
@@ -51,6 +52,7 @@ def describe(module: Module) -> ToolInfo:
         logo=module.logo,
         requires_password=module.requires_password,
         firewall_ports=list(module.firewall_ports or []),
+        allow_public=bool(getattr(module, "allow_public", True)),
         install_params=list(module.install_params or []),
         can_uninstall=bool(module.uninstall_function),
         can_change_password=bool(module.change_password_function),

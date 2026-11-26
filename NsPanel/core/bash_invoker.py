@@ -6,6 +6,7 @@ so the common path is a direct lookup; the scan below is the fallback for
 functions that are not owned by a tool module (system, firewall, disks, …) and
 its result is cached for the process lifetime.
 """
+
 import functools
 import re
 
@@ -61,7 +62,14 @@ def build_cmd(function: str, *args: str, script: str | None = None) -> list[str]
     # scripts/lib/*.sh holds helpers install scripts call by name
     # (_ufw_allow_port, _register_panel_service, log_header, …). Source them
     # first so those calls resolve regardless of which script is the target.
+    # The ERR trap (inherited by functions via `set -E`) names the file, line and
+    # command that stopped a `set -e` script, instead of a bare "exit 1". It stays
+    # quiet in scripts without errexit, where a failing command is not fatal.
+    # BASH_COMMAND is the unexpanded source text, so no secret values are printed.
     snippet = (
+        "set -E; "
+        "trap '_rc=$?; [[ $- == *e* ]] && "
+        'echo "✗ ${BASH_SOURCE[0]##*/}:${LINENO}: ${BASH_COMMAND} (exit $_rc)" >&2\' ERR; '
         '_libdir="$(dirname "$1")/lib"; '
         'if [ -d "$_libdir" ]; then '
         'for _lib in "$_libdir"/*.sh; do [ -f "$_lib" ] && source "$_lib"; done; '

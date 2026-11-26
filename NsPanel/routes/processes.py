@@ -1,7 +1,9 @@
 """FastAPI router for system processes."""
+
 import os
+import re
 import signal
-import subprocess
+import threading
 from typing import Annotated, Any
 
 import psutil
@@ -12,13 +14,45 @@ from core.schemas import DataResponse, MessageResponse
 
 router = APIRouter(prefix="/api/v1/processes")
 
+# Flags whose next argument is a secret, and inline `key=value` secrets.
+_SECRET_FLAGS = {"--token", "-P", "--password", "--pass", "-password"}
+_SECRET_INLINE = re.compile(r"(?i)((?:--)?(?:token|password|passwd|pass|secret|api[-_]?key)=)\S+")
+
+
+def _redact(cmdline: list[str]) -> str:
+    """Join argv for display, masking anything that looks like a credential."""
+    out: list[str] = []
+    hide_next = False
+    for arg in cmdline:
+        if hide_next:
+            out.append("***")
+            hide_next = False
+            continue
+        if arg in _SECRET_FLAGS:
+            hide_next = True
+        out.append(_SECRET_INLINE.sub(r"\1***", arg))
+    return " ".join(out)
+
+
 # Cache to store Process objects for accurate, non-blocking CPU percentage measurement
-_process_cache = {}
+_process_cache: dict[int, psutil.Process] = {}
+# Sync handlers run in a threadpool: two refreshes can overlap.
+_cache_lock = threading.Lock()
 
 
 @router.get("")
 def list_processes(q: str = "") -> DataResponse[list[dict[str, Any]]]:
+    with _cache_lock:
+        return _list_processes(q)
+
+
+# Killing these takes the host or the operator's access down with it.
+_CRITICAL_NAMES = {"systemd", "init", "sshd", "systemd-journald", "systemd-logind", "dbus-daemon"}
+
+
+def _list_processes(q: str) -> DataResponse[list[dict[str, Any]]]:
     global _process_cache
+    protected = _protected_pids()
     current_pids = set()
     all_processes = []
 
@@ -45,7 +79,7 @@ def list_processes(q: str = "") -> DataResponse[list[dict[str, Any]]]:
 
             try:
                 cmdline = proc.cmdline()
-                arguments = " ".join(cmdline) if cmdline else name
+                arguments = _redact(cmdline) if cmdline else name
             except Exception:
                 arguments = name
 
@@ -61,7 +95,7 @@ def list_processes(q: str = "") -> DataResponse[list[dict[str, Any]]]:
 
             try:
                 mem_info = proc.memory_info()
-                ram_gb = round(mem_info.rss / (1024 ** 3), 3)
+                ram_gb = round(mem_info.rss / (1024**3), 3)
             except Exception:
                 ram_gb = 0.0
 
@@ -70,15 +104,18 @@ def list_processes(q: str = "") -> DataResponse[list[dict[str, Any]]]:
             except Exception:
                 cpu_pct = 0.0
 
-            all_processes.append({
-                "pid": pid,
-                "name": name,
-                "arguments": arguments,
-                "threads": threads,
-                "user": user,
-                "ram_gb": ram_gb,
-                "cpu_percent": cpu_pct
-            })
+            all_processes.append(
+                {
+                    "protected": pid in protected or name in _CRITICAL_NAMES,
+                    "pid": pid,
+                    "name": name,
+                    "arguments": arguments,
+                    "threads": threads,
+                    "user": user,
+                    "ram_gb": ram_gb,
+                    "cpu_percent": cpu_pct,
+                }
+            )
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue
         except Exception:
@@ -104,10 +141,10 @@ def list_processes(q: str = "") -> DataResponse[list[dict[str, Any]]]:
         matches_q = False
         if q_clean:
             matches_q = (
-                q_clean in str(p["pid"]) or
-                q_clean in p["name"].lower() or
-                q_clean in p["arguments"].lower() or
-                q_clean in p["user"].lower()
+                q_clean in str(p["pid"])
+                or q_clean in p["name"].lower()
+                or q_clean in p["arguments"].lower()
+                or q_clean in p["user"].lower()
             )
 
         in_top_cpu = p["pid"] in top_cpu_pids
@@ -126,40 +163,42 @@ def list_processes(q: str = "") -> DataResponse[list[dict[str, Any]]]:
     return DataResponse(data=filtered_processes)
 
 
-@router.post("/kill")
-def kill_process(pid: Annotated[int, Form()]) -> MessageResponse:
-    success = False
+# SIGKILL does not exist on Windows, where the panel is developed and tested.
+_SIGNALS = {"TERM": signal.SIGTERM, "KILL": getattr(signal, "SIGKILL", 9)}
 
-    # Escalation Strategy 1: psutil kill
+
+def _protected_pids() -> set[int]:
+    """PIDs the panel must never signal: init, itself, and its own ancestors."""
+    protected = {0, 1, os.getpid()}
     try:
-        proc = psutil.Process(pid)
-        proc.kill()
-        success = True
-    except Exception:
+        protected.update(parent.pid for parent in psutil.Process().parents())
+    except psutil.Error:
         pass
+    return protected
 
-    # Escalation Strategy 2: os.kill
-    if not success:
-        try:
-            os.kill(pid, signal.SIGKILL)
-            success = True
-        except Exception:
-            pass
 
-    # Escalation Strategy 3: Subprocess kill command
-    if not success:
-        try:
-            subprocess.run(["kill", "-9", str(pid)], check=True)
-            success = True
-        except Exception:
-            pass
+@router.post("/kill")
+def kill_process(
+    pid: Annotated[int, Form()],
+    sig: Annotated[str, Form()] = "KILL",
+) -> MessageResponse:
+    sig_name = sig.strip().upper()
+    if sig_name not in _SIGNALS:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "signal must be TERM or KILL")
+    # pid <= 0 would make kill(2) target a process group, or every process on the host.
+    if pid <= 1 or pid in _protected_pids():
+        raise HTTPException(status.HTTP_403_FORBIDDEN, f"PID {pid} is protected and cannot be signalled")
 
-    audit.log("process.kill", f"pid={pid} success={success}")
-
-    if not success:
+    try:
+        psutil.Process(pid).send_signal(_SIGNALS[sig_name])
+    except psutil.NoSuchProcess as exc:
+        audit.log("process.kill", f"pid={pid} sig={sig_name} success=False")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"No process with PID {pid}") from exc
+    except psutil.Error as exc:
+        audit.log("process.kill", f"pid={pid} sig={sig_name} success=False")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to kill process with PID {pid}. Access Denied or process no longer exists."
-        )
+            status.HTTP_500_INTERNAL_SERVER_ERROR, f"Could not signal PID {pid}: {exc}"
+        ) from exc
 
-    return MessageResponse(message=f"Process {pid} has been terminated successfully.")
+    audit.log("process.kill", f"pid={pid} sig={sig_name} success=True")
+    return MessageResponse(message=f"Sent SIG{sig_name} to process {pid}.")

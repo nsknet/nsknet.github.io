@@ -7,13 +7,22 @@ on:
     branches: [main, dev]
     paths:
       - 'NsPanel/frontend/**'
+      - '.github/workflows/frontend.yml'
 
 permissions:
   contents: write
 
+# Two quick pushes must not race to commit two bundles; the newer run wins.
+concurrency:
+  group: frontend-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: NsPanel/frontend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,13 +31,11 @@ jobs:
           cache: npm
           cache-dependency-path: NsPanel/frontend/package-lock.json
       - run: npm ci
-        working-directory: NsPanel/frontend
-      # Never commit a bundle built from code that does not typecheck.
-      - run: npm run typecheck
-        working-directory: NsPanel/frontend
+      # Never commit a bundle built from code that fails its own checks.
+      - run: npm run check
       - run: npm run build
-        working-directory: NsPanel/frontend
       - name: Commit the rebuilt bundle
+        working-directory: .
         run: |
           if [ -z "$(git status --porcelain NsPanel/static/dist)" ]; then
             echo "dist is already up to date"
@@ -38,4 +45,11 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add NsPanel/static/dist
           git commit -m "build: rebuild frontend bundle [skip ci]"
-          git push
+          # Someone may have pushed while this ran; the bundle only touches
+          # static/dist, so replaying it on top is safe.
+          for attempt in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push && exit 0
+            echo "push attempt ${attempt} failed, retrying"
+            sleep 5
+          done
+          exit 1

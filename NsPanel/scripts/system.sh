@@ -21,28 +21,12 @@ common_configs() {
     echo "  Common VPS Configuration"
     echo "════════════════════════════════════════════════════════════"
 
+    # The timezone is left as it is: set it from the System page if needed.
     echo ""
-    echo "▶  Timezone → Asia/Ho_Chi_Minh (GMT+7)"
-    ln -sf /usr/share/zoneinfo/Asia/Ho_Chi_Minh /etc/localtime
-    timedatectl set-timezone Asia/Ho_Chi_Minh 2>/dev/null || true
-    timedatectl status
+    echo "▶  Timezone: $(timedatectl show -p Timezone --value 2>/dev/null || cat /etc/timezone 2>/dev/null || echo unknown)"
 
     echo ""
-    echo "▶  Updating package index..."
-    apt-get update -q
-
-    echo ""
-    echo "▶  Installing common utilities..."
-    apt-get install -y --no-install-recommends \
-        wget curl axel rsync \
-        htop bpytop ncdu iotop sysstat \
-        tmux \
-        rar unrar zip unzip p7zip-full \
-        jq git bc tree pv \
-        nano vim less \
-        lsof psmisc \
-        ca-certificates gnupg lsb-release software-properties-common apt-transport-https \
-        net-tools dnsutils iproute2 iftop mtr-tiny traceroute
+    install_common_utils
 
     echo ""
     echo "▶  Installing cloudflared..."
@@ -113,53 +97,55 @@ install_virtual_ram() {
         echo "   → Deactivation successful."
     fi
 
-    # 3. Ensure disk cleanup (remove existing file to prevent size/allocation issues)
+    # 3. Enough free space? The old file's space comes back once it is removed.
+    local avail_mb old_mb=0 need_mb
+    avail_mb="$(df -Pm "$(dirname "$swapfile")" | awk 'NR == 2 { print $4 }')"
+    if [ -f "$swapfile" ]; then
+        old_mb=$(( $(stat -c %s "$swapfile") / 1048576 ))
+    fi
+    need_mb=$(( size_gb * 1024 + 512 ))  # keep 512 MB spare for the system
+    if [ $(( avail_mb + old_mb )) -lt "$need_mb" ]; then
+        echo "❌  Error: not enough free disk space for ${size_gb} GB of swap"
+        echo "    (available: $(( (avail_mb + old_mb) / 1024 )) GB including the current swap file)."
+        if [ "$current_active" = true ]; then
+            swapon "$swapfile" 2>/dev/null && echo "   → Previous swap re-enabled."
+        fi
+        echo "════════════════════════════════════════════════════════════"
+        return 1
+    fi
+
+    # 4. Ensure disk cleanup (remove existing file to prevent size/allocation issues)
     if [ -f "$swapfile" ] || [ -L "$swapfile" ]; then
         echo "▶  Removing old swap file ${swapfile}..."
         rm -f "$swapfile"
     fi
 
-    # 4. Allocate new swap file
+    # 5. Allocate, format and activate. fallocate is instant but some
+    #    filesystems (XFS on old kernels, btrfs without NOCOW) give files swapon
+    #    rejects; then the file is rebuilt with dd, which always works.
     echo "▶  Allocating ${size_gb} GB for ${swapfile}..."
-    # fallocate is instant; fall back to dd if the filesystem/OS doesn't support it
-    if fallocate -l "${size_gb}G" "$swapfile" 2>/dev/null; then
+    if _swap_create "$swapfile" "$size_gb" fallocate && _swap_enable "$swapfile"; then
         echo "   (used fallocate)"
     else
-        echo "   (falling back to dd — this may take a moment)"
-        if ! dd if=/dev/zero of="$swapfile" bs=1M count=$(( size_gb * 1024 )) status=progress; then
-            echo "❌  Error: Failed to allocate file via dd. Check disk space."
+        echo "   (fallocate file not usable as swap — rebuilding with dd, this may take a while)"
+        swapoff "$swapfile" 2>/dev/null || true
+        if ! _swap_create "$swapfile" "$size_gb" dd || ! _swap_enable "$swapfile"; then
+            rm -f "$swapfile"
+            echo "❌  Error: could not create an active swap file on this filesystem."
             echo "════════════════════════════════════════════════════════════"
             return 1
         fi
     fi
 
-    # 5. Set correct permissions
-    chmod 600 "$swapfile"
-    chown root:root "$swapfile"
-
-    # 6. Format as swap space
-    echo "▶  Formatting as swap..."
-    if ! mkswap "$swapfile"; then
-        echo "❌  Error: Failed to format ${swapfile} as swap."
-        echo "════════════════════════════════════════════════════════════"
-        return 1
-    fi
-
-    # 7. Activate swap
-    echo "▶  Activating swap..."
-    if ! swapon "$swapfile"; then
-        echo "❌  Error: Failed to activate swap."
-        echo "════════════════════════════════════════════════════════════"
-        return 1
-    fi
-
-    # 8. Clean up and persist in /etc/fstab (deduplicate old entries)
+    # 6. Persist in /etc/fstab (deduplicated, verified, restored on error)
     echo "▶  Updating /etc/fstab entry..."
-    # Remove any existing lines starting with /swapfile followed by space/tab
-    sed -i '/^\/swapfile[[:space:]]/d' /etc/fstab 2>/dev/null || true
-    # Append fresh entry
+    local backup errors_before
+    errors_before="$(_fstab_error_count)"
+    backup="$(_fstab_backup)"
+    _fstab_remove_field 1 "$swapfile"
     echo "${swapfile} none swap defaults 0 0" >> /etc/fstab
-    echo "   → Entry successfully persisted."
+    _fstab_verify_or_restore "$backup" "$errors_before" || return 1
+    echo "   → Entry persisted (backup: ${backup})."
 
     echo ""
     echo "▶  New swap status:"
@@ -173,10 +159,34 @@ install_virtual_ram() {
     echo "════════════════════════════════════════════════════════════"
 }
 
+# Create an empty swap file of <size_gb> with `fallocate` or `dd`, mode 0600.
+# On btrfs the file must be NOCOW before any data is written to it.
+_swap_create() {
+    local file="$1" size_gb="$2" method="$3"
+    rm -f "$file"
+    install -m 600 -o root -g root /dev/null "$file"
+    if [ "$(findmnt -no FSTYPE -T "$(dirname "$file")" 2>/dev/null)" = "btrfs" ]; then
+        chattr +C "$file" 2>/dev/null || true
+    fi
+    if [ "$method" = "fallocate" ]; then
+        fallocate -l "${size_gb}G" "$file" 2>/dev/null
+    else
+        dd if=/dev/zero of="$file" bs=1M count=$(( size_gb * 1024 )) status=progress
+    fi
+}
+
+_swap_enable() {
+    mkswap "$1" >/dev/null && swapon "$1"
+}
+
 # ── Individual config functions ───────────────────────────────────────────────
 
 set_timezone() {
-    local tz="${1:-Asia/Ho_Chi_Minh}"
+    local tz="${1:?Timezone required, e.g. Europe/Berlin}"
+    if [ ! -f "/usr/share/zoneinfo/${tz}" ]; then
+        echo "❌  Unknown timezone '${tz}'."
+        return 1
+    fi
     echo "▶  Setting timezone to ${tz}..."
     ln -sf "/usr/share/zoneinfo/${tz}" /etc/localtime
     timedatectl set-timezone "$tz" 2>/dev/null || true
@@ -189,16 +199,19 @@ install_common_utils() {
     echo "  Installing common utilities"
     echo "════════════════════════════════════════════════════════════"
     apt-get update -q
+    # Required: present in Ubuntu main on every supported release.
     apt-get install -y --no-install-recommends \
-        wget curl axel rsync \
-        htop bpytop ncdu iotop sysstat \
+        wget curl rsync \
+        htop ncdu iotop sysstat \
         tmux \
-        rar unrar zip unzip p7zip-full \
+        zip unzip \
         jq git bc tree pv \
         nano vim less \
         lsof psmisc \
         ca-certificates gnupg lsb-release software-properties-common apt-transport-https \
-        net-tools dnsutils iproute2 iftop mtr-tiny traceroute
+        net-tools dnsutils iproute2 traceroute
+    # Optional: universe/multiverse packages that minimal images may lack.
+    _apt_install_optional axel bpytop rar unrar p7zip-full iftop mtr-tiny
     echo ""
     echo "✔  Common utilities installed."
 }
@@ -237,13 +250,25 @@ set_network_ip() {
 
     local target="/etc/netplan/90-nspanel-${iface}.yaml"
 
-    # Back up an existing drop-in before overwriting.
+    # Back up an existing drop-in before overwriting. Backups live outside
+    # /etc/netplan so netplan never reads them as config.
+    local backup=""
     if [ -f "$target" ]; then
-        local backup
-        backup="${target}.$(date +%Y%m%d-%H%M%S).bak"
+        mkdir -p /var/backups/nspanel
+        backup="/var/backups/nspanel/$(basename "$target").$(date +%Y%m%d-%H%M%S).bak"
         cp -a "$target" "$backup"
         echo "▶  Backed up existing config → ${backup}"
     fi
+
+    # Put the previous drop-in back (or remove ours) and re-apply.
+    _netplan_revert() {
+        if [ -n "$backup" ]; then
+            cp -a "$backup" "$target"
+        else
+            rm -f "$target"
+        fi
+        netplan generate && netplan apply
+    }
 
     # Build the nameserver block (shared by both methods).
     local dns_block=""
@@ -305,20 +330,42 @@ set_network_ip() {
 
     echo "▶  Validating configuration (netplan generate)..."
     if ! netplan generate; then
-        echo "❌  Error: netplan validation failed. Reverting."
-        rm -f "$target"
+        echo "❌  Error: netplan validation failed. Restoring the previous config."
+        if [ -n "$backup" ]; then cp -a "$backup" "$target"; else rm -f "$target"; fi
+        netplan generate || true
         return 1
     fi
 
     echo "▶  Applying configuration (netplan apply)..."
     echo "   ⚠  If you are connected over this interface, the session may briefly drop."
     if ! netplan apply; then
-        echo "❌  Error: netplan apply failed."
+        echo "❌  Error: netplan apply failed. Restoring the previous config."
+        _netplan_revert || true
         return 1
     fi
 
-    # Give the interface a moment to settle, then report the result.
-    sleep 2
+    # Verify the host is still reachable before declaring success; otherwise
+    # roll back so a typo cannot strand the server.
+    echo "▶  Checking connectivity..."
+    local ok=0 attempt
+    for attempt in 1 2 3 4 5; do
+        sleep 2
+        if [ "$method" = "manual" ] && [ -n "$gateway" ]; then
+            # Many gateways drop ICMP, so judge by ARP: the ping only triggers
+            # neighbour resolution, which succeeds whenever the gateway is on-link.
+            ping -c 1 -W 2 "$gateway" >/dev/null 2>&1 && { ok=1; break; }
+            ip neigh show "$gateway" dev "$iface" 2>/dev/null |
+                grep -qE 'REACHABLE|STALE|DELAY|PROBE|PERMANENT' && { ok=1; break; }
+        else
+            ip -4 -o addr show dev "$iface" scope global | grep -q inet && { ok=1; break; }
+        fi
+        echo "   …waiting (${attempt}/5)"
+    done
+    if [ "$ok" -ne 1 ]; then
+        echo "❌  ${iface} has no working gateway/address after the change. Rolling back."
+        _netplan_revert || true
+        return 1
+    fi
     echo ""
     echo "▶  Current addresses on ${iface}:"
     ip -brief addr show "$iface" 2>/dev/null || ip addr show "$iface"

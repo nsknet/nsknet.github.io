@@ -16,9 +16,23 @@ export class ApiError extends Error {
   }
 }
 
+/** Called on any 401: the session expired or was signed out elsewhere. */
+let unauthorizedHandler: (() => void) | null = null;
+
+export function onUnauthorized(handler: () => void): void {
+  unauthorizedHandler = handler;
+}
+
+async function failure(response: Response): Promise<ApiError> {
+  if (response.status === 401) unauthorizedHandler?.();
+  return new ApiError(await detailOf(response), response.status);
+}
+
 async function detailOf(response: Response): Promise<string> {
   try {
     const body = await response.json();
+    // The panel's error envelope: {status: "error", code, message, detail}.
+    if (typeof body?.message === 'string') return body.message;
     if (typeof body?.detail === 'string') return body.detail;
     // FastAPI validation errors arrive as a list of {loc, msg}.
     if (Array.isArray(body?.detail)) {
@@ -39,7 +53,7 @@ async function detailOf(response: Response): Promise<string> {
 export async function fetchData<T>(path: string, params?: Record<string, string>): Promise<T> {
   const query = params && Object.keys(params).length ? `?${new URLSearchParams(params)}` : '';
   const response = await fetch(`${path}${query}`);
-  if (!response.ok) throw new ApiError(await detailOf(response), response.status);
+  if (!response.ok) throw await failure(response);
   const body: DataResponse<T> = await response.json();
   return body.data;
 }
@@ -65,7 +79,7 @@ export async function postAction<T = JobResponse | MessageResponse>(
     headers: CSRF_HEADERS,
     body: formBody(fields),
   });
-  if (!response.ok) throw new ApiError(await detailOf(response), response.status);
+  if (!response.ok) throw await failure(response);
   return (await response.json()) as T;
 }
 
@@ -85,4 +99,11 @@ export const endpoints = {
   processes: '/api/v1/processes',
   jobs: '/api/v1/jobs',
   panel: '/api/v1/panel',
+  dashboard: '/api/v1/dashboard',
+  dashboardLive: '/api/v1/dashboard/live',
+  timezones: '/api/v1/system/timezones',
+  me: '/api/v1/auth/me',
+  login: '/api/v1/auth/login',
+  logout: '/api/v1/auth/logout',
+  password: '/api/v1/auth/password',
 } as const;

@@ -1,5 +1,6 @@
 """SPA fallback: client routes get index.html, server paths get real 404s, and
 cache headers keep a reload from pinning a bundle that a `git pull` removed."""
+
 import pytest
 
 import app as app_module
@@ -28,9 +29,7 @@ def test_hashed_assets_are_immutable(client, dist):
     assert "immutable" in response.headers["cache-control"]
 
 
-@pytest.mark.parametrize(
-    "path", ["/api/v1/does-not-exist", "/stream", "/stream/", "/assets/index-old.js"]
-)
+@pytest.mark.parametrize("path", ["/api/v1/does-not-exist", "/stream", "/stream/", "/assets/index-old.js"])
 def test_unknown_server_paths_are_404_not_index_html(client, dist, path):
     response = client.get(path)
     assert response.status_code == 404

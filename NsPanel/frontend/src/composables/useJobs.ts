@@ -22,7 +22,16 @@ export function useJobRunner() {
   async function run(
     path: string,
     fields: Record<string, unknown> = {},
-    options: { title?: string; onDone?: () => void } = {},
+    options: {
+      title?: string;
+      /** Runs when the job ends, whatever its exit code. */
+      onDone?: (ok: boolean) => void;
+      /** Runs only when the job ends with exit code 0 (or a sync action succeeds). */
+      onSuccess?: () => void;
+      /** The request itself failed (validation, 409…). When given, no toast is
+       *  shown: the caller displays the error, e.g. inline in a dialog. */
+      onError?: (error: Error) => void;
+    } = {},
   ): Promise<JobResponse | MessageResponse | null> {
     try {
       const result = await postAction(path, fields);
@@ -31,10 +40,12 @@ export function useJobRunner() {
         ui.openOverlay({
           jobId: result.job_id,
           title: options.title || result.title,
-          onDone: () => {
+          onDone: (ok) => {
             void reload();
             void jobs.load();
-            options.onDone?.();
+            options.onDone?.(ok);
+            if (ok) options.onSuccess?.();
+            else ui.addToast({ t: 'Job failed', d: options.title || result.title, k: 'danger' });
           },
         });
         // Puts the job in the header's "N running" chip.
@@ -46,10 +57,15 @@ export function useJobRunner() {
           k: 'ok',
         });
         void reload();
-        options.onDone?.();
+        options.onDone?.(true);
+        options.onSuccess?.();
       }
       return result as JobResponse | MessageResponse;
     } catch (error) {
+      if (options.onError) {
+        options.onError(error instanceof Error ? error : new Error(String(error)));
+        return null;
+      }
       ui.addToast({
         t: error instanceof ApiError ? 'Action failed' : 'Network error',
         d: error instanceof Error ? error.message : String(error),

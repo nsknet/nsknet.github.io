@@ -32,10 +32,11 @@ function toTool(raw: RawTool): Tool {
     state: status.service_state === 'n/a' && status.installed ? 'installed' : status.service_state,
     ports: status.ports?.length ? status.ports.join(', ') : null,
     logo: module.logo ? `/logo/${module.logo}` : module.name.slice(0, 2).toUpperCase(),
-    color: '#6b7280',
+    color: 'var(--text-2)',
     diag: extra.length ? (extra as [string, string][]) : undefined,
     requiresPassword: module.requires_password,
     firewallPorts: module.firewall_ports ?? [],
+    allowPublic: module.allow_public ?? true,
     installParams: module.install_params ?? [],
     canUninstall: module.can_uninstall,
     canChangePassword: module.can_change_password,
@@ -51,6 +52,7 @@ export const useToolsStore = defineStore('tools', () => {
     tools: tools.data,
     loading: tools.loading,
     loaded: tools.loaded,
+    error: tools.error,
     load: tools.load,
   };
 });

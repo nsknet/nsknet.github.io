@@ -27,6 +27,25 @@ export interface JobSummary {
   started_at: number | null;
   finished_at: number | null;
   line_count: number;
+  cancelled?: boolean;
+}
+
+// --- Auth & version ---------------------------------------------------------
+
+export interface VersionInfo {
+  version: string;
+  commit: string;
+  commit_date: string;
+  branch: string;
+  dirty: string;
+  frontend_commit: string;
+  dist_frontend_commit: string;
+}
+
+export interface Me {
+  username: string;
+  version: VersionInfo;
+  bundle_stale: boolean;
 }
 
 // --- Panel service ----------------------------------------------------------
@@ -49,6 +68,15 @@ export interface PanelUpdateCheck {
   behind: number;
   total_behind: number;
   commits: CommitInfo[];
+  /** GitHub check runs for the commit an update would install. */
+  ci?: PanelCiStatus | null;
+  error: string | null;
+}
+
+export interface PanelCiStatus {
+  state: 'success' | 'failure' | 'pending' | 'none' | 'unknown';
+  commit: string | null;
+  url: string | null;
   error: string | null;
 }
 
@@ -64,14 +92,21 @@ export interface PanelServiceStatus {
   active: string;
   enabled: string;
   port: number;
+  /** The service serves HTTPS (self-signed by default). */
+  tls: boolean;
   branch: string;
   repo_url: string;
   repo_dir: string;
+  release_dir: string | null;
   subnets: string[];
   urls: string[];
   installed_commit: CommitInfo | null;
   /** The commit the panel serving this page was started from. */
   running_commit: CommitInfo | null;
+  /** The release a rollback returns to (still on disk). */
+  previous_commit: CommitInfo | null;
+  can_rollback: boolean;
+  last_rollback: { at: string; from: string; reason: string } | null;
   installed_at: string | null;
   updated_at: string | null;
   update: PanelUpdateCheck | null;
@@ -159,7 +194,7 @@ export interface RawSite {
     memory_mb?: number | null;
     cpu_percent?: number | null;
   };
-  paths?: { nginx_conf?: string; systemd_unit?: string; public?: string };
+  paths?: { nginx_conf?: string; systemd_unit?: string; public?: string; log_dir?: string };
   last_modified?: string;
   created_at?: string;
 }
@@ -208,6 +243,8 @@ export interface RawTool {
     logo: string | null;
     requires_password: boolean;
     firewall_ports: number[];
+    /** False: the tool has no login of its own, so "Any IP" is not offered. */
+    allow_public?: boolean;
     install_params: InstallParam[];
     can_uninstall: boolean;
     can_change_password: boolean;
@@ -234,6 +271,7 @@ export interface Tool {
   diag?: [string, string][];
   requiresPassword: boolean;
   firewallPorts: number[];
+  allowPublic: boolean;
   installParams: InstallParam[];
   canUninstall: boolean;
   canChangePassword: boolean;
@@ -341,8 +379,35 @@ export interface ProcessRow {
   cpu_percent: number;
 }
 
+export interface RawAuditEntry {
+  ts: string;
+  action: string;
+  detail: string;
+  user?: string;
+  ip?: string;
+}
+
 export interface AuditEntry {
   t: string;
   a: string;
   d: Record<string, string | number>;
+  user: string;
+  ip: string;
+}
+
+// --- Overview ---------------------------------------------------------------
+
+export interface PanelAlert {
+  level: 'danger' | 'warn';
+  title: string;
+  detail: string;
+  /** In-app route to fix it, or '' */
+  link: string;
+}
+
+export interface DashboardData {
+  stats: Partial<SystemInfo>;
+  alerts: PanelAlert[];
+  sites: RawSite[];
+  tools: RawTool[];
 }

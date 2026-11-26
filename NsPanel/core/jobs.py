@@ -9,10 +9,16 @@ to open the SSE stream.
 names into a shell string** — the unit name travels as a positional argument,
 so a name that slipped past validation still cannot break out of its slot.
 """
+
+import re
 from typing import Any
 
 from core import audit, bash_invoker, runner
 from core.schemas import JobResponse
+
+# Bash functions that install or remove packages: they run one at a time
+# (runner "exclusive" jobs) so two of them never fight over the dpkg lock.
+_EXCLUSIVE = re.compile(r"^(install_|uninstall_|common_configs$|panel_service_(install|update)$)")
 
 
 def launch(
@@ -24,9 +30,10 @@ def launch(
     env: dict[str, str] | None = None,
     title: str | None = None,
     extra: dict[str, Any] | None = None,
+    exclusive: bool = False,
 ) -> JobResponse:
     """Create, start, and log one background job."""
-    job_id = runner.create_job(cmd, label=label, env=env)
+    job_id = runner.create_job(cmd, label=label, env=env, exclusive=exclusive)
     runner.start_job(job_id)
     detail = f"{audit_detail} job={job_id}".strip()
     audit.log(audit_action, detail)
@@ -54,6 +61,28 @@ def launch_bash(
         env=env,
         title=title,
         extra=extra,
+        exclusive=bool(_EXCLUSIVE.match(function)),
+    )
+
+
+# systemctl verbs a screen may run on one unit: (label verb, progress verb).
+SYSTEMCTL_VERBS = {
+    "start": ("Start", "Starting"),
+    "stop": ("Stop", "Stopping"),
+    "restart": ("Restart", "Restarting"),
+    "disable": ("Disable", "Disabling"),
+}
+
+
+def launch_systemctl(verb: str, unit: str, *, audit_prefix: str) -> JobResponse:
+    """`systemctl <verb> <unit>` as a job, audited as `<audit_prefix>.<verb>`."""
+    label_verb, title_verb = SYSTEMCTL_VERBS[verb]
+    return launch(
+        ["systemctl", verb, unit],
+        label=f"{label_verb} {unit}",
+        title=f"{title_verb} '{unit}'",
+        audit_action=f"{audit_prefix}.{verb}",
+        audit_detail=f"name={unit}",
     )
 
 
@@ -81,5 +110,5 @@ def systemctl_chain(*steps: list[str], echo: str = "", ignore_failures: bool = F
     script = separator.join(fragments)
     if echo:
         argv.append(echo)
-        script = f"{script}{separator}echo \"${{{index}}}\""
+        script = f'{script}{separator}echo "${{{index}}}"'
     return ["bash", "-c", script, "--", *argv]

@@ -4,7 +4,7 @@ Nothing here touches the real system: the job runner is faked so tests record
 the command a route *would* run, and the status probes are stubbed. That keeps
 the suite runnable on any OS, which is where the panel is developed.
 """
-import base64
+
 import sys
 from pathlib import Path
 
@@ -14,27 +14,45 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import app as app_module  # noqa: E402
-from core import auth, runner  # noqa: E402
+import config  # noqa: E402
+from core import audit, auth, passwords, runner, session  # noqa: E402
+
+TEST_PASSWORD = "correct-horse-battery"
 
 
 @pytest.fixture(autouse=True)
-def isolated_audit_log(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Keep every test's audit writes out of the checkout."""
-    from core import audit
-
+def isolated_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Audit log, password hash and job history live in tmp_path, never the checkout."""
     path = tmp_path / "audit.log"
-    monkeypatch.setattr(audit, "AUDIT_LOG", path)
-    return path
+    audit.set_path(path)
+    monkeypatch.setenv("NSPANEL_AUTH_FILE", str(tmp_path / "auth.json"))
+    monkeypatch.setenv("NSPANEL_STATE_DIR", str(tmp_path))
+    monkeypatch.delenv("PANEL_PASSWORD", raising=False)
+    session.reset()
+    passwords.save(TEST_PASSWORD, "admin")
+    yield path
+    audit.set_path(None)
+    session.reset()
+
+
+def signed_in(*, csrf: bool = True) -> TestClient:
+    """A client holding a live session cookie; `csrf=False` omits the X-NsPanel header."""
+    headers = {auth.CSRF_HEADER: "1"} if csrf else {}
+    test_client = TestClient(app_module.app, headers=headers)
+    test_client.cookies.set(config.SESSION_COOKIE, session.create("admin", "testclient"))
+    return test_client
 
 
 @pytest.fixture
 def client() -> TestClient:
-    """Authenticated client — Basic Auth header is attached to every request."""
-    token = base64.b64encode(f"admin:{auth.get_password()}".encode()).decode()
-    return TestClient(
-        app_module.app,
-        headers={"Authorization": f"Basic {token}", auth.CSRF_HEADER: "1"},
-    )
+    """Signed-in client that also sends the CSRF header."""
+    return signed_in()
+
+
+@pytest.fixture
+def anon() -> TestClient:
+    """No session, CSRF header set — for the login flow."""
+    return TestClient(app_module.app, headers={auth.CSRF_HEADER: "1"})
 
 
 class FakeRunner:
@@ -57,9 +75,11 @@ class FakeRunner:
 def fake_runner(monkeypatch: pytest.MonkeyPatch) -> FakeRunner:
     recorder = FakeRunner()
 
-    def create_job(cmd, label="", env=None):
+    def create_job(cmd, label="", env=None, **kwargs):
         job_id = f"job{len(recorder.jobs)}"
-        recorder.jobs.append({"id": job_id, "cmd": [str(c) for c in cmd], "label": label, "env": env or {}})
+        recorder.jobs.append(
+            {"id": job_id, "cmd": [str(c) for c in cmd], "label": label, "env": env or {}, **kwargs}
+        )
         return job_id
 
     monkeypatch.setattr(runner, "create_job", create_job)

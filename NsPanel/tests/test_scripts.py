@@ -5,6 +5,7 @@ core/bash_invoker.build_cmd). A function that calls something defined only in
 another, unsourced script fails at runtime with "command not found" — that is
 how `common_configs` broke. This test models the same sourcing rule.
 """
+
 import re
 from pathlib import Path
 
@@ -71,3 +72,16 @@ def test_defines_ignores_names_embedded_in_longer_ones():
     assert not bash_invoker._defines(common, "ufw_allow_port")
     assert bash_invoker._defines(common, "_ufw_allow_port")
     assert bash_invoker.resolve_script("ufw_allow_port").endswith("firewall.sh")
+
+
+def test_only_install_ufw_enables_the_firewall():
+    """Switching UFW on is reserved for install_ufw, which first allows the real
+    SSH port and the panel; anywhere else it can lock the operator out."""
+    offenders = []
+    for path in SCRIPTS + LIBS:
+        for lineno, line in enumerate(_text(path).splitlines(), 1):
+            code = line.split("#", 1)[0]
+            if re.search(r"\bufw\b.*\benable\b", code):
+                offenders.append((path.name, lineno, line.strip()))
+    assert [o[:1] for o in offenders] == [("firewall.sh",)], offenders
+    assert "ufw --force enable" in offenders[0][2]

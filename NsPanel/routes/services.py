@@ -1,4 +1,5 @@
 """Services API: panel-managed systemd units, including Cloudflare tunnels."""
+
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Form, HTTPException
@@ -7,7 +8,7 @@ from pydantic import BaseModel, field_validator
 from config import SERVICES_DIR
 from core import jobs
 from core.schemas import DataResponse, JobResponse
-from core.validators import bad_request, require_name
+from core.validators import ENV_ASSIGNMENT, UNIX_USER, ResourceName, bad_request, require_name
 from features import cloudflare_tunnel as cft
 from features import systemctl, units
 
@@ -33,6 +34,32 @@ class ServiceCreate(BaseModel):
         v = v.strip()
         if not v:
             raise ValueError("this field is required")
+        return v
+
+    @field_validator("description", "working_dir", "command", "user")
+    @classmethod
+    def _single_line(cls, v: str) -> str:
+        # Each value becomes one `Key=value` line of the unit file; a newline
+        # would let it add directives of its own (ExecStartPre=, User=root …).
+        if "\n" in v or "\r" in v:
+            raise ValueError("must be a single line")
+        return v
+
+    @field_validator("user")
+    @classmethod
+    def _unix_user(cls, v: str) -> str:
+        v = v.strip() or "root"
+        if not UNIX_USER.match(v):
+            raise ValueError("not a valid Unix user name")
+        return v
+
+    @field_validator("env_vars")
+    @classmethod
+    def _env_lines(cls, v: str) -> str:
+        for line in v.splitlines():
+            line = line.strip()
+            if line and not ENV_ASSIGNMENT.match(line):
+                raise ValueError(f"expected KEY=value per line, got {line!r}")
         return v
 
     @property
@@ -61,7 +88,7 @@ def get_services() -> DataResponse[list[dict[str, Any]]]:
 
 
 @router.get("/{name}")
-def get_service_detail(name: str) -> DataResponse[dict[str, Any]]:
+def get_service_detail(name: ResourceName) -> DataResponse[dict[str, Any]]:
     svc = units.get_service(name)
     if svc is None:
         raise HTTPException(status_code=404, detail=f"Service '{name}' not found.")
@@ -130,14 +157,18 @@ def tunnels_create(
             result.hostname, result.service_url, result.tunnel_id, result.tunnel_name, result.zone_name
         ),
     ]
+    # The token goes to a root-only EnvironmentFile (cloudflared reads
+    # TUNNEL_TOKEN), never into the unit file or argv.
+    env_file = units.write_tunnel_env(name, result.token)
     unit_file = units.write_service(
         name,
         f"Cloudflare Tunnel {result.hostname} -> {result.service_url}",
         str(SERVICES_DIR),
-        f"{cloudflared_bin} tunnel --no-autoupdate run --token {result.token}",
+        f"{cloudflared_bin} tunnel --no-autoupdate run",
         "root",
         [],
         unit_extra=unit_extra,
+        env_file=env_file,
     )
     cmd = _register_and_start(
         name,
@@ -159,7 +190,7 @@ def tunnels_create(
 
 
 @router.post("/{name}/tunnel-delete")
-def service_tunnel_delete(name: str, api_token: Annotated[str, Form()]) -> JobResponse:
+def service_tunnel_delete(name: ResourceName, api_token: Annotated[str, Form()]) -> JobResponse:
     _require_exists(name)
     svc = units.get_service(name)
     tunnel = (svc or {}).get("tunnel")
@@ -188,7 +219,7 @@ def service_tunnel_delete(name: str, api_token: Annotated[str, Form()]) -> JobRe
         ["echo", summary],
         ["systemctl", "stop", name],
         ["systemctl", "disable", name],
-        ["rm", "-f", str(units.svc_path(name))],
+        ["rm", "-f", str(units.svc_path(name)), str(units.tunnel_env_path(name))],
         ["systemctl", "daemon-reload"],
         echo=f"Service {name} deleted.",
         ignore_failures=True,
@@ -207,48 +238,34 @@ def service_tunnel_delete(name: str, api_token: Annotated[str, Form()]) -> JobRe
 
 # --- Lifecycle: one systemctl verb each ---------------------------------------
 
-_SIMPLE_ACTIONS = {
-    "start": ("Start", "Starting"),
-    "stop": ("Stop", "Stopping"),
-    "restart": ("Restart", "Restarting"),
-    "disable": ("Disable", "Disabling"),
-}
-
 
 def _simple_action(name: str, verb: str) -> JobResponse:
     _require_exists(name)
-    label_verb, title_verb = _SIMPLE_ACTIONS[verb]
-    return jobs.launch(
-        ["systemctl", verb, name],
-        label=f"{label_verb} {name}",
-        title=f"{title_verb} '{name}'",
-        audit_action=f"service.{verb}",
-        audit_detail=f"name={name}",
-    )
+    return jobs.launch_systemctl(verb, name, audit_prefix="service")
 
 
 @router.post("/{name}/start")
-def service_start(name: str) -> JobResponse:
+def service_start(name: ResourceName) -> JobResponse:
     return _simple_action(name, "start")
 
 
 @router.post("/{name}/stop")
-def service_stop(name: str) -> JobResponse:
+def service_stop(name: ResourceName) -> JobResponse:
     return _simple_action(name, "stop")
 
 
 @router.post("/{name}/restart")
-def service_restart(name: str) -> JobResponse:
+def service_restart(name: ResourceName) -> JobResponse:
     return _simple_action(name, "restart")
 
 
 @router.post("/{name}/disable")
-def service_disable(name: str) -> JobResponse:
+def service_disable(name: ResourceName) -> JobResponse:
     return _simple_action(name, "disable")
 
 
 @router.post("/{name}/enable")
-def service_enable(name: str) -> JobResponse:
+def service_enable(name: ResourceName) -> JobResponse:
     _require_exists(name)
     cmd = jobs.systemctl_chain(
         ["systemctl", "daemon-reload"],
@@ -264,9 +281,17 @@ def service_enable(name: str) -> JobResponse:
 
 
 @router.post("/{name}/edit")
-def service_edit_save(name: str, content: Annotated[str, Form()]) -> JobResponse:
+def service_edit_save(
+    name: ResourceName,
+    content: Annotated[str, Form(max_length=64 * 1024)],
+    force: Annotated[bool, Form()] = False,
+) -> JobResponse:
+    """Save and restart. `systemd-analyze verify` runs first; `force` saves anyway."""
     _require_exists(name)
-    units.write_service_raw(name, content)
+    try:
+        units.write_service_raw(name, content, verify=not force)
+    except units.UnitInvalid as exc:
+        raise bad_request(f"systemd rejected the unit (nothing was saved):\n{exc}") from exc
     cmd = jobs.systemctl_chain(
         ["systemctl", "daemon-reload"],
         ["systemctl", "restart", name],
@@ -282,12 +307,12 @@ def service_edit_save(name: str, content: Annotated[str, Form()]) -> JobResponse
 
 
 @router.post("/{name}/delete")
-def service_delete(name: str) -> JobResponse:
+def service_delete(name: ResourceName) -> JobResponse:
     _require_exists(name)
     cmd = jobs.systemctl_chain(
         ["systemctl", "stop", name],
         ["systemctl", "disable", name],
-        ["rm", "-f", str(units.svc_path(name))],
+        ["rm", "-f", str(units.svc_path(name)), str(units.tunnel_env_path(name))],
         ["systemctl", "daemon-reload"],
         echo=f"Service {name} deleted.",
         ignore_failures=True,
@@ -305,12 +330,12 @@ def service_delete(name: str) -> JobResponse:
 
 
 @router.get("/{name}/status")
-def service_status_output(name: str) -> DataResponse[str]:
+def service_status_output(name: ResourceName) -> DataResponse[str]:
     _require_exists(name)
     return DataResponse(data=units.get_status_output(name))
 
 
 @router.get("/{name}/logs")
-def service_logs_output(name: str) -> DataResponse[str]:
+def service_logs_output(name: ResourceName) -> DataResponse[str]:
     _require_exists(name)
     return DataResponse(data=units.get_journal_logs(name))

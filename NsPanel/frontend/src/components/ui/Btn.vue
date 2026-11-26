@@ -1,18 +1,23 @@
 <script setup lang="ts">
-/** The only button styling in the app. */
+/** The only button styling in the app. Defaults to type="button" so a Btn
+ *  inside a form never submits it by accident; pass type="submit" when it should. */
 import { computed } from 'vue';
 
 const props = withDefaults(
   defineProps<{
-    variant?: 'default' | 'primary' | 'ghost' | 'danger' | 'success' | 'warn' | 'info';
+    variant?: 'default' | 'primary' | 'ghost' | 'danger' | 'danger-solid' | 'success' | 'warn' | 'info';
     sm?: boolean;
     square?: boolean;
+    type?: 'button' | 'submit' | 'reset';
+    disabled?: boolean;
+    /** Shows a spinner and disables the button. */
+    loading?: boolean;
   }>(),
-  { variant: 'default', sm: false, square: false },
+  { variant: 'default', sm: false, square: false, type: 'button', disabled: false, loading: false },
 );
 
 const BASE =
-  'inline-flex items-center justify-center gap-1.5 font-medium leading-none whitespace-nowrap rounded-lg border transition-[background-color,border-color,color,box-shadow,transform] duration-150 ease-out select-none active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none disabled:active:scale-100 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_color-mix(in_oklab,var(--accent)_30%,transparent)] [&_svg]:w-4 [&_svg]:h-4 [&_svg]:shrink-0';
+  'inline-flex items-center justify-center gap-1.5 font-medium leading-none whitespace-nowrap rounded-lg border transition-[background-color,border-color,color,box-shadow,transform] duration-150 ease-out select-none active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none disabled:active:scale-100 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--focus)] [&_svg]:w-4 [&_svg]:h-4 [&_svg]:shrink-0';
 
 const VARIANT: Record<string, string> = {
   default:
@@ -22,6 +27,8 @@ const VARIANT: Record<string, string> = {
   ghost: 'border-transparent text-c-tx2 hover:bg-c-hover hover:text-c-tx active:bg-c-subtle',
   danger:
     'bg-c-bg border-c-border text-c-danger shadow-sm hover:bg-c-dngsoft hover:border-c-danger active:bg-c-dngsoft',
+  'danger-solid':
+    'bg-c-danger border-transparent text-white shadow-sm hover:brightness-110 active:brightness-95',
   success:
     'bg-c-oksoft border-[color-mix(in_oklab,var(--ok)_20%,transparent)] text-c-ok shadow-sm hover:bg-[color-mix(in_oklab,var(--ok)_18%,transparent)] hover:border-[color-mix(in_oklab,var(--ok)_50%,transparent)] active:bg-c-oksoft',
   warn: 'bg-c-warnsoft border-[color-mix(in_oklab,var(--warn)_20%,transparent)] text-c-warn shadow-sm hover:bg-[color-mix(in_oklab,var(--warn)_18%,transparent)] hover:border-[color-mix(in_oklab,var(--warn)_50%,transparent)] active:bg-c-warnsoft',
@@ -31,11 +38,18 @@ const VARIANT: Record<string, string> = {
 const cls = computed(() => [
   BASE,
   VARIANT[props.variant] ?? VARIANT.default,
-  props.sm ? 'h-7 text-xs-var' : 'h-9 text-sm-var',
-  props.square ? (props.sm ? 'w-7' : 'w-9') : props.sm ? 'px-2.5' : 'px-3.5',
+  props.sm ? 'h-8 text-xs-var' : 'h-9 text-sm-var',
+  props.square ? (props.sm ? 'w-8' : 'w-9') : props.sm ? 'px-2.5' : 'px-3.5',
 ]);
 </script>
 
 <template>
-  <button :class="cls"><slot /></button>
+  <button :type="type" :class="cls" :disabled="disabled || loading" :aria-busy="loading || undefined">
+    <span
+      v-if="loading"
+      class="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin"
+      aria-hidden="true"
+    ></span>
+    <slot />
+  </button>
 </template>

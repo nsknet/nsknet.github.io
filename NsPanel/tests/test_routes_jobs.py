@@ -1,4 +1,5 @@
 """Jobs listing and the stream's opening `meta` event."""
+
 import asyncio
 import json
 
@@ -13,14 +14,26 @@ def jobs(monkeypatch):
     table = runner.OrderedDict()
     monkeypatch.setattr(runner, "_jobs", table)
     table["old"] = {
-        "cmd": ["true"], "label": "Old job", "status": "done", "exit_code": 0,
-        "created_at": 100.0, "started_at": 100.0, "finished_at": 104.5,
-        "lines": ["a", "b"], "env": {"DB_PASSWORD": "secret"},
+        "cmd": ["true"],
+        "label": "Old job",
+        "status": "done",
+        "exit_code": 0,
+        "created_at": 100.0,
+        "started_at": 100.0,
+        "finished_at": 104.5,
+        "lines": ["a", "b"],
+        "env": {"DB_PASSWORD": "secret"},
     }
     table["new"] = {
-        "cmd": ["sleep", "9"], "label": "New job", "status": "running", "exit_code": None,
-        "created_at": 200.0, "started_at": 200.0, "finished_at": None,
-        "lines": [], "env": {},
+        "cmd": ["sleep", "9"],
+        "label": "New job",
+        "status": "running",
+        "exit_code": None,
+        "created_at": 200.0,
+        "started_at": 200.0,
+        "finished_at": None,
+        "lines": [],
+        "env": {},
     }
     return table
 
@@ -56,3 +69,22 @@ def test_create_job_records_timestamps(monkeypatch):
     job = runner.get_job(job_id)
     assert job["created_at"] > 0
     assert job["started_at"] is None and job["finished_at"] is None
+
+
+def test_cancel_stops_a_running_job_and_is_audited(client, jobs, monkeypatch, audit_log):
+    cancelled = []
+    monkeypatch.setattr(runner, "cancel", lambda job_id: cancelled.append(job_id) or True)
+    response = client.post("/api/v1/jobs/new/cancel")
+    assert response.status_code == 200
+    assert cancelled == ["new"]
+    assert audit_log and audit_log[0][0] == "job.cancel"
+
+
+def test_cancel_reports_unknown_and_finished_jobs(client, jobs, monkeypatch):
+    monkeypatch.setattr(runner, "cancel", lambda job_id: False)
+    assert client.post("/api/v1/jobs/nope/cancel").status_code == 404
+    assert client.post("/api/v1/jobs/old/cancel").status_code == 409
+
+
+def test_stream_needs_a_session(anon, jobs):
+    assert anon.get("/stream/old").status_code == 401

@@ -9,7 +9,7 @@ class MssqlModule(Module):
     bash_function = "install_mssql"
     uninstall_function = "uninstall_mssql"
     change_password_function = "set_mssql_password"
-    requires_password = True          # SA password (auto-generated; meets MSSQL complexity)
+    requires_password = True  # SA password (auto-generated; meets MSSQL complexity)
     firewall_ports = [1433]
     logo = "mssql.png"
 

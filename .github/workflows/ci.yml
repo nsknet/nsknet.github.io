@@ -5,6 +5,13 @@ on:
     branches: [main, dev]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -16,9 +23,23 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: NsPanel/requirements.lock
       - run: pip install -e ".[dev]"
       - run: ruff check .
+      - run: ruff format --check .
       - run: pytest
+      # The VPS installs exactly requirements.lock, so audit that, not the dev env.
+      - name: Audit pinned dependencies
+        run: pip-audit --strict --disable-pip --no-deps -r requirements.lock
+      # What run.sh does on a VPS: install the lock with hashes, nothing else.
+      # `pip check` then fails if the lock no longer satisfies pyproject.toml.
+      - name: requirements.lock installs alone and satisfies pyproject.toml
+        run: |
+          python -m venv /tmp/lockenv
+          /tmp/lockenv/bin/pip install --quiet --require-hashes --no-deps -r requirements.lock
+          /tmp/lockenv/bin/pip install --quiet --no-deps -e .
+          /tmp/lockenv/bin/pip check
 
   frontend:
     runs-on: ubuntu-latest
@@ -33,8 +54,23 @@ jobs:
           cache: npm
           cache-dependency-path: NsPanel/frontend/package-lock.json
       - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
       - run: npm run typecheck
+      - run: npm test
+      - run: npm audit --omit=dev --audit-level=high
       - run: npm run build
+      # static/dist is committed so a VPS runs without Node. frontend.yml rebuilds
+      # it after every push to main/dev; this only flags a bundle that does not
+      # match its sources (version.json carries the commit, so it always differs).
+      - name: Committed bundle matches the sources
+        working-directory: .
+        run: |
+          changes=$(git status --porcelain -- NsPanel/static/dist ':!NsPanel/static/dist/version.json')
+          if [ -n "$changes" ]; then
+            echo "$changes"
+            echo "::warning title=static/dist is stale::Run 'npm run build' in NsPanel/frontend and commit NsPanel/static/dist (the frontend workflow does this after merge)."
+          fi
 
   shell:
     runs-on: ubuntu-latest
@@ -44,3 +80,40 @@ jobs:
         run: for f in NsPanel/run.sh nspanel.sh NsPanel/scripts/*.sh NsPanel/scripts/lib/*.sh mini-scripts/*.sh; do bash -n "$f"; done
       - name: ShellCheck (warnings and errors)
         run: shellcheck -S warning NsPanel/run.sh nspanel.sh NsPanel/scripts/*.sh NsPanel/scripts/lib/*.sh mini-scripts/*.sh
+
+  # Real installs through the panel's own bash invocation, on throwaway runners
+  # of every Ubuntu release the scripts support. Only when scripts or the
+  # invoker change, since each run downloads packages.
+  integration:
+    needs: [backend, shell]
+    permissions:
+      contents: read
+      pull-requests: read # paths-filter lists a PR's files through the API
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: NsPanel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            scripts:
+              - 'NsPanel/scripts/**'
+              - 'NsPanel/core/bash_invoker.py'
+              - 'NsPanel/tests/integration/**'
+              - '.github/workflows/ci.yml'
+      - uses: actions/setup-python@v5
+        if: steps.changes.outputs.scripts == 'true'
+        with:
+          python-version: "3.12"
+      - if: steps.changes.outputs.scripts == 'true'
+        run: pip install -e ".[dev]"
+      - name: Install nginx, Redis and UFW for real
+        if: steps.changes.outputs.scripts == 'true'
+        run: sudo -E env "PATH=$PATH" NSPANEL_INTEGRATION=1 python -m pytest tests/integration -v -p no:cacheprovider

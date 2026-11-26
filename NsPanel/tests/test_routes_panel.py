@@ -1,4 +1,5 @@
 """Panel service routes, and the update check against real (temporary) git repos."""
+
 import shutil
 import subprocess
 from pathlib import Path
@@ -36,8 +37,17 @@ def test_status_has_the_fields_the_page_reads(client, svc, monkeypatch):
     monkeypatch.setattr(panel_service, "_read_state", lambda: {})
     data = client.get("/api/v1/panel").json()["data"]
     for key in (
-        "installed", "active", "enabled", "port", "urls", "installed_commit",
-        "running_commit", "update", "is_self", "subnet_choices", "default_port",
+        "installed",
+        "active",
+        "enabled",
+        "port",
+        "urls",
+        "installed_commit",
+        "running_commit",
+        "update",
+        "is_self",
+        "subnet_choices",
+        "default_port",
     ):
         assert key in data
     assert data["installed"] is False
@@ -66,10 +76,8 @@ def test_password_not_in_audit_log(client, svc, fake_runner, audit_log):
 @pytest.mark.parametrize(
     ("fields", "message"),
     [
-        ({"password": ""}, "required"),
-        ({"password": "short1"}, "at least 8"),
+        ({"password": "short1"}, "12 characters"),
         ({"password": "only-eleven"}, "12 characters"),
-        ({"password": 'has"quote-12345'}, "may only contain"),
         ({"port": "80"}, "between 1024"),
         ({"port": "abc"}, "number"),
         ({"port": str(config.PORT)}, "used by the panel"),
@@ -81,6 +89,19 @@ def test_install_validation(client, svc, fake_runner, fields, message):
     response = _install(client, **fields)
     assert response.status_code == 400
     assert message in response.json()["detail"]
+    assert fake_runner.jobs == []
+
+
+def test_empty_password_keeps_the_current_admin_password(client, svc, fake_runner):
+    response = _install(client, password="")
+    assert response.status_code == 200
+    assert "SVC_PASSWORD" not in fake_runner.last["env"]
+
+
+def test_empty_password_is_refused_when_none_is_set(client, svc, fake_runner):
+    config.auth_file_path().unlink()
+    response = _install(client, password="")
+    assert response.status_code == 400
     assert fake_runner.jobs == []
 
 
@@ -104,15 +125,137 @@ def test_actions_need_an_installed_service(client, svc, fake_runner, action):
     assert "not installed" in response.json()["detail"]
 
 
-@pytest.mark.parametrize(("action", "function"), [
-    ("update", "panel_service_update"),
-    ("restart", "panel_service_restart"),
-    ("uninstall", "panel_service_uninstall"),
-])
-def test_actions_run_their_script_function(client, svc, fake_runner, action, function):
+def _check(ci_state="success", base="a" * 40, target="b" * 40, error=None):
+    return {
+        "error": error,
+        "base": base,
+        "remote_commit": {"hash": target, "short": target[:7], "date": "", "subject": "s"},
+        "behind": 1,
+        "ci": {"state": ci_state, "commit": target, "url": None, "error": None},
+    }
+
+
+@pytest.fixture
+def checked(monkeypatch):
+    """check_updates() result the update route sees; tests mutate it."""
+    result = {"value": _check()}
+    monkeypatch.setattr(panel_service, "check_updates", lambda **kw: result["value"])
+    return result
+
+
+@pytest.mark.parametrize(
+    ("action", "function"),
+    [
+        ("update", "panel_service_update"),
+        ("restart", "panel_service_restart"),
+        ("uninstall", "panel_service_uninstall"),
+    ],
+)
+def test_actions_run_their_script_function(client, svc, fake_runner, checked, action, function):
     svc["installed"] = True
     assert client.post(f"/api/v1/panel/{action}").status_code == 200
     assert fake_runner.last_cmd[-1] == function
+
+
+def test_update_targets_the_checked_commit(client, svc, fake_runner, checked):
+    svc["installed"] = True
+    client.post("/api/v1/panel/update")
+    assert fake_runner.last["env"]["SVC_TARGET"] == "b" * 40
+
+
+@pytest.mark.parametrize("ci_state", ["failure", "pending"])
+def test_update_is_refused_while_ci_is_red_or_running(client, svc, fake_runner, checked, ci_state):
+    svc["installed"] = True
+    checked["value"] = _check(ci_state=ci_state)
+    assert client.post("/api/v1/panel/update").status_code == 409
+    assert fake_runner.jobs == []
+    assert client.post("/api/v1/panel/update", data={"force": "true"}).status_code == 200
+
+
+@pytest.mark.parametrize("ci_state", ["success", "none", "unknown"])
+def test_update_goes_ahead_when_ci_is_green_or_unknown(client, svc, fake_runner, checked, ci_state):
+    svc["installed"] = True
+    checked["value"] = _check(ci_state=ci_state)
+    assert client.post("/api/v1/panel/update").status_code == 200
+
+
+def test_update_when_already_current(client, svc, fake_runner, checked):
+    svc["installed"] = True
+    checked["value"] = _check(base="c" * 40, target="c" * 40)
+    assert client.post("/api/v1/panel/update").status_code == 400
+    assert fake_runner.jobs == []
+
+
+@pytest.mark.parametrize("action", ["update", "restart", "rollback"])
+def test_restarting_actions_wait_for_running_jobs(client, svc, fake_runner, checked, monkeypatch, action):
+    from core import runner
+
+    svc["installed"] = True
+    monkeypatch.setattr(runner, "running_count", lambda: 2)
+    response = client.post(f"/api/v1/panel/{action}")
+    assert response.status_code == 409
+    assert "2 job(s)" in response.json()["message"]
+    assert fake_runner.jobs == []
+
+
+def test_rollback_needs_a_previous_release(client, svc, fake_runner, monkeypatch):
+    svc["installed"] = True
+    monkeypatch.setattr(panel_service, "get_status", lambda: {"can_rollback": False})
+    assert client.post("/api/v1/panel/rollback").status_code == 400
+    monkeypatch.setattr(panel_service, "get_status", lambda: {"can_rollback": True})
+    assert client.post("/api/v1/panel/rollback").status_code == 200
+    assert fake_runner.last_cmd[-1] == "panel_service_rollback"
+
+
+@pytest.mark.parametrize(("tls", "expected"), [("true", "1"), ("false", "0")])
+def test_install_passes_the_tls_choice(client, svc, fake_runner, tls, expected):
+    _install(client, tls=tls)
+    assert fake_runner.last["env"]["SVC_TLS"] == expected
+
+
+# ── CI summary ───────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("runs", "state"),
+    [
+        ([{"status": "completed", "conclusion": "success"}], "success"),
+        ([{"status": "completed", "conclusion": "skipped"}], "success"),
+        ([{"status": "in_progress", "conclusion": None}], "pending"),
+        (
+            [
+                {"status": "completed", "conclusion": "success"},
+                {"status": "completed", "conclusion": "failure"},
+            ],
+            "failure",
+        ),
+    ],
+)
+def test_ci_runs_are_summarized(runs, state):
+    assert panel_service._summarize_runs(runs) == state
+
+
+def test_ci_walks_back_past_commits_without_runs(monkeypatch):
+    shas = ["tip0", "parent1", "older2"]
+    monkeypatch.setattr(panel_service, "_git", lambda repo, *args, **kw: (0, " ".join(shas)))
+    runs = {"tip0": [], "parent1": [{"status": "completed", "conclusion": "failure"}]}
+    monkeypatch.setattr(
+        panel_service, "_github_json", lambda path: {"check_runs": runs.get(path.split("/")[1], [])}
+    )
+    result = panel_service.ci_status(Path("."), "origin/main")
+    assert (result["state"], result["commit"]) == ("failure", "parent1")
+
+
+def test_ci_is_unknown_when_github_is_unreachable(monkeypatch):
+    import urllib.error
+
+    monkeypatch.setattr(panel_service, "_git", lambda repo, *args, **kw: (0, "tip0"))
+
+    def offline(path):
+        raise urllib.error.URLError("offline")
+
+    monkeypatch.setattr(panel_service, "_github_json", offline)
+    assert panel_service.ci_status(Path("."), "origin/main")["state"] == "unknown"
 
 
 def test_the_service_cannot_uninstall_itself(client, svc, fake_runner):
@@ -123,15 +266,9 @@ def test_the_service_cannot_uninstall_itself(client, svc, fake_runner):
 
 
 def test_actions_need_the_csrf_header(svc, fake_runner):
-    import base64
+    from conftest import signed_in
 
-    from fastapi.testclient import TestClient
-
-    import app as app_module
-    from core import auth
-
-    token = base64.b64encode(f"admin:{auth.get_password()}".encode()).decode()
-    bare = TestClient(app_module.app, headers={"Authorization": f"Basic {token}"})
+    bare = signed_in(csrf=False)
     assert bare.post("/api/v1/panel/install", data={"password": "Str0ng-pass-123"}).status_code == 403
     assert fake_runner.jobs == []
 
@@ -144,7 +281,10 @@ _git_missing = shutil.which("git") is None
 def _git(cwd: Path, *args: str) -> str:
     return subprocess.run(
         ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", *args],
-        cwd=cwd, check=True, capture_output=True, text=True,
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        text=True,
     ).stdout.strip()
 
 
@@ -195,3 +335,34 @@ def test_check_updates_reports_a_failed_fetch(tmp_path, monkeypatch):
     result = panel_service.check_updates()
     assert result["error"] and "fetch failed" in result["error"]
     assert result["behind"] == 0
+
+
+@pytest.mark.skipif(_git_missing, reason="git not installed")
+def test_check_updates_measures_from_the_current_release(tmp_path, monkeypatch):
+    """The clone's own HEAD is irrelevant once releases exist: `current` decides."""
+    upstream = tmp_path / "upstream"
+    upstream.mkdir()
+    _git(upstream, "init", "-q", "-b", "main")
+    _commit(upstream, "NsPanel/app.py", "v1")
+    clone = tmp_path / "clone"
+    _git(tmp_path, "clone", "-q", str(upstream), str(clone))
+    v1 = _git(clone, "rev-parse", "HEAD")
+    _commit(upstream, "NsPanel/app.py", "v2")
+    _commit(upstream, "NsPanel/app.py", "v3")
+    _git(clone, "fetch", "-q", "origin")
+    v2 = _git(clone, "rev-parse", "origin/main~1")
+
+    release = clone / "releases" / v2
+    _git(clone, "worktree", "add", "-q", "--detach", str(release), v2)
+    try:
+        (clone / "current").symlink_to(release / "NsPanel", target_is_directory=True)
+    except OSError:
+        pytest.skip("cannot create symlinks here")
+    monkeypatch.setattr(config, "SERVICE_REPO_DIR", clone)
+    monkeypatch.setattr(config, "SERVICE_STATE_FILE", tmp_path / "state.json")
+
+    assert panel_service.installed_panel_dir() == (release / "NsPanel").resolve()
+    result = panel_service.check_updates(with_ci=False)
+    assert result["base"] == v2 != v1
+    assert result["behind"] == 1
+    assert [c["subject"] for c in result["commits"]] == ["v3"]

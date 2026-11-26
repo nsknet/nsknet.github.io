@@ -8,6 +8,7 @@ token or the tunnel token.
 Flow (setup): verify token -> find zone -> create/reuse tunnel -> update
 ingress -> upsert CNAME -> fetch tunnel token.
 """
+
 import base64
 import re
 import secrets
@@ -64,6 +65,7 @@ PERM_TUNNEL_EDIT = "Account > Cloudflare Tunnel: Edit"
 # ---------------------------------------------------------------------------
 # Input normalisation
 # ---------------------------------------------------------------------------
+
 
 def normalize_hostname(hostname: str) -> str:
     """'HTTPS://Dev.Example.com/' -> 'dev.example.com'."""
@@ -132,10 +134,12 @@ def default_tunnel_name(hostname: str) -> str:
 # SDK plumbing
 # ---------------------------------------------------------------------------
 
+
 def _sdk():
     try:
         import cloudflare  # noqa: F401
         from cloudflare import Cloudflare
+
         return cloudflare, Cloudflare
     except ImportError as exc:
         raise TunnelError(
@@ -191,8 +195,7 @@ def _verify_token(cf) -> None:
         if "400" in exc.message:
             raise TunnelError(
                 "verify",
-                "Cloudflare rejected the API token as malformed — "
-                "paste the full token exactly as issued.",
+                "Cloudflare rejected the API token as malformed — paste the full token exactly as issued.",
             ) from exc
         raise
     status = getattr(v, "status", None)
@@ -202,10 +205,7 @@ def _verify_token(cf) -> None:
 
 def _find_zone(cf, hostname: str):
     zones = _call("zone", PERM_ZONE_READ, lambda: list(cf.zones.list()))
-    matches = [
-        z for z in zones
-        if hostname == z.name.lower() or hostname.endswith("." + z.name.lower())
-    ]
+    matches = [z for z in zones if hostname == z.name.lower() or hostname.endswith("." + z.name.lower())]
     if not matches:
         names = ", ".join(sorted(z.name for z in zones)) or "none"
         raise TunnelError(
@@ -223,8 +223,13 @@ def _tunnels(cf):
 def _create_tunnel(cf, account_id: str, tunnel_name: str):
     secret = base64.b64encode(secrets.token_bytes(32)).decode("utf-8")
     return _call(
-        "tunnel", PERM_TUNNEL_EDIT, _tunnels(cf).create,
-        account_id=account_id, name=tunnel_name, config_src="cloudflare", tunnel_secret=secret,
+        "tunnel",
+        PERM_TUNNEL_EDIT,
+        _tunnels(cf).create,
+        account_id=account_id,
+        name=tunnel_name,
+        config_src="cloudflare",
+        tunnel_secret=secret,
     )
 
 
@@ -236,7 +241,7 @@ def _get_ingress(cf, account_id: str, tunnel_id: str) -> list[dict]:
         return []
     rules = []
     try:
-        for r in (cfg.config.ingress or []):
+        for r in cfg.config.ingress or []:
             rules.append({"hostname": getattr(r, "hostname", None), "service": getattr(r, "service", None)})
     except AttributeError:
         return []
@@ -245,14 +250,19 @@ def _get_ingress(cf, account_id: str, tunnel_id: str) -> list[dict]:
 
 def _set_ingress(cf, account_id: str, tunnel_id: str, rules: list[dict]) -> None:
     _call(
-        "ingress", PERM_TUNNEL_EDIT, _tunnels(cf).configurations.update,
-        tunnel_id=tunnel_id, account_id=account_id, config={"ingress": rules},
+        "ingress",
+        PERM_TUNNEL_EDIT,
+        _tunnels(cf).configurations.update,
+        tunnel_id=tunnel_id,
+        account_id=account_id,
+        config={"ingress": rules},
     )
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def setup_cloudflare_tunnel(
     api_token: str,
@@ -283,7 +293,8 @@ def setup_cloudflare_tunnel(
 
     # --- tunnel: reuse / recreate / create --------------------------------
     existing = _call(
-        "tunnel", PERM_TUNNEL_EDIT,
+        "tunnel",
+        PERM_TUNNEL_EDIT,
         lambda: list(_tunnels(cf).list(account_id=account_id, is_deleted=False)),
     )
     target = next((t for t in existing if t.name == tunnel_name), None)
@@ -297,26 +308,40 @@ def setup_cloudflare_tunnel(
 
     # --- ingress ---------------------------------------------------------
     others = [
-        r for r in _get_ingress(cf, account_id, tunnel_id)
+        r
+        for r in _get_ingress(cf, account_id, tunnel_id)
         if r["hostname"] and r["hostname"] != hostname and r["service"] != CATCH_ALL
     ]
-    _set_ingress(cf, account_id, tunnel_id, [
-        *others,
-        {"hostname": hostname, "service": service_url},
-        {"service": CATCH_ALL},
-    ])
+    _set_ingress(
+        cf,
+        account_id,
+        tunnel_id,
+        [
+            *others,
+            {"hostname": hostname, "service": service_url},
+            {"service": CATCH_ALL},
+        ],
+    )
 
     # --- DNS CNAME -------------------------------------------------------
     target_cname = f"{tunnel_id}.cfargotunnel.com"
     records = _call(
-        "dns", PERM_DNS_EDIT,
+        "dns",
+        PERM_DNS_EDIT,
         lambda: list(cf.dns.records.list(zone_id=zone_id, name=hostname)),
     )
     if not records:
         rec = _call(
-            "dns", PERM_DNS_EDIT, cf.dns.records.create,
-            zone_id=zone_id, name=hostname, type="CNAME", content=target_cname,
-            proxied=True, ttl=1, comment=DNS_COMMENT,
+            "dns",
+            PERM_DNS_EDIT,
+            cf.dns.records.create,
+            zone_id=zone_id,
+            name=hostname,
+            type="CNAME",
+            content=target_cname,
+            proxied=True,
+            ttl=1,
+            comment=DNS_COMMENT,
         )
         dns_record_id = rec.id
     else:
@@ -324,9 +349,17 @@ def setup_cloudflare_tunnel(
         dns_record_id = primary.id
         if primary.type != "CNAME" or primary.content != target_cname or not primary.proxied:
             _call(
-                "dns", PERM_DNS_EDIT, cf.dns.records.edit,
-                dns_record_id=primary.id, zone_id=zone_id, name=hostname, type="CNAME",
-                content=target_cname, proxied=True, ttl=1, comment=DNS_COMMENT,
+                "dns",
+                PERM_DNS_EDIT,
+                cf.dns.records.edit,
+                dns_record_id=primary.id,
+                zone_id=zone_id,
+                name=hostname,
+                type="CNAME",
+                content=target_cname,
+                proxied=True,
+                ttl=1,
+                comment=DNS_COMMENT,
             )
         # Conflicting duplicates (old A records, etc.) — best effort cleanup.
         for extra in records[1:]:
@@ -372,7 +405,8 @@ def delete_cloudflare_tunnel(api_token: str, hostname: str, tunnel_id: str) -> d
     # DNS: only remove the CNAME we created (pointing at this tunnel).
     target_cname = f"{tunnel_id}.cfargotunnel.com"
     records = _call(
-        "dns", PERM_DNS_EDIT,
+        "dns",
+        PERM_DNS_EDIT,
         lambda: list(cf.dns.records.list(zone_id=zone_id, name=hostname)),
     )
     dns_deleted = 0

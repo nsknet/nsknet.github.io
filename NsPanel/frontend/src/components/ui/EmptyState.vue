@@ -11,10 +11,12 @@ withDefaults(defineProps<{ icon?: string; title: string; hint?: string }>(), {
 <template>
   <div class="text-center py-8 px-6 text-c-tx2">
     <div class="w-11 h-11 rounded-xl bg-c-subtle grid place-items-center mx-auto mb-3">
-      <LIcon :name="icon" is="width:20px;height:20px;color:var(--text-3)" />
+      <LIcon is="width:20px;height:20px;color:var(--text-3)" :name="icon" />
     </div>
     <div class="text-c-tx font-medium text-sm-var">{{ title }}</div>
-    <div v-if="hint" class="text-xs-var mt-1"><slot>{{ hint }}</slot></div>
+    <div v-if="hint" class="text-xs-var mt-1">
+      <slot>{{ hint }}</slot>
+    </div>
     <div v-else-if="$slots.default" class="text-xs-var mt-1"><slot /></div>
   </div>
 </template>

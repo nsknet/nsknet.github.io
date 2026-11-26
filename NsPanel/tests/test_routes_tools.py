@@ -1,4 +1,5 @@
 """Tools API: install guards, secret handling and firewall scoping."""
+
 import pytest
 
 from modules import registry
@@ -103,7 +104,27 @@ def test_uninstall_is_refused_when_the_module_has_no_uninstaller(client, fake_ru
 
 
 def test_change_password_is_refused_when_unsupported(client, fake_runner):
-    assert client.post(
-        "/api/v1/tools/nginx/change-password", data={"db_password": "Str0ngPass-1"}
-    ).status_code == 400
+    assert (
+        client.post("/api/v1/tools/nginx/change-password", data={"db_password": "Str0ngPass-1"}).status_code
+        == 400
+    )
     assert not fake_runner.jobs
+
+
+def test_tools_without_a_login_cannot_be_opened_to_everyone(client, fake_runner, monkeypatch):
+    coredns = registry.get_module("coredns")
+    monkeypatch.setattr(type(coredns), "is_installed", lambda self: False)
+    response = client.post("/api/v1/tools/coredns/install", data={"allowed_subnets": "0.0.0.0/0"})
+    assert response.status_code == 400
+    assert "private subnets" in response.json()["message"]
+    assert not fake_runner.jobs
+    ok = client.post("/api/v1/tools/coredns/install", data={"allowed_subnets": "10.0.0.0/8"})
+    assert ok.status_code == 200
+
+
+def test_allow_public_is_exposed_to_the_ui(client, monkeypatch):
+    for module in registry.get_modules():
+        monkeypatch.setattr(type(module), "get_status", lambda self: {"installed": False})
+    tools = {t["module"]["name"]: t["module"] for t in client.get("/api/v1/tools").json()["data"]}
+    assert tools["coredns"]["allow_public"] is False
+    assert tools["postgres"]["allow_public"] is True

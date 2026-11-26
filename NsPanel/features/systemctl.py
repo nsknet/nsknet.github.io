@@ -3,10 +3,44 @@
 All status checks happen here in Python (per the architecture rules) — the
 bash script is only used for *actions*, never for status.
 """
+
 import shutil
 import subprocess
+import threading
+import time
 
 import psutil
+
+from core import runner
+
+# Read-only probes are cached briefly: the Tools and Services lists run several
+# per item, and a dashboard poll would otherwise spawn dozens of processes. The
+# cache is dropped whenever a job finishes, so a start/stop shows up at once.
+_CACHE_SECONDS = 3.0
+_cache: dict[tuple[str, ...], tuple[float, tuple[int, str]]] = {}
+_cache_lock = threading.Lock()
+
+
+def invalidate() -> None:
+    with _cache_lock:
+        _cache.clear()
+
+
+runner.on_job_finished(invalidate)
+
+
+def cached_run(cmd: list[str], timeout: int = 10) -> tuple[int, str]:
+    """`run`, memoised for a few seconds. Only for commands that change nothing."""
+    key = tuple(cmd)
+    now = time.monotonic()
+    with _cache_lock:
+        hit = _cache.get(key)
+        if hit and now - hit[0] < _CACHE_SECONDS:
+            return hit[1]
+    result = run(cmd, timeout=timeout)
+    with _cache_lock:
+        _cache[key] = (now, result)
+    return result
 
 
 def run(cmd: list[str], timeout: int = 10) -> tuple[int, str]:
@@ -27,7 +61,7 @@ def which(name: str) -> str | None:
 
 
 def dpkg_installed(pkg: str) -> bool:
-    code, out = run(["dpkg", "-l", pkg])
+    code, out = cached_run(["dpkg", "-l", pkg])
     if code != 0:
         return False
     return any(line.startswith("ii") for line in out.splitlines())
@@ -35,7 +69,7 @@ def dpkg_installed(pkg: str) -> bool:
 
 def service_state(service: str) -> str:
     """Returns systemctl's word: active | inactive | failed | unknown ..."""
-    _, out = run(["systemctl", "is-active", service])
+    _, out = cached_run(["systemctl", "is-active", service])
     return out.strip() or "unknown"
 
 
@@ -45,12 +79,12 @@ def is_active(service: str) -> bool:
 
 def service_enabled(service: str) -> str:
     """Returns systemctl's word: enabled | disabled | static | unknown ..."""
-    _, out = run(["systemctl", "is-enabled", service])
+    _, out = cached_run(["systemctl", "is-enabled", service])
     return first_line(out) or "unknown"
 
 
 def main_pid(service: str) -> int | None:
-    _, out = run(["systemctl", "show", "-p", "MainPID", "--value", service])
+    _, out = cached_run(["systemctl", "show", "-p", "MainPID", "--value", service])
     try:
         pid = int(out.strip())
     except ValueError:
@@ -91,7 +125,7 @@ def tool_status(
 
     version = None
     if installed and version_cmd:
-        _, out = run(version_cmd)
+        _, out = cached_run(version_cmd)
         version = first_line(out)
 
     return {
@@ -103,12 +137,24 @@ def tool_status(
     }
 
 
+# psutil measures CPU between two calls on the same Process object; keeping the
+# objects lets each call return immediately instead of sleeping to sample.
+_procs: dict[int, psutil.Process] = {}
+
+
 def get_process_stats(pid: int) -> tuple[float | None, float | None]:
-    """Returns (memory_mb, cpu_percent) by blocking for 0.5s to measure CPU utilization."""
+    """(memory_mb, cpu_percent) without blocking. CPU is None on the first sample of a PID."""
     try:
-        proc = psutil.Process(pid)
+        proc = _procs.get(pid)
+        first = proc is None
+        if first:
+            proc = _procs[pid] = psutil.Process(pid)
         memory_mb = round(proc.memory_info().rss / 1e6, 1)
-        cpu_percent = proc.cpu_percent(interval=0.5)
-        return memory_mb, cpu_percent
+        cpu = proc.cpu_percent(None)
+        if len(_procs) > 512:
+            for stale in [p for p, obj in _procs.items() if not obj.is_running()]:
+                _procs.pop(stale, None)
+        return memory_mb, (None if first else round(cpu, 1))
     except (psutil.Error, ValueError, ProcessLookupError):
+        _procs.pop(pid, None)
         return None, None

@@ -9,7 +9,9 @@ class CoreDNSModule(Module):
     bash_function = "install_coredns"
     uninstall_function = "uninstall_coredns"
     requires_password = False
-    firewall_ports = [53]          # opens the subnet dialog; UDP+TCP handled in the script
+    # An open resolver on the internet is abused for DNS amplification attacks.
+    allow_public = False
+    firewall_ports = [53]  # opens the subnet dialog; UDP+TCP handled in the script
     logo = "coredns.png"
 
     def is_installed(self) -> bool:

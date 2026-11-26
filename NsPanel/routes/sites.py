@@ -1,4 +1,6 @@
 """Sites API: list, create, and per-site actions (nginx vhosts)."""
+
+import re
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Form, HTTPException
@@ -6,8 +8,20 @@ from pydantic import BaseModel, field_validator
 
 from core import audit, bash_invoker, jobs
 from core.schemas import DataResponse, JobResponse
-from core.validators import DLL, DOMAIN, PROXY_TARGET, bad_request, require_name
+from core.validators import (
+    ALLOWED_SUBNET_CHOICES,
+    ANY_SUBNET,
+    DLL,
+    DOMAIN,
+    PROXY_TARGET,
+    ResourceName,
+    bad_request,
+    parse_subnets,
+    require_name,
+)
 from features import sites as sites_feature
+
+_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 router = APIRouter(prefix="/api/v1/sites")
 
@@ -26,6 +40,19 @@ class SiteCreate(BaseModel):
     internal_port: str = ""
     aspnetcore_env: str = "Production"
     auto_ssl: str = "false"
+    # Port-mode sites: comma-separated CIDRs (ALLOWED_SUBNET_CHOICES) the port is
+    # opened to. Empty keeps the historical behaviour: open to everyone.
+    allowed_subnets: str = ""
+    # Let's Encrypt account e-mail for expiry notices (optional).
+    ssl_email: str = ""
+
+    @field_validator("ssl_email")
+    @classmethod
+    def _email(cls, v: str) -> str:
+        v = v.strip()
+        if v and not _EMAIL.match(v):
+            raise ValueError("not a valid e-mail address")
+        return v
 
     @field_validator("access_kind")
     @classmethod
@@ -112,6 +139,18 @@ def get_sites() -> DataResponse[list[dict[str, Any]]]:
     return DataResponse(data=sites_feature.list_sites_with_status())
 
 
+def _site_env(payload: SiteCreate) -> dict[str, str]:
+    """Firewall scope and certbot e-mail travel via the job env, like every install."""
+    env: dict[str, str] = {}
+    if payload.access_kind == "port":
+        # A site is meant to be reached: no choice means open to everyone.
+        subnets = parse_subnets(payload.allowed_subnets, ALLOWED_SUBNET_CHOICES)
+        env["ALLOWED_SUBNETS"] = " ".join(subnets) or ANY_SUBNET
+    if payload.wants_ssl and payload.ssl_email:
+        env["CERTBOT_EMAIL"] = payload.ssl_email
+    return env
+
+
 @router.post("/create")
 def sites_create(payload: Annotated[SiteCreate, Form()]) -> JobResponse:
     name = payload.site_name
@@ -119,20 +158,23 @@ def sites_create(payload: Annotated[SiteCreate, Form()]) -> JobResponse:
         raise bad_request(f"A site named '{name}' already exists.")
 
     cmd = _build_site_command(payload, name)
+    env = _site_env(payload)
     return jobs.launch(
         cmd,
+        env=env,
         label=f"Create site {name}",
         title=f"Creating site '{name}'",
         audit_action="site.create",
         audit_detail=(
             f"name={name} backend={payload.backend_type} "
-            f"access={payload.access_kind}:{payload.access_value.strip()} ssl={payload.wants_ssl}"
+            f"access={payload.access_kind}:{payload.access_value.strip()} ssl={payload.wants_ssl} "
+            f"subnets={env.get('ALLOWED_SUBNETS', '-')}"
         ),
     )
 
 
 @router.get("/{name}")
-def get_site(name: str) -> DataResponse[dict[str, Any]]:
+def get_site(name: ResourceName) -> DataResponse[dict[str, Any]]:
     info = sites_feature.get_site(name)
     if info is None:
         raise HTTPException(status_code=404, detail=f"Site '{name}' not found.")
@@ -149,48 +191,33 @@ def _dotnet_site_or_error(name: str) -> dict:
     return info
 
 
-_SITE_ACTIONS = {
-    "start": ("Start", "Starting"),
-    "stop": ("Stop", "Stopping"),
-    "restart": ("Restart", "Restarting"),
-    "disable": ("Disable", "Disabling"),
-}
-
-
 def _site_service_action(name: str, verb: str) -> JobResponse:
     _dotnet_site_or_error(name)
-    label_verb, title_verb = _SITE_ACTIONS[verb]
-    return jobs.launch(
-        ["systemctl", verb, name],
-        label=f"{label_verb} {name}",
-        title=f"{title_verb} '{name}'",
-        audit_action=f"site.{verb}",
-        audit_detail=f"name={name}",
-    )
+    return jobs.launch_systemctl(verb, name, audit_prefix="site")
 
 
 @router.post("/{name}/start")
-def site_start(name: str) -> JobResponse:
+def site_start(name: ResourceName) -> JobResponse:
     return _site_service_action(name, "start")
 
 
 @router.post("/{name}/stop")
-def site_stop(name: str) -> JobResponse:
+def site_stop(name: ResourceName) -> JobResponse:
     return _site_service_action(name, "stop")
 
 
 @router.post("/{name}/restart")
-def site_restart(name: str) -> JobResponse:
+def site_restart(name: ResourceName) -> JobResponse:
     return _site_service_action(name, "restart")
 
 
 @router.post("/{name}/disable")
-def site_disable(name: str) -> JobResponse:
+def site_disable(name: ResourceName) -> JobResponse:
     return _site_service_action(name, "disable")
 
 
 @router.post("/{name}/enable")
-def site_enable(name: str) -> JobResponse:
+def site_enable(name: ResourceName) -> JobResponse:
     info = _dotnet_site_or_error(name)
     unit = (info.get("paths") or {}).get("systemd_unit") or f"/var/www/services/{name}.service"
     cmd = jobs.systemctl_chain(["systemctl", "daemon-reload"], ["systemctl", "enable", unit])
@@ -204,7 +231,9 @@ def site_enable(name: str) -> JobResponse:
 
 
 @router.post("/{name}/reload-nginx")
-def site_reload_nginx(name: str) -> JobResponse:
+def site_reload_nginx(name: ResourceName) -> JobResponse:
+    if sites_feature.read_info(name) is None:
+        raise HTTPException(status_code=404, detail=f"Site '{name}' not found.")
     cmd = jobs.systemctl_chain(["nginx", "-t"], ["systemctl", "reload", "nginx"])
     return jobs.launch(
         cmd,
@@ -216,7 +245,7 @@ def site_reload_nginx(name: str) -> JobResponse:
 
 
 @router.get("/{name}/config")
-def site_config(name: str) -> DataResponse[str]:
+def site_config(name: ResourceName) -> DataResponse[str]:
     info = sites_feature.read_info(name)
     if info is None:
         raise HTTPException(status_code=404, detail=f"Site '{name}' not found.")
@@ -225,7 +254,7 @@ def site_config(name: str) -> DataResponse[str]:
 
 
 @router.get("/{name}/logs")
-def site_logs(name: str) -> DataResponse[str]:
+def site_logs(name: ResourceName) -> DataResponse[str]:
     info = sites_feature.read_info(name)
     if info is None:
         raise HTTPException(status_code=404, detail=f"Site '{name}' not found.")

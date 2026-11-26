@@ -1,4 +1,5 @@
 """System API: timezone, network and disk validation."""
+
 import pytest
 
 from features import disks as disks_feature
@@ -10,6 +11,7 @@ def stub_system(monkeypatch):
     monkeypatch.setattr(system_feature, "get_full_info", lambda: {"hostname": "vps"})
     monkeypatch.setattr(system_feature, "get_ufw_info", lambda: {"active": True, "rules": []})
     monkeypatch.setattr(disks_feature, "list_disks", lambda: [{"device": "/dev/sda"}])
+    monkeypatch.setattr(disks_feature, "device_in_use", lambda device: None)
 
 
 def test_system_info_uses_the_data_envelope(client):
@@ -66,7 +68,10 @@ def test_dhcp_clears_the_address_fields(client, fake_runner, audit_log):
         {"iface": "bad iface", "method": "dhcp"},
         {"iface": "eth0", "method": "carrier-pigeon"},
         {"iface": "eth0", "method": "manual", "address": "10.0.0.5/24", "gateway": "not-an-ip"},
-        {"iface": "eth0", "method": "manual", "address": "10.0.0.5/24", "dns": "1.1.1.1,nope"},
+        {"iface": "eth0", "method": "manual", "address": "10.0.0.5/24", "gateway": "10.0.0.1", "dns": "x"},
+        # A static address must come with an on-link gateway.
+        {"iface": "eth0", "method": "manual", "address": "10.0.0.5/24"},
+        {"iface": "eth0", "method": "manual", "address": "10.0.0.5/24", "gateway": "192.168.1.1"},
     ],
 )
 def test_network_rejects_bad_input(client, fake_runner, payload):
@@ -93,9 +98,7 @@ def test_mount_rejects_bad_paths(client, fake_runner, payload):
 
 
 def test_format_rejects_unknown_filesystems(client, fake_runner):
-    response = client.post(
-        "/api/v1/system/disk/format", data={"device": "/dev/sdb1", "fstype": "zfs"}
-    )
+    response = client.post("/api/v1/system/disk/format", data={"device": "/dev/sdb1", "fstype": "zfs"})
     assert response.status_code == 400
     assert not fake_runner.jobs
 
@@ -106,3 +109,11 @@ def test_format_passes_device_fstype_and_label(client, fake_runner, audit_log):
         data={"device": "/dev/sdb1", "fstype": "EXT4", "label": "data-01"},
     )
     assert fake_runner.last_cmd[6:] == ["/dev/sdb1", "ext4", "data-01"]
+
+
+def test_format_refuses_a_device_in_use(client, fake_runner, monkeypatch):
+    monkeypatch.setattr(disks_feature, "device_in_use", lambda device: "/dev/sda1 is mounted on /")
+    response = client.post("/api/v1/system/disk/format", data={"device": "/dev/sda", "fstype": "ext4"})
+    assert response.status_code == 409
+    assert "/dev/sda1 is mounted on /" in response.json()["detail"]
+    assert not fake_runner.jobs

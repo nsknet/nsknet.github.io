@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# php.sh — PHP-FPM (Ubuntu 22.04 / 24.04) via the ondrej/php PPA
+# php.sh — PHP-FPM (Ubuntu 22.04 / 24.04 / 26.04) via the ondrej/php PPA
 
 # Fail fast: abort on the first error and on failures anywhere in a pipeline.
 # (-u is intentionally omitted: some functions reference optional env vars such
@@ -10,6 +10,19 @@ set -eo pipefail
 # Version may be overridden by the panel via the PHP_VERSION env var (e.g. "8.2").
 PHP_VERSION="${PHP_VERSION:-8.3}"
 
+# PHP_VERSION ends up in package names, paths and a systemd unit name.
+_php_check_version() {
+    if [[ ! "$PHP_VERSION" =~ ^[0-9]+\.[0-9]+$ ]]; then
+        echo "✗  Invalid PHP_VERSION '${PHP_VERSION}' (expected e.g. 8.3)." >&2
+        return 1
+    fi
+}
+
+_php_ppa_enabled() {
+    grep -rqsE '^[^#]*ppa\.launchpad(content)?\.net/ondrej/php' \
+        /etc/apt/sources.list /etc/apt/sources.list.d/
+}
+
 install_php() {
     echo "════════════════════════════════════════════════════════════"
     echo "  Installing PHP-FPM ${PHP_VERSION}"
@@ -17,11 +30,19 @@ install_php() {
 
     export DEBIAN_FRONTEND=noninteractive
 
-    # ── ondrej/php PPA (provides current PHP on 22.04 and 24.04) ──────────────
-    echo "▶  Adding ondrej/php PPA..."
+    _php_check_version
+    # The PPA publishes for current Ubuntu LTS releases only.
+    _require_platform "PHP (ondrej/php PPA)" "22.04 24.04 26.04" "amd64 arm64"
+
+    # ── ondrej/php PPA (provides current PHP on every supported LTS) ──────────
     apt-get update -q
     apt-get install -y software-properties-common ca-certificates
-    add-apt-repository -y ppa:ondrej/php
+    if _php_ppa_enabled; then
+        echo "▶  ondrej/php PPA already configured."
+    else
+        echo "▶  Adding ondrej/php PPA..."
+        add-apt-repository -y ppa:ondrej/php
+    fi
     apt-get update -q
 
     # ── PHP-FPM + the extensions a typical web app needs ─────────────────────
@@ -30,7 +51,6 @@ install_php() {
         "php${PHP_VERSION}-fpm" \
         "php${PHP_VERSION}-cli" \
         "php${PHP_VERSION}-common" \
-        "php${PHP_VERSION}-opcache" \
         "php${PHP_VERSION}-mysql" \
         "php${PHP_VERSION}-pgsql" \
         "php${PHP_VERSION}-gd" \
@@ -40,6 +60,8 @@ install_php() {
         "php${PHP_VERSION}-zip" \
         "php${PHP_VERSION}-bcmath" \
         "php${PHP_VERSION}-intl"
+    # OPcache is a separate package up to PHP 8.4 and built in from 8.5 on.
+    _apt_install_optional "php${PHP_VERSION}-opcache"
 
     local fpm_service="php${PHP_VERSION}-fpm"
     local pool_conf="/etc/php/${PHP_VERSION}/fpm/pool.d/www.conf"
@@ -80,6 +102,7 @@ uninstall_php() {
     echo "════════════════════════════════════════════════════════════"
     echo "  Removing PHP-FPM ${PHP_VERSION}"
     echo "════════════════════════════════════════════════════════════"
+    _php_check_version
     systemctl disable --now "php${PHP_VERSION}-fpm" 2>/dev/null || true
     apt-get purge -y "php${PHP_VERSION}-*" 2>/dev/null || true
     apt-get autoremove -y || true

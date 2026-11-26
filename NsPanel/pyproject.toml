@@ -16,6 +16,7 @@ dependencies = [
 dev = [
     "httpx>=0.28",
     "pytest>=8.3",
+    "pip-audit>=2.7",
     "ruff>=0.9",
 ]
 
@@ -32,6 +33,9 @@ py-modules = ["app", "config"]
 line-length = 110
 target-version = "py312"
 
+[tool.ruff.format]
+line-ending = "lf"
+
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
@@ -46,3 +50,4 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.Form", "fastapi.Query", "f
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = ["integration: changes the machine; runs only with NSPANEL_INTEGRATION=1 as root on Linux"]

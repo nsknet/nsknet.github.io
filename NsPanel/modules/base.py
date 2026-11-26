@@ -8,11 +8,11 @@ class Module(ABC):
     on PostgresModule); the registry only needs them to subclass Module.
     """
 
-    name: str                     # "nginx"
-    display_name: str             # "NGINX Web Server"
+    name: str  # "nginx"
+    display_name: str  # "NGINX Web Server"
     description: str
-    bash_function: str | None     # "install_nginx", or None
-    logo: str | None = None       # "nginx.png" — filename served under /logo/
+    bash_function: str | None  # "install_nginx", or None
+    logo: str | None = None  # "nginx.png" — filename served under /logo/
     # Script in scripts/ defining this module's bash functions. Defaults to
     # "<name>.sh"; core.bash_invoker falls back to scanning scripts/ when the
     # named file does not define the function.
@@ -20,8 +20,8 @@ class Module(ABC):
 
     # Optional lifecycle actions, each a bash function name (or None when the
     # tool doesn't support it). Re-install simply re-runs bash_function.
-    uninstall_function: str | None = None         # "uninstall_nginx"
-    change_password_function: str | None = None   # "set_postgres_password"
+    uninstall_function: str | None = None  # "uninstall_nginx"
+    change_password_function: str | None = None  # "set_postgres_password"
 
     # Install-time prompts shown by the UI before launching the install job.
     # When True, the install dialog asks for an admin/DB password (auto-generated,
@@ -31,6 +31,9 @@ class Module(ABC):
     # the install dialog lets the user choose which subnets to expose them to
     # (class A/B/C private + loopback, or 0.0.0.0/0). Empty = no firewall prompt.
     firewall_ports: list[int] = []
+    # False for services with no login of their own (an open DNS resolver, a
+    # dashboard without auth): the install refuses to open them to 0.0.0.0/0.
+    allow_public: bool = True
 
     # Extra install-time inputs the dialog renders dynamically. Each spec is a
     # dict: {name, env, type, label, default, options?, help?, min?, max?} where

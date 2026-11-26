@@ -3,12 +3,13 @@
 Filesystem is the source of truth — there is no site database. A directory
 under SITES_DIR with a readable info.yml is a site.
 """
+
 import datetime
 from pathlib import Path
 
 import yaml
 
-from config import SITE_LOG_TAIL_LINES, SITES_DIR
+from config import NGINX_CONF_DIR, NGINX_LOG_DIR, SITE_LOG_TAIL_LINES, SITES_DIR
 from features import systemctl
 
 
@@ -67,21 +68,24 @@ def get_site_status(info: dict, nginx_ok: bool | None = None) -> dict:
             "failed": "failed",
             "inactive": "stopped",
         }.get(state, "unknown")
-        return {"state": state, "badge": badge, "pid": pid,
-                "enabled": systemctl.service_enabled(name),
-                "memory_mb": memory_mb, "cpu_percent": cpu_percent}
+        return {
+            "state": state,
+            "badge": badge,
+            "pid": pid,
+            "enabled": systemctl.service_enabled(name),
+            "memory_mb": memory_mb,
+            "cpu_percent": cpu_percent,
+        }
 
     # static / proxy: OK if the nginx conf exists and nginx -t passes globally.
     conf = (info.get("paths") or {}).get("nginx_conf")
     if not conf or not Path(conf).exists():
-        return {"state": "missing config", "badge": "configured",
-                "pid": None, "memory_mb": None}
+        return {"state": "missing config", "badge": "configured", "pid": None, "memory_mb": None}
     if nginx_ok is None:
         nginx_ok = systemctl.nginx_test()[0]
     if nginx_ok:
         return {"state": "ok", "badge": "ok", "pid": None, "memory_mb": None}
-    return {"state": "config error", "badge": "failed",
-            "pid": None, "memory_mb": None}
+    return {"state": "config error", "badge": "failed", "pid": None, "memory_mb": None}
 
 
 def list_sites_with_status() -> list[dict]:
@@ -104,10 +108,24 @@ def get_site(name: str) -> dict | None:
     return info
 
 
+def _inside(path: Path, root: Path) -> bool:
+    """True when `path` resolves under `root`: info.yml is a file on disk, so the
+    paths it names are only trusted inside the directories the panel owns."""
+    try:
+        return path.resolve().is_relative_to(root.resolve())
+    except (OSError, ValueError):
+        return False
+
+
 def read_config(info: dict) -> str:
     conf = (info.get("paths") or {}).get("nginx_conf")
-    if conf and Path(conf).exists():
-        return Path(conf).read_text(encoding="utf-8", errors="replace")
+    if not conf:
+        return "(nginx config file not found)"
+    path = Path(conf)
+    if not _inside(path, NGINX_CONF_DIR):
+        return f"(refusing to read {conf}: outside {NGINX_CONF_DIR})"
+    if path.exists():
+        return path.read_text(encoding="utf-8", errors="replace")
     return "(nginx config file not found)"
 
 
@@ -124,14 +142,14 @@ def _tail_file(path: Path, n: int) -> str:
 def tail_logs(info: dict, n: int = SITE_LOG_TAIL_LINES) -> dict:
     """Last n lines of each relevant log, keyed by a human label."""
     name = info.get("name")
-    log_dir = Path((info.get("paths") or {}).get("log_dir", "/var/www/nginx/log"))
+    log_dir = Path((info.get("paths") or {}).get("log_dir", str(NGINX_LOG_DIR)))
+    if not _inside(log_dir, NGINX_LOG_DIR):
+        log_dir = NGINX_LOG_DIR
     out = {
         "nginx access": _tail_file(log_dir / f"{name}-access.log", n),
         "nginx error": _tail_file(log_dir / f"{name}-error.log", n),
     }
     if info.get("type") == "dotnet":
-        code, journal = systemctl.run(
-            ["journalctl", "-u", name, "-n", str(n), "--no-pager"]
-        )
+        code, journal = systemctl.run(["journalctl", "-u", name, "-n", str(n), "--no-pager"])
         out["systemd journal"] = journal or "(no journal output)"
     return out
