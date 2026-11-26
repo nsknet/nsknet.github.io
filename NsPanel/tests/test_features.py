@@ -132,3 +132,24 @@ def test_ufw_defaults_parsing(monkeypatch):
     monkeypatch.setattr(system_feature.shutil, "which", lambda name: "/usr/sbin/ufw")
     monkeypatch.setattr(system_feature.subprocess, "run", lambda *a, **k: Result())
     assert system_feature.ufw_defaults() == {"incoming": "deny", "outgoing": "allow", "routed": "disabled"}
+
+
+def test_unit_verify_ignores_other_units_warnings():
+    output = (
+        "/usr/lib/systemd/system/walinuxagent.service:21: CPUAccounting= has been removed\n"
+        "/usr/lib/systemd/system/system-xfs_scrub.slice:15: CPUAccounting= has been removed\n"
+    )
+    assert units._unit_problems("demo", output) is None
+
+
+def test_unit_verify_keeps_this_units_problems():
+    output = (
+        "/usr/lib/systemd/system/walinuxagent.service:21: CPUAccounting= has been removed\n"
+        "demo.service: Command /usr/bin/missing is not executable: No such file or directory\n"
+        "demo.service:3: Unknown key name 'Bogus' in section 'Service', ignoring.\n"
+    )
+    problems = units._unit_problems("demo", output)
+    assert problems is not None
+    assert "walinuxagent" not in problems
+    assert "not executable" in problems
+    assert "Bogus" in problems

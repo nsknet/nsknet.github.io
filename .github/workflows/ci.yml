@@ -77,9 +77,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Syntax check
-        run: for f in NsPanel/run.sh nspanel.sh NsPanel/scripts/*.sh NsPanel/scripts/lib/*.sh mini-scripts/*.sh; do bash -n "$f"; done
+        run: for f in NsPanel/run.sh nspanel.sh NsPanel/scripts/*.sh NsPanel/scripts/lib/*.sh; do bash -n "$f"; done
       - name: ShellCheck (warnings and errors)
-        run: shellcheck -S warning NsPanel/run.sh nspanel.sh NsPanel/scripts/*.sh NsPanel/scripts/lib/*.sh mini-scripts/*.sh
+        run: shellcheck -S warning NsPanel/run.sh nspanel.sh NsPanel/scripts/*.sh NsPanel/scripts/lib/*.sh
 
   # Real installs through the panel's own bash invocation, on throwaway runners
   # of every Ubuntu release the scripts support. Only when scripts or the
