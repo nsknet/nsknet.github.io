@@ -155,20 +155,22 @@ function disable(): void {
 
 function deleteService(): void {
   const target = name.value;
-  const details = [
-    'Stops and disables the service',
-    `Deletes ${service.value?.path || `${target}.service`}`,
-  ];
-  if (tunnel.value) details.push(`The tunnel and the DNS record for ${tunnel.value.hostname} stay on Cloudflare`);
+  const details = ['Stops and disables the service', `Deletes ${service.value?.path || `${target}.service`}`];
+  if (tunnel.value)
+    details.push(`The tunnel and the DNS record for ${tunnel.value.hostname} stay on Cloudflare`);
   if (ownerSite.value) details.push(`The .NET site ${target} stops working`);
   ui.confirmThen(
     `Delete ${target}?`,
     'This cannot be undone.',
     () =>
-      void run(apiPath`/api/v1/services/${target}/delete`, {}, {
-        title: `Deleting ${target}`,
-        onSuccess: () => void router.push('/apps'),
-      }),
+      void run(
+        apiPath`/api/v1/services/${target}/delete`,
+        {},
+        {
+          title: `Deleting ${target}`,
+          onSuccess: () => void router.push('/apps'),
+        },
+      ),
     { danger: true, confirmLabel: 'Delete service', typeToConfirm: target, details },
   );
 }
@@ -194,7 +196,7 @@ const deletingTunnel = ref(false);
             class="mono text-c-actx underline underline-offset-2 inline-flex items-center gap-1"
           >
             {{ tunnel.hostname }}<span class="sr-only"> (opens in a new tab)</span>
-            <LIcon name="external-link" is="width:13px;height:13px" />
+            <LIcon is="width:13px;height:13px" name="external-link" />
           </a>
           <span class="mono"> → {{ tunnel.service_url }}</span>
         </template>
@@ -213,8 +215,7 @@ const deletingTunnel = ref(false);
       This is the unit of the .NET site
       <RouterLink :to="ownerSiteLink" class="font-medium underline underline-offset-2">{{
         ownerSite.name
-      }}</RouterLink
-      >. Start and stop it from there; edit the unit here.
+      }}</RouterLink>. Start and stop it from there; edit the unit here.
     </Alert>
 
     <Tabs v-model="tabModel" :items="tabItems" label="Service sections">
@@ -222,7 +223,11 @@ const deletingTunnel = ref(false);
       <div v-if="tab === 'overview'" class="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4 items-start">
         <div class="flex flex-col gap-4 min-w-0">
           <Card v-if="tunnel">
-            <CardHeader title="Cloudflare tunnel" icon="cloud" subtitle="Proxied CNAME, managed on Cloudflare" />
+            <CardHeader
+              title="Cloudflare tunnel"
+              icon="cloud"
+              subtitle="Proxied CNAME, managed on Cloudflare"
+            />
             <div class="p-4">
               <KeyValueList :items="tunnelDetails">
                 <template #value-public="{ item }">
@@ -233,7 +238,7 @@ const deletingTunnel = ref(false);
                     class="text-c-actx underline underline-offset-2 inline-flex items-center gap-1 break-all"
                   >
                     {{ item.value }}<span class="sr-only"> (opens in a new tab)</span>
-                    <LIcon name="external-link" is="width:13px;height:13px;flex-shrink:0" />
+                    <LIcon is="width:13px;height:13px;flex-shrink:0" name="external-link" />
                   </a>
                 </template>
               </KeyValueList>
@@ -246,7 +251,11 @@ const deletingTunnel = ref(false);
           </Card>
 
           <Card>
-            <CardHeader title="Environment variables" icon="list" :subtitle="String(service.envVars.length)" />
+            <CardHeader
+              title="Environment variables"
+              icon="list"
+              :subtitle="String(service.envVars.length)"
+            />
             <div class="p-4">
               <ul v-if="service.envVars.length" class="m-0 p-0 list-none flex flex-col gap-1.5">
                 <li
@@ -268,10 +277,16 @@ const deletingTunnel = ref(false);
             <div class="p-4 flex flex-col gap-4">
               <KeyValueList :items="runtime" label-width="100px">
                 <template #value-status="{ item }"><StatusBadge :status="String(item.value)" /></template>
-                <template #value-autostart="{ item }"><StatusBadge :status="String(item.value || 'unknown')" /></template>
+                <template #value-autostart="{ item }"
+                  ><StatusBadge :status="String(item.value || 'unknown')"
+                /></template>
               </KeyValueList>
               <div class="flex flex-wrap gap-2 pt-3 border-t border-c-border">
-                <Btn v-if="service.autostart !== 'enabled'" sm @click="action('enable', `Enabling ${service.name}`)">
+                <Btn
+                  v-if="service.autostart !== 'enabled'"
+                  sm
+                  @click="action('enable', `Enabling ${service.name}`)"
+                >
                   <LIcon name="circle-check" /> Enable autostart
                 </Btn>
                 <Btn v-else sm variant="danger" @click="disable"><LIcon name="ban" /> Disable autostart</Btn>
@@ -284,8 +299,8 @@ const deletingTunnel = ref(false);
             <div class="p-4 flex flex-col gap-4">
               <div v-if="tunnel" class="flex flex-col gap-2">
                 <p class="m-0 text-sm-var text-c-tx2">
-                  Delete the service <em>and</em> its tunnel, DNS record and ingress rule on Cloudflare. Needs your
-                  API token.
+                  Delete the service <em>and</em> its tunnel, DNS record and ingress rule on Cloudflare. Needs
+                  your API token.
                 </p>
                 <div>
                   <Btn variant="danger" @click="deletingTunnel = true">
@@ -295,7 +310,9 @@ const deletingTunnel = ref(false);
               </div>
               <div class="flex flex-col gap-2" :class="tunnel ? 'pt-4 border-t border-c-border' : ''">
                 <p class="m-0 text-sm-var text-c-tx2">
-                  Stop, disable and remove the unit file{{ tunnel ? ' only — Cloudflare is left as it is' : '' }}.
+                  Stop, disable and remove the unit file{{
+                    tunnel ? ' only — Cloudflare is left as it is' : ''
+                  }}.
                 </p>
                 <div>
                   <Btn variant="danger" @click="deleteService">

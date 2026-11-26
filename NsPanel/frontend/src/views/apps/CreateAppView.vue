@@ -62,7 +62,7 @@ function touch(field: string): void {
 
 /** The error to show under a field: only once it was left or the form was submitted. */
 function shown(errors: Record<string, string>, field: string): string {
-  return touched[field] || submitted.value ? errors[field] ?? '' : '';
+  return touched[field] || submitted.value ? (errors[field] ?? '') : '';
 }
 
 function hasErrors(errors: Record<string, string>): boolean {
@@ -148,17 +148,26 @@ function siteExists(name: string): string {
 const siteErrors = computed<Record<string, string>>(() => {
   const errors: Record<string, string> = {};
   if (site.accessKind === 'domain') {
-    errors.domain = v.first(v.required(site.domain, 'Domain'), v.domain(site.domain), siteExists(site.domain.trim()));
+    errors.domain = v.first(
+      v.required(site.domain, 'Domain'),
+      v.domain(site.domain),
+      siteExists(site.domain.trim()),
+    );
     if (site.autoSsl) errors.sslEmail = v.email(site.sslEmail);
   } else {
-    errors.port = portError(site.port, kind.value === 'dotnet' ? { value: site.internalPort, label: 'internal port' } : undefined);
+    errors.port = portError(
+      site.port,
+      kind.value === 'dotnet' ? { value: site.internalPort, label: 'internal port' } : undefined,
+    );
     errors.name = v.first(v.name(site.name, 'Site name'), siteExists(site.name.trim()));
     errors.subnets = selectedSubnets.value.length ? '' : 'Pick at least one network, or Any IP.';
   }
   if (kind.value === 'proxy') {
     errors.proxyTarget = v.first(
       v.required(site.proxyTarget, 'Proxy target'),
-      PROXY_TARGET.test(site.proxyTarget.trim()) ? '' : 'Use http(s)://host:port, e.g. http://127.0.0.1:5000.',
+      PROXY_TARGET.test(site.proxyTarget.trim())
+        ? ''
+        : 'Use http(s)://host:port, e.g. http://127.0.0.1:5000.',
     );
   }
   if (kind.value === 'dotnet') {
@@ -210,7 +219,14 @@ async function submitSite(): Promise<void> {
 const UNIX_USER = /^[a-z_][a-z0-9_-]{0,31}\$?$/;
 const ENV_LINE = /^[A-Za-z_][A-Za-z0-9_]*=[^\r\n]*$/;
 
-const service = reactive({ name: '', description: '', workingDir: '', command: '', user: 'root', envVars: '' });
+const service = reactive({
+  name: '',
+  description: '',
+  workingDir: '',
+  command: '',
+  user: 'root',
+  envVars: '',
+});
 
 function singleLine(value: string, what: string): string {
   return /[\r\n]/.test(value) ? `${what} must be a single line.` : '';
@@ -258,7 +274,10 @@ async function submitService(): Promise<void> {
           .filter(Boolean)
           .join('\n'),
       },
-      { title: `Registering service ${name}`, onSuccess: () => void router.push(apiPath`/apps/service/${name}`) },
+      {
+        title: `Registering service ${name}`,
+        onSuccess: () => void router.push(apiPath`/apps/service/${name}`),
+      },
     );
   } finally {
     pending.value = false;
@@ -267,7 +286,8 @@ async function submitService(): Promise<void> {
 
 // ── Cloudflare tunnel ─────────────────────────────────────────────────────
 // Mirrors HOSTNAME_RE in features/cloudflare_tunnel.py (the backend is authoritative).
-const TUNNEL_HOST = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+const TUNNEL_HOST =
+  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
 const tunnel = reactive({ token: '', hostname: '', url: '' });
 
@@ -345,7 +365,10 @@ watch([kind, () => site.accessKind], () => {
 
 <template>
   <section class="max-w-3xl">
-    <PageHeader title="New app" subtitle="Each app is created by a job; its live output opens when you submit." />
+    <PageHeader
+      title="New app"
+      subtitle="Each app is created by a job; its live output opens when you submit."
+    />
 
     <form ref="formEl" class="flex flex-col gap-4" novalidate @submit.prevent="submit">
       <Card class="p-4">
@@ -387,12 +410,16 @@ watch([kind, () => site.accessKind], () => {
               </Field>
 
               <label class="flex items-start gap-2.5 cursor-pointer select-none">
-                <input v-model="site.autoSsl" type="checkbox" class="mt-0.5 w-4 h-4 accent-c-accent shrink-0" />
+                <input
+                  v-model="site.autoSsl"
+                  type="checkbox"
+                  class="mt-0.5 w-4 h-4 accent-c-accent shrink-0"
+                />
                 <span class="flex flex-col gap-0.5">
                   <span class="text-sm-var font-medium">Get an SSL certificate (Let's Encrypt)</span>
                   <span class="text-xs-var text-c-tx2">
-                    Runs certbot right after the site is created and redirects HTTP to HTTPS. The domain's DNS must
-                    already point here, and port 80 must be reachable from the internet.
+                    Runs certbot right after the site is created and redirects HTTP to HTTPS. The domain's DNS
+                    must already point here, and port 80 must be reachable from the internet.
                   </span>
                 </span>
               </label>
@@ -440,7 +467,13 @@ watch([kind, () => site.accessKind], () => {
                     @blur="touch('name')"
                   />
                 </Field>
-                <Field v-slot="f" label="Port" required :error="shown(siteErrors, 'port')" help="1024–65535, not used by another app.">
+                <Field
+                  v-slot="f"
+                  label="Port"
+                  required
+                  :error="shown(siteErrors, 'port')"
+                  help="1024–65535, not used by another app."
+                >
                   <div class="flex gap-1.5">
                     <input
                       :id="f.id"
@@ -453,7 +486,7 @@ watch([kind, () => site.accessKind], () => {
                       :aria-invalid="f.invalid"
                       @blur="touch('port')"
                     />
-                    <Btn @click="(site.port = freePort([site.internalPort])), touch('port')">
+                    <Btn @click="((site.port = freePort([site.internalPort])), touch('port'))">
                       <LIcon name="dices" /> Free port
                     </Btn>
                   </div>
@@ -461,7 +494,11 @@ watch([kind, () => site.accessKind], () => {
               </div>
               <div>
                 <SubnetPicker v-model="site.subnets" legend="Open the port to" />
-                <p v-if="shown(siteErrors, 'subnets')" class="m-0 mt-1.5 text-xs-var text-c-danger" role="alert">
+                <p
+                  v-if="shown(siteErrors, 'subnets')"
+                  class="m-0 mt-1.5 text-xs-var text-c-danger"
+                  role="alert"
+                >
                   {{ siteErrors.subnets }}
                 </p>
               </div>
@@ -536,7 +573,7 @@ watch([kind, () => site.accessKind], () => {
                   :aria-invalid="f.invalid"
                   @blur="touch('internalPort')"
                 />
-                <Btn @click="(site.internalPort = freePort([site.port])), touch('internalPort')">
+                <Btn @click="((site.internalPort = freePort([site.port])), touch('internalPort'))">
                   <LIcon name="dices" /> Free port
                 </Btn>
               </div>
@@ -554,7 +591,13 @@ watch([kind, () => site.accessKind], () => {
       <Card v-else-if="kind === 'service'">
         <CardHeader title="Service" icon="server" subtitle="Unit file in /var/www/services/" />
         <div class="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field v-slot="f" label="Name" required :error="shown(serviceErrors, 'name')" help="The systemd unit name, e.g. queue-worker.">
+          <Field
+            v-slot="f"
+            label="Name"
+            required
+            :error="shown(serviceErrors, 'name')"
+            help="The systemd unit name, e.g. queue-worker."
+          >
             <input
               :id="f.id"
               v-model="service.name"
@@ -568,7 +611,12 @@ watch([kind, () => site.accessKind], () => {
               @blur="touch('name')"
             />
           </Field>
-          <Field v-slot="f" label="Run as user" :error="shown(serviceErrors, 'user')" help="Defaults to root.">
+          <Field
+            v-slot="f"
+            label="Run as user"
+            :error="shown(serviceErrors, 'user')"
+            help="Defaults to root."
+          >
             <input
               :id="f.id"
               v-model="service.user"
@@ -582,7 +630,12 @@ watch([kind, () => site.accessKind], () => {
               @blur="touch('user')"
             />
           </Field>
-          <Field v-slot="f" label="Description" :error="shown(serviceErrors, 'description')" class="sm:col-span-2">
+          <Field
+            v-slot="f"
+            label="Description"
+            :error="shown(serviceErrors, 'description')"
+            class="sm:col-span-2"
+          >
             <input
               :id="f.id"
               v-model="service.description"
@@ -594,7 +647,13 @@ watch([kind, () => site.accessKind], () => {
               @blur="touch('description')"
             />
           </Field>
-          <Field v-slot="f" label="Working directory" required :error="shown(serviceErrors, 'workingDir')" class="sm:col-span-2">
+          <Field
+            v-slot="f"
+            label="Working directory"
+            required
+            :error="shown(serviceErrors, 'workingDir')"
+            class="sm:col-span-2"
+          >
             <input
               :id="f.id"
               v-model="service.workingDir"
@@ -720,7 +779,7 @@ watch([kind, () => site.accessKind], () => {
               :key="sample"
               type="button"
               class="mono text-xs-var px-2 py-0.5 rounded-full border border-c-border bg-c-subtle text-c-tx2 hover:text-c-tx hover:bg-c-hover"
-              @click="(tunnel.url = sample), touch('url')"
+              @click="((tunnel.url = sample), touch('url'))"
             >
               {{ sample }}
             </button>

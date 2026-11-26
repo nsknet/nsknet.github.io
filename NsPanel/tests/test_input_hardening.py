@@ -1,4 +1,5 @@
 """Input that must never reach a path join, a unit file or systemctl argv."""
+
 from pathlib import Path
 
 import pytest

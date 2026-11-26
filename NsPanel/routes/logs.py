@@ -1,4 +1,5 @@
 """Audit log API."""
+
 from typing import Annotated
 
 from fastapi import APIRouter, Query

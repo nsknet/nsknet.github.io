@@ -17,6 +17,18 @@ export const useAuthStore = defineStore('auth', () => {
   const me = ref<Me | null>(null);
   /** Set when the session ended on its own (not by pressing Log out). */
   const expired = ref(false);
+  /** `frontend_commit` of the bundle this page booted (static/dist/version.json).
+   * Read at runtime, not baked into the JS, so the bundle builds byte-identical
+   * from the same sources whatever commit it lands in. */
+  const loadedBundle = ref('');
+  void fetch('version.json', { cache: 'no-store' })
+    .then((response) => (response.ok ? response.json() : null))
+    .then((data: { frontend_commit?: string } | null) => {
+      loadedBundle.value = data?.frontend_commit ?? '';
+    })
+    .catch(() => {
+      /* dev server or tests: no version.json, no reload hint */
+    });
 
   onUnauthorized(() => {
     if (status.value === 'signed-in') expired.value = true;
@@ -66,11 +78,12 @@ export const useAuthStore = defineStore('auth', () => {
     return info.commit ? `v${info.version}+${info.commit.slice(0, 7)}` : `v${info.version}`;
   });
 
-  /** The running bundle was built from older frontend sources than the backend has. */
+  /** static/dist is older than frontend/, or this page runs an older bundle than
+   * the server now serves (it was updated while the tab stayed open). */
   const bundleStale = computed(() => {
     if (me.value?.bundle_stale) return true;
-    const backend = me.value?.version.frontend_commit;
-    return !!(backend && __FRONTEND_COMMIT__ && backend !== __FRONTEND_COMMIT__);
+    const served = me.value?.version.dist_frontend_commit;
+    return !!(served && loadedBundle.value && served !== loadedBundle.value);
   });
 
   return { status, me, expired, check, login, logout, changePassword, versionLabel, bundleStale };

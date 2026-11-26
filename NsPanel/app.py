@@ -4,6 +4,7 @@ Launch with run.sh (recommended), which creates the virtualenv, makes sure an
 admin password exists and binds per NSPANEL_HOST/NSPANEL_PORT. See
 docs/ARCHITECTURE.md.
 """
+
 import asyncio
 import logging
 import os

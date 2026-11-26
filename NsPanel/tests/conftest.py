@@ -4,6 +4,7 @@ Nothing here touches the real system: the job runner is faked so tests record
 the command a route *would* run, and the status probes are stubbed. That keeps
 the suite runnable on any OS, which is where the panel is developed.
 """
+
 import sys
 from pathlib import Path
 

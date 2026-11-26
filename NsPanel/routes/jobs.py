@@ -3,6 +3,7 @@
 Lets the UI find a job again after a reload or after its output dialog was
 closed; the output itself is replayed by GET /stream/{job_id}.
 """
+
 from fastapi import APIRouter, HTTPException, status
 
 from core import audit, runner

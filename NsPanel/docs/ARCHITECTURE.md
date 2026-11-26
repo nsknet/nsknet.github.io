@@ -91,8 +91,15 @@ Every error is `{status: "error", code, message, detail}`.
 
 `core/version.py` reports the package version plus the git commit the process
 started from (`GET /healthz`, `GET /api/v1/version`). The build writes
-`static/dist/version.json` with the last commit that touched `frontend/`; when the
-backend's checkout has a newer one, the UI shows "UI out of date".
+`static/dist/version.json` with the last commit that touched `frontend/`. The UI
+shows "UI out of date" in two cases:
+
+- the backend's checkout has newer `frontend/` commits than that file, so `static/dist` is stale;
+- the page booted with a different `version.json` than the server now serves, because the
+  tab stayed open across an update.
+
+The commit is only in `version.json`, never compiled into the JS, so the same sources
+always build the same bundle and CI can compare it byte for byte.
 
 ### Calling a bash function
 
@@ -233,3 +240,10 @@ confirm dialog, the data table and the firewall lockout logic.
 status probes, so nothing calls systemctl. The suite protects three things:
 input validation, that values never reach the shell as text, and that every tool
 module points at a bash function that actually exists.
+
+`tests/integration/` is the exception: it runs real installs through
+`bash_invoker.build_cmd`, exactly as a job would, and checks the result from the
+outside (service active, Redis refuses a client without the password, UFW kept
+SSH and the panel open). It changes the machine, so it is skipped unless
+`NSPANEL_INTEGRATION=1` and running as root on Linux; CI runs it on throwaway
+Ubuntu 22.04 and 24.04 runners when `scripts/` changes.

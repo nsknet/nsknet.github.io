@@ -12,6 +12,7 @@ Guarantees:
   over the dpkg lock;
 - output is capped per job; the oldest lines are dropped first.
 """
+
 import asyncio
 import contextlib
 import json
@@ -33,9 +34,9 @@ _PRIVATE_ENV = frozenset({"PANEL_PASSWORD"})
 # CSI sequences end with a letter from @ to ~ (0x40 to 0x7E).
 # We match CSI sequences ending with letters in [@-l] or [n-~], thus preserving 'm'.
 _ANSI_STRIP = re.compile(
-    r"\x1b\[[0-9;?]*[ -/]*[@-ln-~]"      # CSI except SGR (m)
+    r"\x1b\[[0-9;?]*[ -/]*[@-ln-~]"  # CSI except SGR (m)
     r"|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)"  # OSC
-    r"|\x1b[a-ln-zB-Z]"                   # lone ESC followed by non-m, non-[ characters
+    r"|\x1b[a-ln-zB-Z]"  # lone ESC followed by non-m, non-[ characters
 )
 
 FINISHED = ("done", "failed")

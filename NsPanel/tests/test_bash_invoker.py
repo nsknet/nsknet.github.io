@@ -1,4 +1,5 @@
 """Locating and building bash commands."""
+
 import pytest
 
 from core import bash_invoker

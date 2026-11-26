@@ -96,7 +96,9 @@ function update(force: boolean): void {
           confirmLabel: 'Update anyway',
           details: [
             `Target commit: ${u?.remote_commit?.short ?? 'branch tip'}.`,
-            ci === 'failure' ? 'Its CI run failed — the release may be broken.' : 'Its CI run has not finished.',
+            ci === 'failure'
+              ? 'Its CI run failed — the release may be broken.'
+              : 'Its CI run has not finished.',
           ],
         }
       : { confirmLabel: 'Update & restart' },
@@ -149,24 +151,26 @@ function startReconfigure(): void {
       <Alert v-if="movingTo" tone="info" icon="arrow-right-left" title="The panel is moving">
         Waiting for <span class="mono break-all">{{ movingTo }}</span> to answer, then opening it.
         <template v-if="showMoveLink">
-          It has not answered yet — the browser may not trust its certificate, or it blocks an http address from
-          an https page. Open it yourself.
+          It has not answered yet — the browser may not trust its certificate, or it blocks an http address
+          from an https page. Open it yourself.
         </template>
         <template v-if="showMoveLink" #action>
           <a
             :href="movingTo"
             class="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg bg-c-accent text-c-acfg text-xs-var font-medium no-underline"
           >
-            <LIcon name="external-link" is="width:14px;height:14px" /> Open the new address
+            <LIcon is="width:14px;height:14px" name="external-link" /> Open the new address
           </a>
         </template>
       </Alert>
       <Alert v-if="!restarting && busyJobs && status.installed" tone="warn">
-        {{ busyJobs }} job{{ busyJobs > 1 ? 's are' : ' is' }} still running. Restart, update and roll back wait
-        until {{ busyJobs > 1 ? 'they finish' : 'it finishes' }} — a restart would stop
+        {{ busyJobs }} job{{ busyJobs > 1 ? 's are' : ' is' }} still running. Restart, update and roll back
+        wait until {{ busyJobs > 1 ? 'they finish' : 'it finishes' }} — a restart would stop
         {{ busyJobs > 1 ? 'them' : 'it' }}.
         <template #action>
-          <RouterLink to="/activity/jobs" class="text-xs-var underline underline-offset-2">Show jobs</RouterLink>
+          <RouterLink to="/activity/jobs" class="text-xs-var underline underline-offset-2"
+            >Show jobs</RouterLink
+          >
         </template>
       </Alert>
     </div>

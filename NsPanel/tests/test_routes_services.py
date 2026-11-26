@@ -1,4 +1,5 @@
 """Services API: validation, the job it launches, and the response envelope."""
+
 import pytest
 
 from features import units
@@ -16,9 +17,7 @@ def stub_units(monkeypatch, tmp_path):
         "list_services",
         lambda: [{"name": "demo", "state": "active", "enabled": "enabled"}],
     )
-    monkeypatch.setattr(
-        units, "get_service", lambda name: {"name": name} if name in existing else None
-    )
+    monkeypatch.setattr(units, "get_service", lambda name: {"name": name} if name in existing else None)
     monkeypatch.setattr(units, "get_status_output", lambda name: f"● {name} running")
     monkeypatch.setattr(units, "get_journal_logs", lambda name, lines=60: "log line")
     monkeypatch.setattr(units, "write_service_raw", lambda name, content: None)

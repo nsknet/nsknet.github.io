@@ -163,6 +163,8 @@ onMounted(() => {
 </script>
 
 <template>
+  <!-- Backdrop click closes; the keyboard path is Esc via the dialog stack. -->
+  <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -->
   <div
     class="fixed inset-0 z-[210] flex justify-center items-start pt-[10vh] px-4 bg-c-overlay backdrop-blur-[2px] animate-fade"
     @mousedown.self="close"
@@ -177,7 +179,7 @@ onMounted(() => {
     >
       <h2 :id="titleId" class="sr-only">Search and jump</h2>
       <div class="flex items-center gap-2.5 px-4 h-12 border-b border-c-border">
-        <LIcon name="search" is="width:16px;height:16px;color:var(--text-3);flex-shrink:0" />
+        <LIcon is="width:16px;height:16px;color:var(--text-3);flex-shrink:0" name="search" />
         <input
           v-model="query"
           data-autofocus
@@ -219,6 +221,8 @@ onMounted(() => {
               :aria-labelledby="`${base}-grp-${section.group.replace(/\W+/g, '')}`"
               class="m-0 p-0 list-none"
             >
+              <!-- Focus stays in the search box (aria-activedescendant); arrows and Enter drive options. -->
+              <!-- eslint-disable-next-line vuejs-accessibility/click-events-have-key-events, vuejs-accessibility/interactive-supports-focus -->
               <li
                 v-for="row in section.rows"
                 :id="optionId(row.index)"
@@ -233,7 +237,7 @@ onMounted(() => {
                 @mousedown.prevent
                 @click="go(row.entry)"
               >
-                <LIcon :name="row.entry.icon" is="width:15px;height:15px;color:var(--text-2);flex-shrink:0" />
+                <LIcon is="width:15px;height:15px;color:var(--text-2);flex-shrink:0" :name="row.entry.icon" />
                 <span class="truncate">{{ row.entry.label }}</span>
                 <span class="ml-auto pl-3 truncate mono text-xs-var text-c-tx3 max-w-[45%]">{{
                   row.entry.hint
@@ -254,7 +258,9 @@ onMounted(() => {
         <span><kbd class="mono">↑ ↓</kbd> move</span>
         <span><kbd class="mono">↵</kbd> open</span>
         <span><kbd class="mono">Esc</kbd> close</span>
-        <span class="ml-auto"><kbd class="mono">{{ modKey }} K</kbd> opens this anywhere</span>
+        <span class="ml-auto"
+          ><kbd class="mono">{{ modKey }} K</kbd> opens this anywhere</span
+        >
       </div>
     </div>
   </div>

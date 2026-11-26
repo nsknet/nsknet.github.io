@@ -22,9 +22,7 @@ class KibanaModule(Module):
             ports=[5601],
         )
         if status["installed"]:
-            _, out = systemctl.run(
-                ["dpkg-query", "-W", "-f=${Version}", "kibana"]
-            )
+            _, out = systemctl.run(["dpkg-query", "-W", "-f=${Version}", "kibana"])
             if out and "not found" not in out:
                 status["version"] = f"kibana {out.strip()}"
         return status

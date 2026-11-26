@@ -1,4 +1,5 @@
 """System API: timezone, network and disk validation."""
+
 import pytest
 
 from features import disks as disks_feature
@@ -97,9 +98,7 @@ def test_mount_rejects_bad_paths(client, fake_runner, payload):
 
 
 def test_format_rejects_unknown_filesystems(client, fake_runner):
-    response = client.post(
-        "/api/v1/system/disk/format", data={"device": "/dev/sdb1", "fstype": "zfs"}
-    )
+    response = client.post("/api/v1/system/disk/format", data={"device": "/dev/sdb1", "fstype": "zfs"})
     assert response.status_code == 400
     assert not fake_runner.jobs
 

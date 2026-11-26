@@ -1,4 +1,5 @@
 """System API: host info, timezone, network, swap and disks."""
+
 import ipaddress
 import re
 from typing import Annotated, Any
@@ -149,9 +150,7 @@ def set_network(config: Annotated[NetworkConfig, Form()]) -> JobResponse:
         label=title,
         title=title,
         audit_action="system.set_network",
-        audit_detail=(
-            f"iface={config.iface} method={config.method} address={addr_cidr} gateway={gateway}"
-        ),
+        audit_detail=(f"iface={config.iface} method={config.method} address={addr_cidr} gateway={gateway}"),
     )
 
 

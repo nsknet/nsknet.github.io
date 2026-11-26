@@ -76,7 +76,7 @@ const logSections = computed(() => {
   const marks = [...text.matchAll(pattern)];
   marks.forEach((match, index) => {
     const start = (match.index ?? 0) + match[0].length + 1;
-    const end = index + 1 < marks.length ? marks[index + 1].index ?? text.length : text.length;
+    const end = index + 1 < marks.length ? (marks[index + 1].index ?? text.length) : text.length;
     sections.push({ label: match[1], text: text.slice(start, end).replace(/\s+$/, '') });
   });
   if (!sections.length && text) sections.push({ label: 'log', text });
@@ -84,7 +84,9 @@ const logSections = computed(() => {
 });
 
 const logSection = ref('');
-const sectionOptions = computed(() => logSections.value.map((section) => ({ value: section.label, label: section.label })));
+const sectionOptions = computed(() =>
+  logSections.value.map((section) => ({ value: section.label, label: section.label })),
+);
 const currentSection = computed(
   () => logSections.value.find((section) => section.label === logSection.value) ?? logSections.value[0],
 );
@@ -116,7 +118,8 @@ const details = computed<KeyValueItem[]>(() => {
       copy: true,
     },
   ];
-  if (s.type === 'proxy') items.push({ key: 'proxy', label: 'Proxy target', value: s.proxyTarget, mono: true, copy: true });
+  if (s.type === 'proxy')
+    items.push({ key: 'proxy', label: 'Proxy target', value: s.proxyTarget, mono: true, copy: true });
   if (s.type === 'dotnet') {
     items.push(
       { key: 'dll', label: 'DLL', value: s.dll, mono: true },
@@ -140,7 +143,8 @@ const paths = computed<KeyValueItem[]>(() => {
     { key: 'conf', label: 'nginx config', value: s.configPath, mono: true, copy: true },
   ];
   if (s.logDir) items.push({ key: 'logs', label: 'Log folder', value: s.logDir, mono: true, copy: true });
-  if (s.type === 'dotnet') items.push({ key: 'unit', label: 'systemd unit', value: s.unitPath, mono: true, copy: true });
+  if (s.type === 'dotnet')
+    items.push({ key: 'unit', label: 'systemd unit', value: s.unitPath, mono: true, copy: true });
   return items;
 });
 
@@ -204,7 +208,7 @@ const logsDownload = computed(() =>
           class="ml-2 inline-flex items-center gap-1 text-c-actx underline underline-offset-2"
         >
           Open<span class="sr-only"> {{ site.name }} in a new tab</span>
-          <LIcon name="external-link" is="width:13px;height:13px" />
+          <LIcon is="width:13px;height:13px" name="external-link" />
         </a>
       </template>
 
@@ -252,7 +256,11 @@ const logsDownload = computed(() =>
                 <template #value-status="{ item }"><StatusBadge :status="String(item.value)" /></template>
               </KeyValueList>
               <div class="flex flex-wrap gap-2 pt-3 border-t border-c-border">
-                <Btn v-if="site.autostart !== 'enabled'" sm @click="action('enable', `Enabling ${site.name}`)">
+                <Btn
+                  v-if="site.autostart !== 'enabled'"
+                  sm
+                  @click="action('enable', `Enabling ${site.name}`)"
+                >
                   <LIcon name="circle-check" /> Enable autostart
                 </Btn>
                 <Btn v-else sm variant="danger" @click="disable">
@@ -266,9 +274,12 @@ const logsDownload = computed(() =>
             <div class="p-4 text-sm-var text-c-tx2 flex flex-col gap-2">
               <div class="flex items-center gap-2"><StatusBadge :status="site.status" /></div>
               <p class="m-0">
-                <template v-if="state === 'up'">nginx serves this site and its config passes <span class="mono">nginx -t</span>.</template>
+                <template v-if="state === 'up'"
+                  >nginx serves this site and its config passes <span class="mono">nginx -t</span>.</template
+                >
                 <template v-else-if="state === 'failed'">
-                  <span class="mono">nginx -t</span> fails. Check the error log and the config, then reload nginx.
+                  <span class="mono">nginx -t</span> fails. Check the error log and the config, then reload
+                  nginx.
                 </template>
                 <template v-else>The site's nginx config file is missing.</template>
               </p>

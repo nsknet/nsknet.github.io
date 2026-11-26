@@ -32,8 +32,7 @@ async function submit(event: Event): Promise<void> {
     await auth.login(username.value.trim(), password.value);
     password.value = '';
   } catch (err) {
-    error.value =
-      err instanceof ApiError ? err.message : 'Could not reach the panel. Check the connection.';
+    error.value = err instanceof ApiError ? err.message : 'Could not reach the panel. Check the connection.';
     password.value = '';
     passwordEl.value?.focus();
   } finally {
@@ -103,7 +102,7 @@ async function submit(event: Event): Promise<void> {
               :aria-label="showPassword ? 'Hide password' : 'Show password'"
               @click="showPassword = !showPassword"
             >
-              <LIcon :name="showPassword ? 'eye-off' : 'eye'" is="width:16px;height:16px" />
+              <LIcon is="width:16px;height:16px" :name="showPassword ? 'eye-off' : 'eye'" />
             </button>
           </div>
         </div>

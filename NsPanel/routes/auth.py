@@ -3,6 +3,7 @@
 `login` is the only API route reachable without a session. It is rate limited
 per client IP, always costs one scrypt check, and audits every attempt.
 """
+
 import time
 from typing import Annotated, Any
 

@@ -65,14 +65,9 @@ function download(): void {
       </label>
     </div>
     <!-- Focusable so the keyboard can scroll it. -->
-    <div
-      v-if="ansi"
-      :class="textClass"
-      tabindex="0"
-      role="region"
-      :aria-label="title"
-      v-html="html"
-    ></div>
+    <!-- eslint-disable vue/no-v-html -- ansiToHtml escapes the content first -->
+    <div v-if="ansi" :class="textClass" tabindex="0" role="region" :aria-label="title" v-html="html"></div>
+    <!-- eslint-enable vue/no-v-html -->
     <div v-else :class="textClass" tabindex="0" role="region" :aria-label="title">{{ content }}</div>
     <template #footer>
       <Btn data-autofocus @click="emit('close')">Close</Btn>

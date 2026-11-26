@@ -23,7 +23,7 @@ const style = computed(() => STYLE[props.tone]);
     :role="tone === 'danger' || tone === 'warn' ? 'alert' : 'status'"
     :class="['flex items-start gap-2.5 py-2.5 px-3 rounded-theme text-sm-var', style.cls]"
   >
-    <LIcon :name="icon || style.icon" is="width:16px;height:16px;flex-shrink:0;margin-top:2px" />
+    <LIcon is="width:16px;height:16px;flex-shrink:0;margin-top:2px" :name="icon || style.icon" />
     <div class="flex-1 min-w-0">
       <div v-if="title" class="font-semibold">{{ title }}</div>
       <div :class="[title ? 'mt-0.5' : '', 'text-c-tx break-words']"><slot /></div>

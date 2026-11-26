@@ -118,7 +118,11 @@ export function usePanelRestart(onGaveUp: () => void) {
   }
 
   /** After a reconfigure: follow the panel to its new address, or wait for it in place. */
-  function afterReconfigure(target: PanelTarget, runningHash: string | null | undefined, currentPort: number): void {
+  function afterReconfigure(
+    target: PanelTarget,
+    runningHash: string | null | undefined,
+    currentPort: number,
+  ): void {
     const samePlace = target.port === currentPort && target.scheme === window.location.protocol;
     if (samePlace) void waitForRestart(runningHash);
     else void moveTo(target);

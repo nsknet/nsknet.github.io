@@ -56,17 +56,23 @@ const spark = computed(() => {
   const values = cpuHistory.value;
   if (values.length < 2) return null;
   const step = 100 / (values.length - 1);
-  const points = values.map((v, i) => `${(i * step).toFixed(2)},${(31 - (Math.min(Math.max(v, 0), 100) / 100) * 30).toFixed(2)}`);
+  const points = values.map(
+    (v, i) => `${(i * step).toFixed(2)},${(31 - (Math.min(Math.max(v, 0), 100) / 100) * 30).toFixed(2)}`,
+  );
   const line = `M${points.join(' L')}`;
   return { line, area: `${line} L100,32 L0,32 Z` };
 });
 
-const fixed = (value: number | undefined, digits = 1) => (typeof value === 'number' ? value.toFixed(digits) : '—');
+const fixed = (value: number | undefined, digits = 1) =>
+  typeof value === 'number' ? value.toFixed(digits) : '—';
 
 const metrics = computed(() => {
   const s = stats.value;
   return {
-    cpu: { value: typeof s.cpu_percent === 'number' ? Math.round(s.cpu_percent) : '—', percent: s.cpu_percent ?? null },
+    cpu: {
+      value: typeof s.cpu_percent === 'number' ? Math.round(s.cpu_percent) : '—',
+      percent: s.cpu_percent ?? null,
+    },
     ram: {
       value: fixed(s.ram_used_gb),
       unit: `/ ${fixed(s.ram_total_gb)} GB`,
@@ -146,14 +152,18 @@ const showSkeleton = computed(() => loading.value && !loaded.value);
         <ul class="m-0 p-0 list-none divide-y divide-c-border">
           <li v-for="(alert, index) in alerts" :key="index" class="flex items-start gap-3 px-4 py-3">
             <LIcon
-              :name="alert.level === 'danger' ? 'octagon-x' : 'triangle-alert'"
               :is="`width:16px;height:16px;flex-shrink:0;margin-top:2px;color:var(--${alert.level === 'danger' ? 'danger' : 'warn'})`"
+              :name="alert.level === 'danger' ? 'octagon-x' : 'triangle-alert'"
             />
             <div class="flex-1 min-w-0">
               <div class="text-sm-var font-medium text-c-tx">
-                <span class="sr-only">{{ alert.level === 'danger' ? 'Problem: ' : 'Warning: ' }}</span>{{ alert.title }}
+                <span class="sr-only">{{ alert.level === 'danger' ? 'Problem: ' : 'Warning: ' }}</span>{{
+                  alert.title
+                }}
               </div>
-              <div v-if="alert.detail" class="text-xs-var text-c-tx2 mt-0.5 break-words">{{ alert.detail }}</div>
+              <div v-if="alert.detail" class="text-xs-var text-c-tx2 mt-0.5 break-words">
+                {{ alert.detail }}
+              </div>
             </div>
             <RouterLink
               v-if="alert.link"
@@ -161,14 +171,14 @@ const showSkeleton = computed(() => loading.value && !loaded.value);
               class="shrink-0 inline-flex items-center gap-1 text-sm-var text-c-actx font-medium no-underline hover:underline underline-offset-2"
             >
               Open<span class="sr-only">: {{ alert.title }}</span>
-              <LIcon name="chevron-right" is="width:14px;height:14px" />
+              <LIcon is="width:14px;height:14px" name="chevron-right" />
             </RouterLink>
           </li>
         </ul>
       </Card>
       <Card v-else class="flex items-center gap-3 px-4 py-3.5">
         <span class="w-8 h-8 rounded-full bg-c-oksoft grid place-items-center shrink-0" aria-hidden="true">
-          <LIcon name="circle-check" is="width:16px;height:16px;color:var(--ok)" />
+          <LIcon is="width:16px;height:16px;color:var(--ok)" name="circle-check" />
         </span>
         <div role="status">
           <div class="text-sm-var font-medium">All good</div>
@@ -187,7 +197,13 @@ const showSkeleton = computed(() => loading.value && !loaded.value);
           sub="Sampled every 10 s"
           :loading="showSkeleton"
         >
-          <svg v-if="spark" class="spark !mt-1" viewBox="0 0 100 32" preserveAspectRatio="none" aria-hidden="true">
+          <svg
+            v-if="spark"
+            class="spark !mt-1"
+            viewBox="0 0 100 32"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
             <path class="area" :d="spark.area" />
             <path :d="spark.line" />
           </svg>
@@ -227,7 +243,8 @@ const showSkeleton = computed(() => loading.value && !loaded.value);
               to="/apps"
               class="inline-flex items-center gap-1 text-sm-var text-c-actx font-medium no-underline hover:underline underline-offset-2"
             >
-              View all<span class="sr-only"> apps</span> <LIcon name="chevron-right" is="width:14px;height:14px" />
+              View all<span class="sr-only"> apps</span>
+              <LIcon is="width:14px;height:14px" name="chevron-right" />
             </RouterLink>
           </CardHeader>
 
@@ -240,7 +257,9 @@ const showSkeleton = computed(() => loading.value && !loaded.value);
               <dt class="text-xs-var text-c-tx2 font-medium">{{ tile.label }}</dt>
               <dd class="m-0 mt-0.5 text-xl font-semibold tabular-nums">
                 <span v-if="showSkeleton" class="skeleton inline-block h-5 w-8 align-middle"></span>
-                <span v-else :class="counts[tile.key] ? tile.tone : 'text-c-tx3'">{{ counts[tile.key] }}</span>
+                <span v-else :class="counts[tile.key] ? tile.tone : 'text-c-tx3'">{{
+                  counts[tile.key]
+                }}</span>
               </dd>
             </div>
           </dl>
@@ -280,7 +299,10 @@ const showSkeleton = computed(() => loading.value && !loaded.value);
                     </div>
                     <div class="mono text-xs-var text-c-tx2 truncate mt-0.5">{{ app.target || '—' }}</div>
                   </div>
-                  <span class="hidden sm:inline text-xs-var text-c-tx2 tabular-nums shrink-0" :title="app.modified">
+                  <span
+                    class="hidden sm:inline text-xs-var text-c-tx2 tabular-nums shrink-0"
+                    :title="app.modified"
+                  >
                     {{ app.modifiedAt ? ago(app.modifiedAt / 1000) : '' }}
                   </span>
                   <StatusBadge :status="app.status" />
@@ -294,21 +316,31 @@ const showSkeleton = computed(() => loading.value && !loaded.value);
         <Card class="min-w-0">
           <CardHeader title="Tools" icon="package">
             <template #subtitle>
-              <span v-if="!showSkeleton" class="tabular-nums">{{ installedTools.length }} of {{ toolCount }} installed</span>
+              <span v-if="!showSkeleton" class="tabular-nums"
+                >{{ installedTools.length }} of {{ toolCount }} installed</span
+              >
             </template>
             <RouterLink
               to="/tools"
               class="inline-flex items-center gap-1 text-sm-var text-c-actx font-medium no-underline hover:underline underline-offset-2"
             >
-              Manage<span class="sr-only"> tools</span> <LIcon name="chevron-right" is="width:14px;height:14px" />
+              Manage<span class="sr-only"> tools</span>
+              <LIcon is="width:14px;height:14px" name="chevron-right" />
             </RouterLink>
           </CardHeader>
 
-          <div v-if="showSkeleton" class="p-4 flex flex-col gap-3" aria-busy="true" aria-label="Loading tools">
+          <div
+            v-if="showSkeleton"
+            class="p-4 flex flex-col gap-3"
+            aria-busy="true"
+            aria-label="Loading tools"
+          >
             <div v-for="n in 3" :key="n" class="skeleton h-4" :style="{ width: `${75 - n * 10}%` }"></div>
           </div>
           <EmptyState v-else-if="!installedTools.length" icon="package" title="No tools installed yet">
-            <RouterLink to="/tools" class="text-c-actx font-medium underline underline-offset-2">Browse tools</RouterLink>
+            <RouterLink to="/tools" class="text-c-actx font-medium underline underline-offset-2"
+              >Browse tools</RouterLink
+            >
           </EmptyState>
           <ul v-else class="m-0 p-0 py-1 list-none">
             <li v-for="tool in installedTools" :key="tool.id">

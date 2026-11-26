@@ -111,8 +111,8 @@ function saveAnyway(): void {
   >
     <div v-if="step === 'edit'" class="flex flex-col gap-3">
       <Alert v-if="hasRedactedToken" tone="info">
-        Tunnel tokens are shown as <span class="mono">***</span>. Leave them as they are: the server puts the real
-        token back when you save.
+        Tunnel tokens are shown as <span class="mono">***</span>. Leave them as they are: the server puts the
+        real token back when you save.
       </Alert>
       <label for="unit-editor" class="sr-only">Unit file content</label>
       <textarea
@@ -153,12 +153,13 @@ function saveAnyway(): void {
                   ··· {{ line.count }} unchanged line{{ line.count === 1 ? '' : 's' }} ···
                 </td>
               </tr>
-              <tr
-                v-else
-                :class="line.op === 'add' ? 'bg-c-oksoft' : line.op === 'del' ? 'bg-c-dngsoft' : ''"
-              >
-                <td class="w-10 px-2 text-right text-c-tx3 tabular-nums select-none align-top">{{ line.oldNo ?? '' }}</td>
-                <td class="w-10 px-2 text-right text-c-tx3 tabular-nums select-none align-top">{{ line.newNo ?? '' }}</td>
+              <tr v-else :class="line.op === 'add' ? 'bg-c-oksoft' : line.op === 'del' ? 'bg-c-dngsoft' : ''">
+                <td class="w-10 px-2 text-right text-c-tx3 tabular-nums select-none align-top">
+                  {{ line.oldNo ?? '' }}
+                </td>
+                <td class="w-10 px-2 text-right text-c-tx3 tabular-nums select-none align-top">
+                  {{ line.newNo ?? '' }}
+                </td>
                 <td
                   :class="[
                     'w-5 text-center select-none align-top',
@@ -166,7 +167,9 @@ function saveAnyway(): void {
                   ]"
                 >
                   <span aria-hidden="true">{{ line.op === 'add' ? '+' : line.op === 'del' ? '−' : '' }}</span>
-                  <span class="sr-only">{{ line.op === 'add' ? 'added' : line.op === 'del' ? 'removed' : '' }}</span>
+                  <span class="sr-only">{{
+                    line.op === 'add' ? 'added' : line.op === 'del' ? 'removed' : ''
+                  }}</span>
                 </td>
                 <td class="pr-3 whitespace-pre text-c-tx">{{ line.text || ' ' }}</td>
               </tr>
@@ -183,12 +186,16 @@ function saveAnyway(): void {
     <template #footer>
       <template v-if="step === 'edit'">
         <Btn @click="dialog?.requestClose()">Cancel</Btn>
-        <Btn variant="primary" :disabled="!dirty" @click="review"><LIcon name="file-diff" /> Review changes</Btn>
+        <Btn variant="primary" :disabled="!dirty" @click="review"
+          ><LIcon name="file-diff" /> Review changes</Btn
+        >
       </template>
       <template v-else>
         <Btn :disabled="saving" @click="step = 'edit'"><LIcon name="arrow-left" /> Back to editing</Btn>
         <Btn v-if="verifyOutput" variant="danger" :disabled="saving" @click="saveAnyway">Save anyway</Btn>
-        <Btn variant="primary" :loading="saving" @click="save()"><LIcon name="check" /> Save &amp; restart</Btn>
+        <Btn variant="primary" :loading="saving" @click="save()"
+          ><LIcon name="check" /> Save &amp; restart</Btn
+        >
       </template>
     </template>
   </BaseDialog>

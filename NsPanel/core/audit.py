@@ -8,6 +8,7 @@ core.auth.require_session through a context variable). The file is created
 0600 and rotated by size. Lines in the older `ts | action | detail` format are
 still read back.
 """
+
 import contextvars
 import datetime
 import json

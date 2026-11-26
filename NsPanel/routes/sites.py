@@ -1,4 +1,5 @@
 """Sites API: list, create, and per-site actions (nginx vhosts)."""
+
 import re
 from typing import Annotated, Any
 
@@ -9,11 +10,13 @@ from core import audit, bash_invoker, jobs
 from core.schemas import DataResponse, JobResponse
 from core.validators import (
     ALLOWED_SUBNET_CHOICES,
+    ANY_SUBNET,
     DLL,
     DOMAIN,
     PROXY_TARGET,
     ResourceName,
     bad_request,
+    parse_subnets,
     require_name,
 )
 from features import sites as sites_feature
@@ -140,14 +143,9 @@ def _site_env(payload: SiteCreate) -> dict[str, str]:
     """Firewall scope and certbot e-mail travel via the job env, like every install."""
     env: dict[str, str] = {}
     if payload.access_kind == "port":
-        requested = [s.strip() for s in payload.allowed_subnets.split(",") if s.strip()]
-        invalid = [s for s in requested if s not in ALLOWED_SUBNET_CHOICES]
-        if invalid:
-            raise bad_request(f"Invalid subnet(s): {', '.join(invalid)}")
-        if not requested or "0.0.0.0/0" in requested:
-            env["ALLOWED_SUBNETS"] = "0.0.0.0/0"
-        else:
-            env["ALLOWED_SUBNETS"] = " ".join(dict.fromkeys(requested))
+        # A site is meant to be reached: no choice means open to everyone.
+        subnets = parse_subnets(payload.allowed_subnets, ALLOWED_SUBNET_CHOICES)
+        env["ALLOWED_SUBNETS"] = " ".join(subnets) or ANY_SUBNET
     if payload.wants_ssl and payload.ssl_email:
         env["CERTBOT_EMAIL"] = payload.ssl_email
     return env
@@ -193,24 +191,9 @@ def _dotnet_site_or_error(name: str) -> dict:
     return info
 
 
-_SITE_ACTIONS = {
-    "start": ("Start", "Starting"),
-    "stop": ("Stop", "Stopping"),
-    "restart": ("Restart", "Restarting"),
-    "disable": ("Disable", "Disabling"),
-}
-
-
 def _site_service_action(name: str, verb: str) -> JobResponse:
     _dotnet_site_or_error(name)
-    label_verb, title_verb = _SITE_ACTIONS[verb]
-    return jobs.launch(
-        ["systemctl", verb, name],
-        label=f"{label_verb} {name}",
-        title=f"{title_verb} '{name}'",
-        audit_action=f"site.{verb}",
-        audit_detail=f"name={name}",
-    )
+    return jobs.launch_systemctl(verb, name, audit_prefix="site")
 
 
 @router.post("/{name}/start")

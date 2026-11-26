@@ -29,7 +29,14 @@ const columns: Column<NetInterface>[] = [
   { key: 'method', label: 'Method', sortable: true },
   { key: 'gateway', label: 'Gateway', class: 'mono text-c-tx2' },
   { key: 'dns', label: 'DNS', hideOnMobile: true },
-  { key: 'speed_mbps', label: 'Speed', align: 'right', hideOnMobile: true, sortable: true, sortValue: (r) => r.speed_mbps ?? 0 },
+  {
+    key: 'speed_mbps',
+    label: 'Speed',
+    align: 'right',
+    hideOnMobile: true,
+    sortable: true,
+    sortValue: (r) => r.speed_mbps ?? 0,
+  },
   { key: 'mtu', label: 'MTU', align: 'right', hideOnMobile: true, class: 'num' },
   { key: 'actions', label: 'Actions', srOnlyLabel: true, align: 'right' },
 ];
@@ -119,9 +126,8 @@ function configure(row: NetInterface): void {
     </Card>
 
     <p class="mt-3 mb-0 text-xs-var text-c-tx2">
-      “Not managed” means no netplan file sets this interface (for example a VPN or Docker bridge).
-      Configure writes <span class="mono">/etc/netplan/90-nspanel-&lt;iface&gt;.yaml</span> and keeps a
-      backup.
+      “Not managed” means no netplan file sets this interface (for example a VPN or Docker bridge). Configure
+      writes <span class="mono">/etc/netplan/90-nspanel-&lt;iface&gt;.yaml</span> and keeps a backup.
     </p>
   </section>
 </template>

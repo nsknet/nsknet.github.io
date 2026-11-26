@@ -13,6 +13,7 @@ Also a small CLI, used by run.sh and scripts/panel_service.sh::
 `PANEL_PASSWORD` in the environment pins the password: `ensure` re-hashes it
 every launch, so the variable stays the source of truth while it is set.
 """
+
 import base64
 import hashlib
 import hmac

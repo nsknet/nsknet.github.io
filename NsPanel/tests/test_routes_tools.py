@@ -1,4 +1,5 @@
 """Tools API: install guards, secret handling and firewall scoping."""
+
 import pytest
 
 from modules import registry
@@ -103,9 +104,10 @@ def test_uninstall_is_refused_when_the_module_has_no_uninstaller(client, fake_ru
 
 
 def test_change_password_is_refused_when_unsupported(client, fake_runner):
-    assert client.post(
-        "/api/v1/tools/nginx/change-password", data={"db_password": "Str0ngPass-1"}
-    ).status_code == 400
+    assert (
+        client.post("/api/v1/tools/nginx/change-password", data={"db_password": "Str0ngPass-1"}).status_code
+        == 400
+    )
     assert not fake_runner.jobs
 
 

@@ -4,6 +4,7 @@ Every .py file in modules/ (except base/registry/__init__) is imported and
 scanned for Module subclasses. Adding a tool requires no edits here — see
 docs/ADDING_A_TOOL.md.
 """
+
 import importlib
 import pkgutil
 from pathlib import Path

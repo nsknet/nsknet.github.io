@@ -50,10 +50,16 @@ const options = computed(() => {
         <span class="mono text-xs-var text-c-tx3 tabular-nums">{{ option.cidr }}</span>
       </label>
     </div>
-    <p v-if="selected[ANY_IP]" class="flex items-start gap-1.5 m-0 mt-1.5 text-xs-var text-c-warn" role="status">
-      <LIcon name="triangle-alert" is="width:13px;height:13px;margin-top:2px;flex-shrink:0" />
+    <p
+      v-if="selected[ANY_IP]"
+      class="flex items-start gap-1.5 m-0 mt-1.5 text-xs-var text-c-warn"
+      role="status"
+    >
+      <LIcon is="width:13px;height:13px;margin-top:2px;flex-shrink:0" name="triangle-alert" />
       Every IP on the internet can reach this port.
     </p>
-    <p class="m-0 mt-1.5 text-xs-var text-c-tx3">UFW rules only — UFW itself is not switched on if it is off.</p>
+    <p class="m-0 mt-1.5 text-xs-var text-c-tx3">
+      UFW rules only — UFW itself is not switched on if it is off.
+    </p>
   </fieldset>
 </template>

@@ -48,7 +48,8 @@ export function port(value: string | number, { min = 1, max = 65535 } = {}): str
 export function name(value: string, what = 'Name'): string {
   const v = value.trim();
   if (!v) return `${what} is required.`;
-  if (!NAME.test(v) || v.includes('..')) return `${what}: letters, digits, . _ - only, starting with a letter or digit.`;
+  if (!NAME.test(v) || v.includes('..'))
+    return `${what}: letters, digits, . _ - only, starting with a letter or digit.`;
   return '';
 }
 
@@ -57,10 +58,13 @@ export function domain(value: string): string {
 }
 
 /** A DNS record name: one or more labels; a TLD is not required (`db`, `db.lan`). */
-export const DNS_NAME = /^(?=.{1,253}$)[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+export const DNS_NAME =
+  /^(?=.{1,253}$)[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
 
 export function dnsName(value: string): string {
-  return DNS_NAME.test(value.trim()) ? '' : 'Use letters, digits and hyphens, optionally with dots (db, db.lan).';
+  return DNS_NAME.test(value.trim())
+    ? ''
+    : 'Use letters, digits and hyphens, optionally with dots (db, db.lan).';
 }
 
 export function email(value: string): string {

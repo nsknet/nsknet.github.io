@@ -6,13 +6,12 @@ class SambaModule(Module):
     name = "samba"
     display_name = "Samba"
     description = (
-        "SMB/CIFS file sharing with password auth. "
-        "One share, one login user (works on modern Windows)."
+        "SMB/CIFS file sharing with password auth. One share, one login user (works on modern Windows)."
     )
     bash_function = "install_samba"
     uninstall_function = "uninstall_samba"
     change_password_function = "set_samba_password"
-    requires_password = True           # the Samba user's password (auto-generated; editable)
+    requires_password = True  # the Samba user's password (auto-generated; editable)
     firewall_ports = [445, 139]
     logo = "samba.png"
 

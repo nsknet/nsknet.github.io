@@ -45,7 +45,9 @@ export function lineDiff(before: string, after: string): DiffLine[] {
   for (let i = n - 1; i >= 0; i--) {
     for (let j = m - 1; j >= 0; j--) {
       lcs[i * width + j] =
-        a[i] === b[j] ? lcs[(i + 1) * width + j + 1] + 1 : Math.max(lcs[(i + 1) * width + j], lcs[i * width + j + 1]);
+        a[i] === b[j]
+          ? lcs[(i + 1) * width + j + 1] + 1
+          : Math.max(lcs[(i + 1) * width + j], lcs[i * width + j + 1]);
     }
   }
 
@@ -75,7 +77,8 @@ export function withContext(lines: DiffLine[], context = 3): (DiffLine | DiffGap
   const keep = new Array<boolean>(lines.length).fill(false);
   lines.forEach((line, index) => {
     if (line.op === 'same') return;
-    for (let k = Math.max(0, index - context); k <= Math.min(lines.length - 1, index + context); k++) keep[k] = true;
+    for (let k = Math.max(0, index - context); k <= Math.min(lines.length - 1, index + context); k++)
+      keep[k] = true;
   });
 
   const out: (DiffLine | DiffGap)[] = [];

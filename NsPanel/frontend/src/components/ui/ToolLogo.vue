@@ -1,11 +1,14 @@
 <script setup lang="ts">
 /** A tool's logo tile. PNG logos sit on a fixed white plate so dark-coloured
  *  marks stay visible in the dark theme; text logos use the tool's colour. */
-withDefaults(defineProps<{ logo: string; name: string; color?: string; size?: 'sm' | 'md'; dim?: boolean }>(), {
-  color: undefined,
-  size: 'md',
-  dim: false,
-});
+withDefaults(
+  defineProps<{ logo: string; name: string; color?: string; size?: 'sm' | 'md'; dim?: boolean }>(),
+  {
+    color: undefined,
+    size: 'md',
+    dim: false,
+  },
+);
 </script>
 
 <template>

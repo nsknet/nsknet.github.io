@@ -60,7 +60,7 @@ function regenerate(): void {
         :aria-pressed="visible"
         @click="visible = !visible"
       >
-        <LIcon :name="visible ? 'eye-off' : 'eye'" is="width:16px;height:16px" />
+        <LIcon is="width:16px;height:16px" :name="visible ? 'eye-off' : 'eye'" />
       </button>
     </div>
     <button
@@ -69,7 +69,7 @@ function regenerate(): void {
       class="h-9 px-2.5 inline-flex items-center gap-1.5 rounded-lg border border-c-border bg-c-bg text-sm-var text-c-tx2 hover:text-c-tx hover:bg-c-hover"
       @click="regenerate"
     >
-      <LIcon name="dices" is="width:15px;height:15px" /> Generate
+      <LIcon is="width:15px;height:15px" name="dices" /> Generate
     </button>
     <button
       v-if="copy"
@@ -79,7 +79,7 @@ function regenerate(): void {
       :disabled="!model"
       @click="copyText(model, 'Password')"
     >
-      <LIcon name="copy" is="width:15px;height:15px" />
+      <LIcon is="width:15px;height:15px" name="copy" />
     </button>
   </div>
 </template>

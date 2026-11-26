@@ -13,7 +13,9 @@ defineProps<{ parts: AuditDetailPart[] }>();
       :key="`${index}-${part.key}`"
       :class="[
         'min-w-0 max-w-full break-all mono text-xs-var',
-        part.key ? 'px-1.5 py-0.5 rounded-theme-sm bg-c-subtle border border-c-border text-c-tx' : 'text-c-tx2 py-0.5',
+        part.key
+          ? 'px-1.5 py-0.5 rounded-theme-sm bg-c-subtle border border-c-border text-c-tx'
+          : 'text-c-tx2 py-0.5',
       ]"
     >
       <span v-if="part.key" class="text-c-tx3">{{ part.key }}=</span>{{ part.value }}

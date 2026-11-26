@@ -4,6 +4,7 @@ Releases track commits on `main`, so the commit is the real identity; the
 package version only moves on breaking changes. Read once at import — the
 checkout does not change under a running process (updates restart it).
 """
+
 import json
 import subprocess
 from functools import lru_cache

@@ -81,9 +81,13 @@ function enable(): void {
     state.installed ? 'Enable the firewall?' : 'Install and enable the firewall?',
     'Before switching UFW on, the panel allows the ports you need to stay connected.',
     () =>
-      void run('/api/v1/firewall/install', {}, {
-        title: state.installed ? 'Enabling UFW firewall' : 'Installing UFW firewall',
-      }),
+      void run(
+        '/api/v1/firewall/install',
+        {},
+        {
+          title: state.installed ? 'Enabling UFW firewall' : 'Installing UFW firewall',
+        },
+      ),
     {
       confirmLabel: state.installed ? 'Enable firewall' : 'Install and enable',
       details: [
@@ -214,7 +218,9 @@ function deleteRule(rule: RuleRow): void {
             >
               <dt class="text-xs-var text-c-tx2">{{ policy.label }}</dt>
               <dd class="m-0 mt-1">
-                <Badge v-if="policy.value" :tone="POLICY_TONE[policy.value] ?? 'neutral'">{{ policy.value }}</Badge>
+                <Badge v-if="policy.value" :tone="POLICY_TONE[policy.value] ?? 'neutral'">{{
+                  policy.value
+                }}</Badge>
                 <span v-else class="text-c-tx3 text-sm-var">—</span>
               </dd>
             </div>
@@ -232,7 +238,11 @@ function deleteRule(rule: RuleRow): void {
       </Alert>
 
       <Card class="overflow-clip">
-        <CardHeader title="Rules" icon="list" :subtitle="loaded ? `${firewall.rules.length} total, IPv4 and IPv6` : ''" />
+        <CardHeader
+          title="Rules"
+          icon="list"
+          :subtitle="loaded ? `${firewall.rules.length} total, IPv4 and IPv6` : ''"
+        />
         <DataTable
           :columns="columns"
           :rows="rows"
@@ -252,8 +262,12 @@ function deleteRule(rule: RuleRow): void {
         >
           <template #cell-to="{ row }">
             <span class="inline-flex items-center gap-1.5">
-              <span v-if="row.protection" class="inline-flex shrink-0 text-c-warn" :title="row.protection.reason">
-                <LIcon name="lock" is="width:13px;height:13px" />
+              <span
+                v-if="row.protection"
+                class="inline-flex shrink-0 text-c-warn"
+                :title="row.protection.reason"
+              >
+                <LIcon is="width:13px;height:13px" name="lock" />
                 <span class="sr-only">Protected: {{ row.protection.reason }}</span>
               </span>
               <span class="mono font-medium">{{ row.to.replace(' (v6)', '') }}</span>

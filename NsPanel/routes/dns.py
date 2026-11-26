@@ -1,4 +1,5 @@
 """DNS API: CoreDNS host records (domain → IPv4)."""
+
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Form, HTTPException

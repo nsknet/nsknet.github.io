@@ -10,6 +10,7 @@ carry the `X-NsPanel: 1` header (a plain cross-site form cannot set it, and
 cross-site script would need a CORS preflight the panel never approves), and
 must not come from another origin.
 """
+
 from urllib.parse import urlsplit
 
 from fastapi import HTTPException, Request, status

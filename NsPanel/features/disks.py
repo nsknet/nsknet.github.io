@@ -4,6 +4,7 @@ Backs the Disks section of the System page. Read-only: enumeration is done with
 `lsblk` (JSON output) enriched with live usage figures from psutil. Mutating
 operations (mount / unmount / format) run as streamed jobs via scripts/disks.sh.
 """
+
 import json
 import shutil
 import subprocess
@@ -30,7 +31,9 @@ def list_disks() -> list[dict]:
     try:
         result = subprocess.run(
             ["lsblk", "-J", "-b", "-o", cols],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode != 0:
             return []
@@ -137,7 +140,9 @@ def device_in_use(device: str) -> str | None:
     try:
         result = subprocess.run(
             ["lsblk", "-J", "-o", "PATH,TYPE,FSTYPE,MOUNTPOINT", device],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode != 0:
             return f"{device} was not found"

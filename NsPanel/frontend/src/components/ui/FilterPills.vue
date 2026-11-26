@@ -21,7 +21,9 @@ defineProps<{ options: { value: string; label: string; count?: number }[]; label
       @click="model = option.value"
     >
       {{ option.label }}
-      <span v-if="option.count !== undefined" class="tabular-nums opacity-70 text-xs-var">{{ option.count }}</span>
+      <span v-if="option.count !== undefined" class="tabular-nums opacity-70 text-xs-var">{{
+        option.count
+      }}</span>
     </button>
   </div>
 </template>

@@ -8,6 +8,7 @@ an atomic rewrite of this file — no service restart required.
 Status checks stay in Python (per the architecture rules); the file is simple so
 its reads/writes live here too rather than in a bash action.
 """
+
 import ipaddress
 import os
 import re

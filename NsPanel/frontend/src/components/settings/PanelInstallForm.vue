@@ -42,9 +42,7 @@ const submitted = ref(false);
 const touched = reactive({ password: false, port: false });
 const pending = ref(false);
 
-const chosenSubnets = computed(() =>
-  Object.keys(selected.value).filter((cidr) => selected.value[cidr]),
-);
+const chosenSubnets = computed(() => Object.keys(selected.value).filter((cidr) => selected.value[cidr]));
 
 const passwordError = computed(() => {
   const value = password.value;
@@ -96,19 +94,20 @@ async function submit(): Promise<void> {
     </CardHeader>
     <form class="p-4 flex flex-col gap-5" novalidate @submit.prevent="submit">
       <p class="m-0 text-sm-var text-c-tx2">
-        Installs the panel from GitHub (<span class="mono">{{ status.branch }}</span>) into its own directory,
-        starts it with systemd on boot, and opens its port in UFW for the networks you pick.
+        Installs the panel from GitHub (<span class="mono">{{ status.branch }}</span
+        >) into its own directory, starts it with systemd on boot, and opens its port in UFW for the networks
+        you pick.
       </p>
       <Alert v-if="restartsSelf" tone="warn">
         Saving restarts the panel you are on. This page follows it to the new address.
       </Alert>
 
       <Field
+        v-slot="f"
         label="Port"
         help="1024–65535. The service's URL changes if you change it."
         :error="shown('port', portError)"
         required
-        v-slot="f"
       >
         <input
           :id="f.id"
@@ -124,7 +123,11 @@ async function submit(): Promise<void> {
       </Field>
 
       <div>
-        <SubnetPicker v-model="selected" :choices="status.subnet_choices" :legend="`Open port ${port || '…'} to`" />
+        <SubnetPicker
+          v-model="selected"
+          :choices="status.subnet_choices"
+          :legend="`Open port ${port || '…'} to`"
+        />
         <p v-if="selected['0.0.0.0/0']" class="m-0 mt-1.5 text-xs-var text-c-warn">
           Anyone who can reach this server could try the panel login.
         </p>
@@ -145,8 +148,8 @@ async function submit(): Promise<void> {
           <span class="text-sm-var font-medium text-c-tx">Serve over HTTPS</span>
         </label>
         <p :id="`${tlsId}-help`" class="m-0 pl-[26px] text-xs-var text-c-tx3">
-          With a self-signed certificate made for this host: the browser asks you to trust it once. Replace the
-          files in <span class="mono">/etc/nspanel/tls</span> to use your own.
+          With a self-signed certificate made for this host: the browser asks you to trust it once. Replace
+          the files in <span class="mono">/etc/nspanel/tls</span> to use your own.
         </p>
         <Alert v-if="!tls" tone="warn" class="mt-1">
           Plain HTTP: anyone on the same network segment could read the password in transit.
@@ -154,10 +157,10 @@ async function submit(): Promise<void> {
       </div>
 
       <Field
+        v-slot="f"
         label="New admin password (optional)"
         :help="`Leave empty to keep the password you signed in with. A new one (at least ${PASSWORD_MIN} characters) replaces the admin password of every NsPanel on this host; only its hash is stored.`"
         :error="shown('password', passwordError)"
-        v-slot="f"
       >
         <PasswordField
           :id="f.id"

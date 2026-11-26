@@ -3,6 +3,7 @@
 A browser-based admin panel for a single Ubuntu VPS: **FastAPI** on the back,
 a **Vue 3** SPA on the front, and **bash** doing the actual work.
 
+- [Operations](docs/OPERATIONS.md) — install, passwords, updates, manual rollback, backups, troubleshooting
 - [Architecture](docs/ARCHITECTURE.md) — the layers, the two response envelopes, how a job runs
 - [Adding a tool](docs/ADDING_A_TOOL.md) — one Python file plus one bash script
 - [Frontend guide](docs/FRONTEND.md) — layout, data states, forms, dialogs and components
@@ -116,17 +117,25 @@ NsPanel/
 ```bash
 # Backend
 pip install -e ".[dev]"
-ruff check . && pytest
+ruff check . && ruff format --check . && pytest
 
-# Frontend (rebuild static/dist after any change under frontend/)
+# Frontend
 cd frontend && npm ci
 npm run dev        # Vite on :7778, proxying the API to a running panel
+npm run check      # eslint, prettier --check, vue-tsc, vitest
+npm run format     # apply prettier
 npm run build      # writes ../static/dist
-npm run typecheck
 ```
 
-`static/dist/` is committed so a VPS can `git clone` and run without Node;
-CI rebuilds and commits it whenever `frontend/` changes.
+`static/dist/` is committed so a VPS can `git clone` and run without Node. The
+*Build frontend* workflow rebuilds and commits it after every push to `main` or
+`dev` that changes `frontend/`; CI warns when the committed bundle does not match
+its sources.
+
+CI (`.github/workflows/ci.yml`) also audits the pinned dependencies, checks that
+`requirements.lock` installs on its own, runs ShellCheck, and — when `scripts/`
+changes — installs nginx, Redis and UFW for real on fresh Ubuntu 22.04 and 24.04
+runners through the panel's own bash invocation (`tests/integration/`).
 
 ---
 

@@ -57,7 +57,9 @@ const hasSwap = computed(() => host.value.swap.total > 0);
 const pickingZone = ref(false);
 
 // --- Swap ----------------------------------------------------------------------
-const swapSize = ref<string | number>(String(Math.min(64, Math.max(1, Math.round(host.value.swap.total) || 4))));
+const swapSize = ref<string | number>(
+  String(Math.min(64, Math.max(1, Math.round(host.value.swap.total) || 4))),
+);
 const swapTouched = ref(false);
 const swapError = computed(() => {
   // v-model on a number input yields a number (or "" when empty).
@@ -89,7 +91,9 @@ function applySwap(): void {
       details: [
         `Needs ${size} GB + 512 MB free on / (the current swap file counts as free). Without it the job stops and changes nothing.`,
         '/etc/fstab is backed up, checked after the edit and restored on error.',
-        ...(replacing ? ['Turning swap off moves its pages back into RAM; this can take a while on a busy host.'] : []),
+        ...(replacing
+          ? ['Turning swap off moves its pages back into RAM; this can take a while on a busy host.']
+          : []),
       ],
     },
   );
@@ -103,7 +107,10 @@ function installUtils(): void {
     () => void run('/api/v1/system/install-utils', {}, { title: 'Installing common utilities' }),
     {
       confirmLabel: 'Install utilities',
-      details: [UTILITIES + '.', 'Optional extras when available: axel, bpytop, rar/unrar, p7zip, iftop, mtr.'],
+      details: [
+        UTILITIES + '.',
+        'Optional extras when available: axel, bpytop, rar/unrar, p7zip, iftop, mtr.',
+      ],
     },
   );
 }
@@ -204,7 +211,11 @@ function commonConfig(): void {
 
         <div class="flex flex-col gap-4 min-w-0">
           <Card class="overflow-clip">
-            <CardHeader title="Swap" icon="layers" :subtitle="hasSwap ? `/swapfile · ${gb(host.swap.total)}` : 'none'" />
+            <CardHeader
+              title="Swap"
+              icon="layers"
+              :subtitle="hasSwap ? `/swapfile · ${gb(host.swap.total)}` : 'none'"
+            />
             <form class="p-4 flex flex-col gap-3" novalidate @submit.prevent="applySwap">
               <Field
                 v-slot="f"

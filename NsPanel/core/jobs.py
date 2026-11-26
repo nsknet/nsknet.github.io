@@ -9,6 +9,7 @@ to open the SSE stream.
 names into a shell string** — the unit name travels as a positional argument,
 so a name that slipped past validation still cannot break out of its slot.
 """
+
 import re
 from typing import Any
 
@@ -64,6 +65,27 @@ def launch_bash(
     )
 
 
+# systemctl verbs a screen may run on one unit: (label verb, progress verb).
+SYSTEMCTL_VERBS = {
+    "start": ("Start", "Starting"),
+    "stop": ("Stop", "Stopping"),
+    "restart": ("Restart", "Restarting"),
+    "disable": ("Disable", "Disabling"),
+}
+
+
+def launch_systemctl(verb: str, unit: str, *, audit_prefix: str) -> JobResponse:
+    """`systemctl <verb> <unit>` as a job, audited as `<audit_prefix>.<verb>`."""
+    label_verb, title_verb = SYSTEMCTL_VERBS[verb]
+    return launch(
+        ["systemctl", verb, unit],
+        label=f"{label_verb} {unit}",
+        title=f"{title_verb} '{unit}'",
+        audit_action=f"{audit_prefix}.{verb}",
+        audit_detail=f"name={unit}",
+    )
+
+
 def systemctl_chain(*steps: list[str], echo: str = "", ignore_failures: bool = False) -> list[str]:
     """Build one `bash -c` command running several argv-safe steps in order.
 
@@ -88,5 +110,5 @@ def systemctl_chain(*steps: list[str], echo: str = "", ignore_failures: bool = F
     script = separator.join(fragments)
     if echo:
         argv.append(echo)
-        script = f"{script}{separator}echo \"${{{index}}}\""
+        script = f'{script}{separator}echo "${{{index}}}"'
     return ["bash", "-c", script, "--", *argv]

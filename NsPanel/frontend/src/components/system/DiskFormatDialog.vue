@@ -32,7 +32,9 @@ const FS_HELP: Record<FsType, string> = {
   ext2: 'No journal; prefer ext4.',
 };
 
-const fstype = ref<FsType>(FS_TYPES.includes(props.node.fstype as FsType) ? (props.node.fstype as FsType) : 'ext4');
+const fstype = ref<FsType>(
+  FS_TYPES.includes(props.node.fstype as FsType) ? (props.node.fstype as FsType) : 'ext4',
+);
 const label = ref(props.node.label);
 const pending = ref(false);
 
@@ -78,7 +80,9 @@ function submit(): void {
         `Model: ${summary || 'unknown'}`,
         `Current label: ${node.label || 'none'} · filesystem: ${node.fstype || 'none'}`,
         ...(partitions.value
-          ? [`Its ${partitions.value} partition${partitions.value === 1 ? '' : 's'} and the partition table are destroyed.`]
+          ? [
+              `Its ${partitions.value} partition${partitions.value === 1 ? '' : 's'} and the partition table are destroyed.`,
+            ]
           : []),
         'All data on the device will be erased.',
       ],
@@ -103,7 +107,9 @@ function submit(): void {
             node.label ? ` labelled ${node.label}` : ''
           }}.
         </template>
-        <template v-if="partitions"> Its {{ partitions }} partition{{ partitions === 1 ? '' : 's' }} are removed too.</template>
+        <template v-if="partitions">
+          Its {{ partitions }} partition{{ partitions === 1 ? '' : 's' }} are removed too.</template
+        >
         You will type the device path to confirm.
       </Alert>
       <Field v-slot="f" label="Filesystem" :help="FS_HELP[fstype]">

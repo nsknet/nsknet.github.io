@@ -4,6 +4,7 @@ Reads come from :mod:`features.panel_service`; every change is a bash job in
 scripts/panel_service.sh. The password travels via the job's environment, never
 argv, so it does not show up in the command echoed to the live log.
 """
+
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Form, HTTPException, status
@@ -12,7 +13,7 @@ from fastapi.concurrency import run_in_threadpool
 import config
 from core import jobs, passwords, runner
 from core.schemas import DataResponse, JobResponse
-from core.validators import bad_request, require_port
+from core.validators import bad_request, parse_subnets, require_port
 from features import panel_service
 
 router = APIRouter(prefix="/api/v1/panel")
@@ -50,16 +51,12 @@ def _require_idle() -> None:
 
 
 def _resolve_subnets(raw: str | None) -> str:
-    requested = [s.strip() for s in (raw or "").split(",") if s.strip()]
-    if not requested:
-        raise bad_request("Select at least one subnet to open the port to.")
+    """The panel may also open to the host's own interface subnets."""
     allowed = {choice["cidr"] for choice in panel_service.lan_subnet_choices()}
-    invalid = [s for s in requested if s not in allowed]
-    if invalid:
-        raise bad_request(f"Invalid subnet(s): {', '.join(invalid)}")
-    if "0.0.0.0/0" in requested:
-        return "0.0.0.0/0"
-    return " ".join(dict.fromkeys(requested))
+    subnets = parse_subnets(raw, allowed)
+    if not subnets:
+        raise bad_request("Select at least one subnet to open the port to.")
+    return " ".join(subnets)
 
 
 @router.get("")

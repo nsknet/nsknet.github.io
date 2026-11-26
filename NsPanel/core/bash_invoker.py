@@ -6,6 +6,7 @@ so the common path is a direct lookup; the scan below is the fallback for
 functions that are not owned by a tool module (system, firewall, disks, …) and
 its result is cached for the process lifetime.
 """
+
 import functools
 import re
 

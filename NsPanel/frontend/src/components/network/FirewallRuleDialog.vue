@@ -149,12 +149,7 @@ function submit(): void {
           />
         </Field>
         <Field v-slot="f" label="Action" :help="ACTION_HELP[form.action]">
-          <select
-            :id="f.id"
-            v-model="form.action"
-            class="input"
-            :aria-describedby="f.describedBy"
-          >
+          <select :id="f.id" v-model="form.action" class="input" :aria-describedby="f.describedBy">
             <option v-for="action in ACTIONS" :key="action" :value="action">{{ action }}</option>
           </select>
         </Field>
@@ -189,7 +184,12 @@ function submit(): void {
         />
       </Field>
 
-      <Field v-slot="f" label="Comment" :error="visible('comment', commentError)" help="Optional. Shown next to the rule.">
+      <Field
+        v-slot="f"
+        label="Comment"
+        :error="visible('comment', commentError)"
+        help="Optional. Shown next to the rule."
+      >
         <input
           :id="f.id"
           v-model="form.comment"
@@ -202,19 +202,15 @@ function submit(): void {
         />
       </Field>
 
-      <p
-        v-if="hit"
-        class="m-0 flex items-start gap-1.5 text-xs-var text-c-warn"
-        role="status"
-      >
-        <LIcon name="triangle-alert" is="width:13px;height:13px;margin-top:2px;flex-shrink:0" />
+      <p v-if="hit" class="m-0 flex items-start gap-1.5 text-xs-var text-c-warn" role="status">
+        <LIcon is="width:13px;height:13px;margin-top:2px;flex-shrink:0" name="triangle-alert" />
         Port {{ hit.port }} is used by {{ hit.what }}. A {{ form.action }} rule can cut off your access.
       </p>
       <p
         v-else-if="form.source === 'any' && form.action === 'ALLOW' && form.port"
         class="m-0 flex items-start gap-1.5 text-xs-var text-c-tx2"
       >
-        <LIcon name="globe" is="width:13px;height:13px;margin-top:2px;flex-shrink:0" />
+        <LIcon is="width:13px;height:13px;margin-top:2px;flex-shrink:0" name="globe" />
         Every address on the internet will be able to reach this port.
       </p>
     </form>

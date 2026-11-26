@@ -1,4 +1,5 @@
 """FastAPI router for system processes."""
+
 import os
 import re
 import signal
@@ -94,7 +95,7 @@ def _list_processes(q: str) -> DataResponse[list[dict[str, Any]]]:
 
             try:
                 mem_info = proc.memory_info()
-                ram_gb = round(mem_info.rss / (1024 ** 3), 3)
+                ram_gb = round(mem_info.rss / (1024**3), 3)
             except Exception:
                 ram_gb = 0.0
 
@@ -103,16 +104,18 @@ def _list_processes(q: str) -> DataResponse[list[dict[str, Any]]]:
             except Exception:
                 cpu_pct = 0.0
 
-            all_processes.append({
-                "protected": pid in protected or name in _CRITICAL_NAMES,
-                "pid": pid,
-                "name": name,
-                "arguments": arguments,
-                "threads": threads,
-                "user": user,
-                "ram_gb": ram_gb,
-                "cpu_percent": cpu_pct
-            })
+            all_processes.append(
+                {
+                    "protected": pid in protected or name in _CRITICAL_NAMES,
+                    "pid": pid,
+                    "name": name,
+                    "arguments": arguments,
+                    "threads": threads,
+                    "user": user,
+                    "ram_gb": ram_gb,
+                    "cpu_percent": cpu_pct,
+                }
+            )
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue
         except Exception:
@@ -138,10 +141,10 @@ def _list_processes(q: str) -> DataResponse[list[dict[str, Any]]]:
         matches_q = False
         if q_clean:
             matches_q = (
-                q_clean in str(p["pid"]) or
-                q_clean in p["name"].lower() or
-                q_clean in p["arguments"].lower() or
-                q_clean in p["user"].lower()
+                q_clean in str(p["pid"])
+                or q_clean in p["name"].lower()
+                or q_clean in p["arguments"].lower()
+                or q_clean in p["user"].lower()
             )
 
         in_top_cpu = p["pid"] in top_cpu_pids

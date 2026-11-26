@@ -4,6 +4,7 @@ Everything filesystem-related lives here so the rest of the code never
 hardcodes a path. Network settings read from the environment (set by run.sh)
 with safe localhost defaults — see docs/ARCHITECTURE.md.
 """
+
 import os
 from pathlib import Path
 

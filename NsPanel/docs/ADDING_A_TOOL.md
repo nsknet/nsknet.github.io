@@ -64,8 +64,8 @@ class MyToolModule(Module):
     name = "mytool"
     display_name = "My Tool"
     description = "Does something useful."
-    logo = "mytool.png"                  # file in static/logo/
-    script = "mytool.sh"                 # optional — defaults to "<name>.sh"
+    logo = "mytool.png"  # file in static/logo/
+    script = "mytool.sh"  # optional — defaults to "<name>.sh"
     bash_function = "install_mytool"
     uninstall_function = "uninstall_mytool"
 
@@ -96,20 +96,20 @@ dashboard URL); the Tools screen shows it as key/value rows.
 | `install_params = [...]` | Extra form fields — see below. |
 
 ```python
-    install_params = [
-        {
-            "name": "edition",          # form field name
-            "env": "MYTOOL_EDITION",    # env var the script reads
-            "type": "select",           # string | number | checkbox | select
-            "label": "Edition",
-            "default": "free",
-            "help": "Free is fine for most setups.",
-            "options": [
-                {"value": "free", "label": "Free"},
-                {"value": "pro", "label": "Pro — licensed"},
-            ],
-        },
-    ]
+install_params = [
+    {
+        "name": "edition",  # form field name
+        "env": "MYTOOL_EDITION",  # env var the script reads
+        "type": "select",  # string | number | checkbox | select
+        "label": "Edition",
+        "default": "free",
+        "help": "Free is fine for most setups.",
+        "options": [
+            {"value": "free", "label": "Free"},
+            {"value": "pro", "label": "Pro — licensed"},
+        ],
+    },
+]
 ```
 
 All of these reach the script as **environment variables**, never as arguments,
@@ -120,7 +120,10 @@ so they never appear in the live log. `number` accepts `min`/`max`.
 ```bash
 pytest tests/test_registry.py   # every declared bash function must exist
 bash -n scripts/mytool.sh
-shellcheck -S error scripts/mytool.sh
+shellcheck -S warning scripts/mytool.sh
 ```
 
-Then install it once from the Tools screen and watch the live output.
+Then install it once from the Tools screen on a throwaway host and watch the live
+output. If the install can run on a stock GitHub runner, add a case to
+`tests/integration/test_real_install.py` (install, check from the outside,
+uninstall) so CI keeps it working on every supported Ubuntu release.

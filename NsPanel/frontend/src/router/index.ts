@@ -259,12 +259,9 @@ export const navItems = router
   }));
 
 /** Nav items bucketed by section, sections in first-appearance order. */
-export const navGroups = navItems.reduce<{ group: NavGroup; items: typeof navItems }[]>(
-  (groups, item) => {
-    const last = groups[groups.length - 1];
-    if (last?.group === item.group) last.items.push(item);
-    else groups.push({ group: item.group, items: [item] });
-    return groups;
-  },
-  [],
-);
+export const navGroups = navItems.reduce<{ group: NavGroup; items: typeof navItems }[]>((groups, item) => {
+  const last = groups[groups.length - 1];
+  if (last?.group === item.group) last.items.push(item);
+  else groups.push({ group: item.group, items: [item] });
+  return groups;
+}, []);

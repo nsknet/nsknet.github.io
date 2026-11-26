@@ -63,7 +63,11 @@ function apply(): void {
     `The host clock changes from ${props.current || 'unknown'} to ${zone}.`,
     async () => {
       pending.value = true;
-      const result = await run('/api/v1/system/set-timezone', { tz: zone }, { title: `Set timezone → ${zone}` });
+      const result = await run(
+        '/api/v1/system/set-timezone',
+        { tz: zone },
+        { title: `Set timezone → ${zone}` },
+      );
       pending.value = false;
       if (result) emit('done');
     },
@@ -119,7 +123,9 @@ function apply(): void {
           :aria-invalid="f.invalid"
           :disabled="!timezonesLoaded"
         >
-          <option value="" disabled>{{ shown.length ? 'Choose a timezone' : 'No zone matches the search' }}</option>
+          <option value="" disabled>
+            {{ shown.length ? 'Choose a timezone' : 'No zone matches the search' }}
+          </option>
           <option v-for="zone in shown" :key="zone" :value="zone">
             {{ zone }}{{ zone === current ? ' (current)' : '' }}
           </option>

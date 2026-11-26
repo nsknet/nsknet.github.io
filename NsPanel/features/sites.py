@@ -3,6 +3,7 @@
 Filesystem is the source of truth — there is no site database. A directory
 under SITES_DIR with a readable info.yml is a site.
 """
+
 import datetime
 from pathlib import Path
 
@@ -67,21 +68,24 @@ def get_site_status(info: dict, nginx_ok: bool | None = None) -> dict:
             "failed": "failed",
             "inactive": "stopped",
         }.get(state, "unknown")
-        return {"state": state, "badge": badge, "pid": pid,
-                "enabled": systemctl.service_enabled(name),
-                "memory_mb": memory_mb, "cpu_percent": cpu_percent}
+        return {
+            "state": state,
+            "badge": badge,
+            "pid": pid,
+            "enabled": systemctl.service_enabled(name),
+            "memory_mb": memory_mb,
+            "cpu_percent": cpu_percent,
+        }
 
     # static / proxy: OK if the nginx conf exists and nginx -t passes globally.
     conf = (info.get("paths") or {}).get("nginx_conf")
     if not conf or not Path(conf).exists():
-        return {"state": "missing config", "badge": "configured",
-                "pid": None, "memory_mb": None}
+        return {"state": "missing config", "badge": "configured", "pid": None, "memory_mb": None}
     if nginx_ok is None:
         nginx_ok = systemctl.nginx_test()[0]
     if nginx_ok:
         return {"state": "ok", "badge": "ok", "pid": None, "memory_mb": None}
-    return {"state": "config error", "badge": "failed",
-            "pid": None, "memory_mb": None}
+    return {"state": "config error", "badge": "failed", "pid": None, "memory_mb": None}
 
 
 def list_sites_with_status() -> list[dict]:
@@ -146,8 +150,6 @@ def tail_logs(info: dict, n: int = SITE_LOG_TAIL_LINES) -> dict:
         "nginx error": _tail_file(log_dir / f"{name}-error.log", n),
     }
     if info.get("type") == "dotnet":
-        code, journal = systemctl.run(
-            ["journalctl", "-u", name, "-n", str(n), "--no-pager"]
-        )
+        code, journal = systemctl.run(["journalctl", "-u", name, "-n", str(n), "--no-pager"])
         out["systemd journal"] = journal or "(no journal output)"
     return out

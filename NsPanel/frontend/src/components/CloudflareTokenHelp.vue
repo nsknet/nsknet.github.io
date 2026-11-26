@@ -29,9 +29,9 @@ const PERMISSIONS = [
         :aria-controls="panelId"
         @click="open = !open"
       >
-        <LIcon name="info" is="width:13px;height:13px" />
+        <LIcon is="width:13px;height:13px" name="info" />
         Required permissions
-        <LIcon :name="open ? 'chevron-up' : 'chevron-down'" is="width:13px;height:13px" />
+        <LIcon is="width:13px;height:13px" :name="open ? 'chevron-up' : 'chevron-down'" />
       </button>
     </div>
 

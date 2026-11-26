@@ -41,8 +41,8 @@ async function submit(): Promise<void> {
   >
     <form id="disk-unmount" class="flex flex-col gap-4" novalidate @submit.prevent="submit">
       <Alert tone="warn">
-        Programs using files under <span class="mono">{{ node.mountpoint }}</span> lose access. The unmount fails
-        if a process still has files open there.
+        Programs using files under <span class="mono">{{ node.mountpoint }}</span> lose access. The unmount
+        fails if a process still has files open there.
       </Alert>
       <div class="flex flex-col gap-1">
         <label class="flex items-center gap-2 text-sm-var text-c-tx cursor-pointer">

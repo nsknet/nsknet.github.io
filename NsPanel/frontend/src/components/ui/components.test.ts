@@ -9,7 +9,10 @@ import ConfirmDialog from '../ConfirmDialog.vue';
 import BaseDialog from './BaseDialog.vue';
 import DataTable from './DataTable.vue';
 
-const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/:p(.*)*', component: { render: () => null } }] });
+const router = createRouter({
+  history: createMemoryHistory(),
+  routes: [{ path: '/:p(.*)*', component: { render: () => null } }],
+});
 
 describe('ConfirmDialog', () => {
   beforeEach(() => setActivePinia(createPinia()));
@@ -18,7 +21,14 @@ describe('ConfirmDialog', () => {
     const onYes = vi.fn();
     const wrapper = mount(ConfirmDialog, {
       props: {
-        confirm: { title: 'Format /dev/sdb?', body: 'All data is erased.', onYes, danger: true, confirmLabel: 'Format', typeToConfirm: '/dev/sdb' },
+        confirm: {
+          title: 'Format /dev/sdb?',
+          body: 'All data is erased.',
+          onYes,
+          danger: true,
+          confirmLabel: 'Format',
+          typeToConfirm: '/dev/sdb',
+        },
       },
       attachTo: document.body,
     });

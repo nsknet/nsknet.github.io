@@ -42,10 +42,15 @@ const itemClass = computed(() => ['rail-btn', { 'rail-btn--wide': props.wide }])
         aria-hidden="true"
         >N</span
       >
-      <span v-if="wide" class="font-semibold text-sm tracking-[-0.02em] text-c-tx whitespace-nowrap">NsPanel</span>
+      <span v-if="wide" class="font-semibold text-sm tracking-[-0.02em] text-c-tx whitespace-nowrap"
+        >NsPanel</span
+      >
     </RouterLink>
 
-    <div class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col gap-0.5 w-full" :class="wide ? 'items-stretch' : 'items-center'">
+    <div
+      class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col gap-0.5 w-full"
+      :class="wide ? 'items-stretch' : 'items-center'"
+    >
       <template v-for="(section, index) in navGroups" :key="section.group">
         <div
           v-if="wide && section.group !== 'Overview'"
@@ -56,7 +61,11 @@ const itemClass = computed(() => ['rail-btn', { 'rail-btn--wide': props.wide }])
         >
           {{ section.group }}
         </div>
-        <div v-else-if="!wide && index" class="w-6 h-px bg-c-border my-1.5 self-center" aria-hidden="true"></div>
+        <div
+          v-else-if="!wide && index"
+          class="w-6 h-px bg-c-border my-1.5 self-center"
+          aria-hidden="true"
+        ></div>
         <RouterLink
           v-for="item in section.items"
           :key="item.key"
@@ -73,7 +82,9 @@ const itemClass = computed(() => ['rail-btn', { 'rail-btn--wide': props.wide }])
       </template>
     </div>
 
-    <div :class="['flex flex-col gap-0.5 pt-2 mt-1 border-t border-c-border w-full', wide ? '' : 'items-center']">
+    <div
+      :class="['flex flex-col gap-0.5 pt-2 mt-1 border-t border-c-border w-full', wide ? '' : 'items-center']"
+    >
       <button
         type="button"
         :class="itemClass"

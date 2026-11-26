@@ -17,9 +17,7 @@ const emit = defineEmits<{ close: [] }>();
 
 const typed = ref('');
 const needsTyping = computed(() => !!props.confirm.typeToConfirm);
-const canConfirm = computed(
-  () => !needsTyping.value || typed.value.trim() === props.confirm.typeToConfirm,
-);
+const canConfirm = computed(() => !needsTyping.value || typed.value.trim() === props.confirm.typeToConfirm);
 
 function onYes(): void {
   if (!canConfirm.value) return;

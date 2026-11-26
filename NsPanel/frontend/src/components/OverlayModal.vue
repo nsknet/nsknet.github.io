@@ -27,7 +27,7 @@ const MAX_LINES = 5000;
 const RECONNECT_MS = 2000;
 
 const termEl = ref<HTMLElement | null>(null);
-const lines = ref<{ id: number; html: string }[]>([]);
+const lines = ref<{ id: number; html: string; text: string }[]>([]);
 const dropped = ref(0);
 const phase = ref<'running' | 'done' | 'failed' | 'reconnecting' | 'lost'>('running');
 const seconds = ref(0);
@@ -78,8 +78,9 @@ function onScroll(): void {
   follow.value = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
 }
 
-function push(html: string): void {
-  lines.value.push({ id: lineId++, html });
+/** `text` is the raw line (for Copy); `html` is its escaped, coloured rendering. */
+function push(text: string, html = ansiToHtml(text)): void {
+  lines.value.push({ id: lineId++, html, text });
   if (lines.value.length > MAX_LINES) {
     const extra = lines.value.length - MAX_LINES;
     lines.value.splice(0, extra);
@@ -89,7 +90,7 @@ function push(html: string): void {
 }
 
 function copyLogs(): void {
-  const text = lines.value.map((line) => line.html.replace(/<[^>]*>/g, '')).join('\n');
+  const text = lines.value.map((line) => line.text.replace(/\x1b\[[0-9;]*m/g, '')).join('\n');
   void copyText(text, 'Output');
 }
 
@@ -128,14 +129,15 @@ function connect(): void {
     }
   });
 
-  source.addEventListener('line', (event) => push(ansiToHtml((event as MessageEvent<string>).data)));
+  source.addEventListener('line', (event) => push((event as MessageEvent<string>).data));
 
   source.addEventListener('error', (event) => {
     source?.close();
     // A server-sent `error` event carries data: the job is unknown (evicted,
     // or the panel restarted). A bare Event is a dropped connection.
     if (typeof (event as MessageEvent<unknown>).data === 'string') {
-      push('<span class="dim">[This job is no longer known to the panel — it restarted or the job was evicted]</span>');
+      const note = '[This job is no longer known to the panel — it restarted or the job was evicted]';
+      push(note, `<span class="dim">${note}</span>`);
       phase.value = 'lost';
       clearInterval(elapsedTimer);
       return;
@@ -172,11 +174,15 @@ onUnmounted(stopTimers);
     <div class="flex flex-wrap items-center gap-2 mb-2 text-xs-var">
       <span v-if="jobId" class="mono text-c-tx3">job {{ jobId.slice(0, 12) }}</span>
       <div class="ml-auto flex items-center gap-1.5">
-        <label class="inline-flex items-center gap-1.5 h-8 px-2 rounded-theme border border-c-border text-c-tx2 cursor-pointer select-none">
+        <label
+          class="inline-flex items-center gap-1.5 h-8 px-2 rounded-theme border border-c-border text-c-tx2 cursor-pointer select-none"
+        >
           <input v-model="follow" type="checkbox" class="w-3.5 h-3.5 accent-c-accent" @change="scrollToEnd" />
           Follow
         </label>
-        <label class="inline-flex items-center gap-1.5 h-8 px-2 rounded-theme border border-c-border text-c-tx2 cursor-pointer select-none">
+        <label
+          class="inline-flex items-center gap-1.5 h-8 px-2 rounded-theme border border-c-border text-c-tx2 cursor-pointer select-none"
+        >
           <input v-model="wordWrap" type="checkbox" class="w-3.5 h-3.5 accent-c-accent" />
           Wrap
         </label>
@@ -197,29 +203,32 @@ onUnmounted(stopTimers);
       @scroll="onScroll"
     >
       <span v-if="dropped" class="ln dim">… {{ dropped }} earlier line(s) not shown …</span>
+      <!-- eslint-disable-next-line vue/no-v-html -- ansiToHtml escapes the line first -->
       <span v-for="line in lines" :key="line.id" class="ln" v-html="line.html"></span>
     </div>
 
     <template #footer>
       <div class="flex items-center gap-2 mr-auto text-sm-var" role="status">
         <template v-if="phase === 'running'">
-          <span class="w-3.5 h-3.5 rounded-full border-2 border-c-bstrong border-t-c-accent animate-spin"></span>
+          <span
+            class="w-3.5 h-3.5 rounded-full border-2 border-c-bstrong border-t-c-accent animate-spin"
+          ></span>
           <span class="text-c-tx2">{{ cancelling ? 'Stopping…' : 'Running…' }}</span>
         </template>
         <template v-else-if="phase === 'reconnecting'">
-          <LIcon name="cloud-off" is="width:15px;height:15px;color:var(--warn)" />
+          <LIcon is="width:15px;height:15px;color:var(--warn)" name="cloud-off" />
           <span class="text-c-warn">Connection lost — reconnecting…</span>
         </template>
         <template v-else-if="phase === 'lost'">
-          <LIcon name="circle-x" is="width:15px;height:15px;color:var(--text-3)" />
+          <LIcon is="width:15px;height:15px;color:var(--text-3)" name="circle-x" />
           <span class="text-c-tx2">Result unknown</span>
         </template>
         <template v-else-if="phase === 'done'">
-          <LIcon name="circle-check-big" is="width:15px;height:15px;color:var(--ok)" />
+          <LIcon is="width:15px;height:15px;color:var(--ok)" name="circle-check-big" />
           <span class="text-c-ok font-medium">Succeeded</span>
         </template>
         <template v-else>
-          <LIcon name="circle-x" is="width:15px;height:15px;color:var(--danger)" />
+          <LIcon is="width:15px;height:15px;color:var(--danger)" name="circle-x" />
           <span class="text-c-danger font-medium">Failed · exit {{ exitCode }}</span>
         </template>
         <span class="mono text-c-tx3 tabular-nums">{{ duration(seconds) }}</span>

@@ -30,11 +30,13 @@ const barWidth = computed(() => `${Math.min(100, Math.max(0, props.percent ?? 0)
   <Card class="p-4 flex flex-col gap-1 min-w-0">
     <div class="flex items-center justify-between gap-2">
       <span class="text-xs-var font-medium uppercase tracking-[0.06em] text-c-tx2">{{ label }}</span>
-      <LIcon v-if="icon" :name="icon" is="width:15px;height:15px;color:var(--text-3)" />
+      <LIcon is="width:15px;height:15px;color:var(--text-3)" v-if="icon" :name="icon" />
     </div>
     <div v-if="loading" class="skeleton h-7 w-24 mt-1"></div>
     <div v-else class="flex items-baseline gap-1 min-w-0">
-      <span class="text-[26px] leading-tight font-semibold tracking-[-0.02em] tabular-nums truncate">{{ value }}</span>
+      <span class="text-[26px] leading-tight font-semibold tracking-[-0.02em] tabular-nums truncate">{{
+        value
+      }}</span>
       <span v-if="unit" class="text-sm-var text-c-tx2">{{ unit }}</span>
     </div>
     <div v-if="sub" class="text-xs-var text-c-tx2 truncate">{{ sub }}</div>

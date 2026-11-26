@@ -1,4 +1,5 @@
 """Panel service routes, and the update check against real (temporary) git repos."""
+
 import shutil
 import subprocess
 from pathlib import Path
@@ -36,8 +37,17 @@ def test_status_has_the_fields_the_page_reads(client, svc, monkeypatch):
     monkeypatch.setattr(panel_service, "_read_state", lambda: {})
     data = client.get("/api/v1/panel").json()["data"]
     for key in (
-        "installed", "active", "enabled", "port", "urls", "installed_commit",
-        "running_commit", "update", "is_self", "subnet_choices", "default_port",
+        "installed",
+        "active",
+        "enabled",
+        "port",
+        "urls",
+        "installed_commit",
+        "running_commit",
+        "update",
+        "is_self",
+        "subnet_choices",
+        "default_port",
     ):
         assert key in data
     assert data["installed"] is False
@@ -133,11 +143,14 @@ def checked(monkeypatch):
     return result
 
 
-@pytest.mark.parametrize(("action", "function"), [
-    ("update", "panel_service_update"),
-    ("restart", "panel_service_restart"),
-    ("uninstall", "panel_service_uninstall"),
-])
+@pytest.mark.parametrize(
+    ("action", "function"),
+    [
+        ("update", "panel_service_update"),
+        ("restart", "panel_service_restart"),
+        ("uninstall", "panel_service_uninstall"),
+    ],
+)
 def test_actions_run_their_script_function(client, svc, fake_runner, checked, action, function):
     svc["installed"] = True
     assert client.post(f"/api/v1/panel/{action}").status_code == 200
@@ -209,8 +222,13 @@ def test_install_passes_the_tls_choice(client, svc, fake_runner, tls, expected):
         ([{"status": "completed", "conclusion": "success"}], "success"),
         ([{"status": "completed", "conclusion": "skipped"}], "success"),
         ([{"status": "in_progress", "conclusion": None}], "pending"),
-        ([{"status": "completed", "conclusion": "success"}, {"status": "completed", "conclusion": "failure"}],
-         "failure"),
+        (
+            [
+                {"status": "completed", "conclusion": "success"},
+                {"status": "completed", "conclusion": "failure"},
+            ],
+            "failure",
+        ),
     ],
 )
 def test_ci_runs_are_summarized(runs, state):
@@ -263,7 +281,10 @@ _git_missing = shutil.which("git") is None
 def _git(cwd: Path, *args: str) -> str:
     return subprocess.run(
         ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", *args],
-        cwd=cwd, check=True, capture_output=True, text=True,
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        text=True,
     ).stdout.strip()
 
 

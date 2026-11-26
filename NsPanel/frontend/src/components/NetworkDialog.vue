@@ -26,7 +26,9 @@ const current = props.dialog.current;
 
 const initial = {
   mode: (current.method === 'dhcp' ? 'dhcp' : 'manual') as 'dhcp' | 'manual',
-  address: current.cidr || (current.ip && current.prefix != null ? `${current.ip}/${current.prefix}` : current.ip || ''),
+  address:
+    current.cidr ||
+    (current.ip && current.prefix != null ? `${current.ip}/${current.prefix}` : current.ip || ''),
   gateway: current.gateway || '',
   dns: (Array.isArray(current.dns) ? current.dns : []).join(', '),
 };
@@ -187,7 +189,7 @@ function submit(): void {
             />
             <span class="flex flex-col gap-0.5 min-w-0">
               <span class="flex items-center gap-1.5 text-sm-var font-medium">
-                <LIcon :name="option.icon" is="width:14px;height:14px" /> {{ option.title }}
+                <LIcon is="width:14px;height:14px" :name="option.icon" /> {{ option.title }}
               </span>
               <span class="text-xs-var text-c-tx2">{{ option.hint }}</span>
             </span>
@@ -261,10 +263,10 @@ function submit(): void {
       </p>
 
       <p class="m-0 flex items-start gap-1.5 text-xs-var text-c-warn">
-        <LIcon name="triangle-alert" is="width:13px;height:13px;margin-top:2px;flex-shrink:0" />
+        <LIcon is="width:13px;height:13px;margin-top:2px;flex-shrink:0" name="triangle-alert" />
         <span>
-          If you are connected through <span class="mono">{{ iface }}</span>, your session may drop
-          while the change applies.
+          If you are connected through <span class="mono">{{ iface }}</span>, your session may drop while the
+          change applies.
         </span>
       </p>
     </form>

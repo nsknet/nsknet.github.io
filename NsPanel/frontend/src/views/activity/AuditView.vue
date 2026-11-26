@@ -66,7 +66,9 @@ const serverQuery = computed(() => search.value || (namespace.value === 'all' ? 
 watch(serverQuery, (q) => void auditStore.load(q), { immediate: true });
 
 const rows = computed(() =>
-  namespace.value === 'all' ? entries.value : entries.value.filter((row) => row.namespace === namespace.value),
+  namespace.value === 'all'
+    ? entries.value
+    : entries.value.filter((row) => row.namespace === namespace.value),
 );
 
 const refreshing = ref(false);
@@ -124,8 +126,8 @@ function clearFilters(): void {
       <label class="relative w-full sm:max-w-sm">
         <span class="sr-only">Search the audit log</span>
         <LIcon
-          name="search"
           is="position:absolute;left:10px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--text-3);width:14px;height:14px"
+          name="search"
         />
         <input
           v-model="searchInput"

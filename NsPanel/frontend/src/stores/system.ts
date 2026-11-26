@@ -70,9 +70,7 @@ function toHost(info: SystemInfoFull, network: NetInterface[]): Host {
 }
 
 export const useSystemStore = defineStore('system', () => {
-  const info = createResource<SystemInfoFull>(EMPTY_INFO, () =>
-    fetchData<SystemInfoFull>(endpoints.system),
-  );
+  const info = createResource<SystemInfoFull>(EMPTY_INFO, () => fetchData<SystemInfoFull>(endpoints.system));
   const disks = createResource<DiskNode[]>([], () => fetchData<DiskNode[]>(endpoints.disks));
   const timezones = createResource<string[]>([], () => fetchData<string[]>(endpoints.timezones));
 

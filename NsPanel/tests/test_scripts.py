@@ -5,6 +5,7 @@ core/bash_invoker.build_cmd). A function that calls something defined only in
 another, unsourced script fails at runtime with "command not found" — that is
 how `common_configs` broke. This test models the same sourcing rule.
 """
+
 import re
 from pathlib import Path
 

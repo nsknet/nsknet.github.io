@@ -28,9 +28,7 @@ class ElasticsearchModule(Module):
             ports=[9200],
         )
         if status["installed"]:
-            _, out = systemctl.run(
-                ["dpkg-query", "-W", "-f=${Version}", "elasticsearch"]
-            )
+            _, out = systemctl.run(["dpkg-query", "-W", "-f=${Version}", "elasticsearch"])
             if out and "not found" not in out:
                 status["version"] = f"elasticsearch {out.strip()}"
             status["extra"]["credentials"] = _CRED_FILE

@@ -7,6 +7,7 @@ Here we only read: systemctl state, the commits of the current and previous
 release, and `state.json`, which both the script (releases, times, port,
 subnets) and :func:`check_updates` (the last update check) write into.
 """
+
 import contextlib
 import ipaddress
 import json
@@ -365,8 +366,13 @@ def check_updates(*, with_ci: bool = True) -> dict[str, Any]:
         result["total_behind"] = _int(total.strip(), 0)
         result["behind"] = _int(behind.strip(), 0)
         _, log = _git(
-            repo, "log", f"--format={_LOG_FORMAT}", f"-n{_MAX_COMMITS}", span,
-            "--", *config.SERVICE_UPDATE_PATHS,
+            repo,
+            "log",
+            f"--format={_LOG_FORMAT}",
+            f"-n{_MAX_COMMITS}",
+            span,
+            "--",
+            *config.SERVICE_UPDATE_PATHS,
         )
         result["commits"] = [c for c in map(_parse_commit, log.splitlines()) if c]
         if with_ci and result["behind"]:
@@ -376,4 +382,3 @@ def check_updates(*, with_ci: bool = True) -> dict[str, Any]:
         with contextlib.suppress(OSError):
             _update_state(update=result)
     return result
-

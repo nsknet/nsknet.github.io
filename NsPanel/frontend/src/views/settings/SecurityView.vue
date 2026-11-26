@@ -25,7 +25,10 @@ const themeName = useId();
 const POLICY = [
   { icon: 'timer', text: 'A session ends after 30 minutes without activity.' },
   { icon: 'clock', text: 'Every session ends 12 hours after sign-in, active or not.' },
-  { icon: 'shield-alert', text: '5 failed sign-ins from one IP address lock that address out for 15 minutes.' },
+  {
+    icon: 'shield-alert',
+    text: '5 failed sign-ins from one IP address lock that address out for 15 minutes.',
+  },
   { icon: 'log-out', text: 'Changing the password signs out every other browser.' },
 ];
 
@@ -85,8 +88,11 @@ function reload(): void {
           <CardHeader title="Session" icon="user" />
           <div class="p-4 flex flex-col gap-4">
             <div class="flex items-center gap-3 min-w-0">
-              <div class="w-10 h-10 rounded-full bg-c-acsoft text-c-actx grid place-items-center shrink-0" aria-hidden="true">
-                <LIcon name="user" is="width:18px;height:18px" />
+              <div
+                class="w-10 h-10 rounded-full bg-c-acsoft text-c-actx grid place-items-center shrink-0"
+                aria-hidden="true"
+              >
+                <LIcon is="width:18px;height:18px" name="user" />
               </div>
               <div class="min-w-0">
                 <div class="text-sm-var text-c-tx2">Signed in as</div>
@@ -94,8 +100,15 @@ function reload(): void {
               </div>
             </div>
             <ul class="m-0 p-0 list-none flex flex-col gap-2.5">
-              <li v-for="rule in POLICY" :key="rule.text" class="flex items-start gap-2.5 text-sm-var text-c-tx2">
-                <LIcon :name="rule.icon" is="width:15px;height:15px;margin-top:2px;flex-shrink:0;color:var(--text-3)" />
+              <li
+                v-for="rule in POLICY"
+                :key="rule.text"
+                class="flex items-start gap-2.5 text-sm-var text-c-tx2"
+              >
+                <LIcon
+                  is="width:15px;height:15px;margin-top:2px;flex-shrink:0;color:var(--text-3)"
+                  :name="rule.icon"
+                />
                 <span>{{ rule.text }}</span>
               </li>
             </ul>
@@ -126,7 +139,7 @@ function reload(): void {
                   :checked="ui.themeMode === theme.value"
                   @change="ui.setThemeMode(theme.value)"
                 />
-                <LIcon :name="theme.icon" is="width:16px;height:16px;flex-shrink:0" />
+                <LIcon is="width:16px;height:16px;flex-shrink:0" :name="theme.icon" />
                 <span class="min-w-0">
                   <span class="block text-sm-var font-medium">{{ theme.label }}</span>
                   <span class="block text-xs-var text-c-tx3">{{ theme.hint }}</span>

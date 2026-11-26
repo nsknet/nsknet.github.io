@@ -1,4 +1,5 @@
 """Firewall API: UFW rules."""
+
 import ipaddress
 from typing import Annotated, Any
 

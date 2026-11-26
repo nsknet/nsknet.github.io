@@ -5,15 +5,7 @@ import { computed } from 'vue';
 
 const props = withDefaults(
   defineProps<{
-    variant?:
-      | 'default'
-      | 'primary'
-      | 'ghost'
-      | 'danger'
-      | 'danger-solid'
-      | 'success'
-      | 'warn'
-      | 'info';
+    variant?: 'default' | 'primary' | 'ghost' | 'danger' | 'danger-solid' | 'success' | 'warn' | 'info';
     sm?: boolean;
     square?: boolean;
     type?: 'button' | 'submit' | 'reset';

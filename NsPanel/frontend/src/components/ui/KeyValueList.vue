@@ -30,7 +30,7 @@ withDefaults(defineProps<{ items: KeyValueItem[]; labelWidth?: string }>(), { la
             :aria-label="`Copy ${item.label}`"
             @click="copyText(String(item.value), item.label)"
           >
-            <LIcon name="copy" is="width:12px;height:12px" />
+            <LIcon is="width:12px;height:12px" name="copy" />
           </button>
         </slot>
       </dd>

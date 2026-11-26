@@ -105,7 +105,11 @@ function cancel(job: JobSummary): void {
 }
 
 const emptyTitle = computed(() =>
-  filter.value === 'running' ? 'Nothing running' : filter.value === 'failed' ? 'No failed jobs' : 'No jobs yet',
+  filter.value === 'running'
+    ? 'Nothing running'
+    : filter.value === 'failed'
+      ? 'No failed jobs'
+      : 'No jobs yet',
 );
 </script>
 
@@ -171,8 +175,6 @@ const emptyTitle = computed(() =>
         </template>
       </DataTable>
     </Card>
-    <p class="mt-3 mb-0 text-xs-var text-c-tx3">
-      The list refreshes every few seconds while a job runs.
-    </p>
+    <p class="mt-3 mb-0 text-xs-var text-c-tx3">The list refreshes every few seconds while a job runs.</p>
   </section>
 </template>

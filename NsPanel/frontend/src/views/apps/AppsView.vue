@@ -106,7 +106,9 @@ const columns: Column<AppRow>[] = [
   },
 ];
 
-const anyLoading = computed(() => (sitesLoading.value && !sitesLoaded.value) || (servicesLoading.value && !servicesLoaded.value));
+const anyLoading = computed(
+  () => (sitesLoading.value && !sitesLoaded.value) || (servicesLoading.value && !servicesLoaded.value),
+);
 
 /** The table's error: only when nothing could be shown at all. */
 const tableError = computed(() => {
@@ -169,8 +171,8 @@ const subtitle = computed(() => {
         <div class="relative sm:ml-auto sm:w-72">
           <label for="apps-search" class="sr-only">Search apps</label>
           <LIcon
-            name="search"
             is="width:15px;height:15px;position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-3);pointer-events:none"
+            name="search"
           />
           <input
             id="apps-search"
@@ -214,7 +216,9 @@ const subtitle = computed(() => {
             <TypeChip :type="row.type" />
           </template>
           <template #cell-target="{ row }">
-            <span class="block max-w-[320px] truncate text-c-tx2" :title="row.target">{{ row.target || '—' }}</span>
+            <span class="block max-w-[320px] truncate text-c-tx2" :title="row.target">{{
+              row.target || '—'
+            }}</span>
           </template>
           <template #cell-status="{ row }">
             <StatusBadge :status="row.status" />

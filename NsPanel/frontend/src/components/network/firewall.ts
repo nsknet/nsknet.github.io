@@ -112,7 +112,11 @@ export function protectionOf(rule: UfwRule, state: FirewallState): Protection | 
   if (ports !== 'all' && !ports.length && /ssh/i.test(rule.to)) {
     const ssh = access.filter((a) => a.what === 'SSH');
     if (ssh.length) {
-      return { port: ssh[0].port, what: 'SSH', reason: `The ${rule.to.replace(/\(v6\)/i, '').trim()} profile opens SSH.` };
+      return {
+        port: ssh[0].port,
+        what: 'SSH',
+        reason: `The ${rule.to.replace(/\(v6\)/i, '').trim()} profile opens SSH.`,
+      };
     }
   }
 

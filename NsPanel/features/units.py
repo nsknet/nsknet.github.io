@@ -4,6 +4,7 @@ Service files are stored in SERVICES_DIR (/var/www/services/) and registered
 with systemd via `systemctl enable <path>`. This module handles reading,
 writing, and querying those service files.
 """
+
 import os
 import re
 import shutil
@@ -159,7 +160,9 @@ def get_status_output(name: str) -> str:
     try:
         r = subprocess.run(
             ["systemctl", "status", "--no-pager", name],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         return redact((r.stdout + r.stderr).strip()) or "(no output)"
     except Exception as exc:
@@ -170,7 +173,9 @@ def get_journal_logs(name: str, lines: int = 60) -> str:
     try:
         r = subprocess.run(
             ["journalctl", "-u", name, "-n", str(lines), "--no-pager", "--output=short-iso"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         return (r.stdout + r.stderr).strip() or "(no output)"
     except Exception as exc:
@@ -211,29 +216,29 @@ def _parse_service_file(content: str) -> dict:
         "restart_sec": None,
         "syslog_id": None,
         "env_vars": [],
-        "tunnel": None,   # {hostname, service_url, tunnel_id, tunnel_name, zone, public_url}
+        "tunnel": None,  # {hostname, service_url, tunnel_id, tunnel_name, zone, public_url}
     }
     tunnel: dict = {}
     for line in content.splitlines():
         line = line.strip()
         if line.startswith("Description="):
-            fields["description"] = line[len("Description="):]
+            fields["description"] = line[len("Description=") :]
         elif line.startswith("WorkingDirectory="):
-            fields["working_dir"] = line[len("WorkingDirectory="):]
+            fields["working_dir"] = line[len("WorkingDirectory=") :]
         elif line.startswith("ExecStart="):
-            fields["exec_start"] = line[len("ExecStart="):]
+            fields["exec_start"] = line[len("ExecStart=") :]
         elif line.startswith("User="):
-            fields["user"] = line[len("User="):]
+            fields["user"] = line[len("User=") :]
         elif line.startswith("Restart="):
-            fields["restart"] = line[len("Restart="):]
+            fields["restart"] = line[len("Restart=") :]
         elif line.startswith("RestartSec="):
-            fields["restart_sec"] = line[len("RestartSec="):]
+            fields["restart_sec"] = line[len("RestartSec=") :]
         elif line.startswith("SyslogIdentifier="):
-            fields["syslog_id"] = line[len("SyslogIdentifier="):]
+            fields["syslog_id"] = line[len("SyslogIdentifier=") :]
         elif line.startswith("Environment="):
-            fields["env_vars"].append(line[len("Environment="):])
+            fields["env_vars"].append(line[len("Environment=") :])
         elif line.startswith(TUNNEL_KEY_PREFIX):
-            key, _, val = line[len(TUNNEL_KEY_PREFIX):].partition("=")
+            key, _, val = line[len(TUNNEL_KEY_PREFIX) :].partition("=")
             if key in _TUNNEL_KEYS:
                 tunnel[_TUNNEL_KEYS[key]] = val.strip()
     if tunnel.get("hostname") and tunnel.get("tunnel_id"):

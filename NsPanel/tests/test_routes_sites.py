@@ -1,4 +1,5 @@
 """Sites API: which bash function each backend type reaches, and what is refused."""
+
 import pytest
 
 from features import sites as sites_feature
@@ -92,10 +93,21 @@ def test_create_dotnet_site_strips_the_dll_suffix(client, stub_sites, fake_runne
         {"access_kind": "port", "access_value": "8080", "backend_type": "nonsense", "name": "x"},
         {"access_kind": "port", "access_value": "notaport", "backend_type": "static", "name": "x"},
         {"access_kind": "domain", "access_value": "bad domain", "backend_type": "static"},
-        {"access_kind": "port", "access_value": "8080", "backend_type": "proxy", "name": "x",
-         "proxy_target": "file:///etc/passwd"},
-        {"access_kind": "port", "access_value": "8080", "backend_type": "dotnet", "name": "x",
-         "dll_name": "App", "internal_port": "abc"},
+        {
+            "access_kind": "port",
+            "access_value": "8080",
+            "backend_type": "proxy",
+            "name": "x",
+            "proxy_target": "file:///etc/passwd",
+        },
+        {
+            "access_kind": "port",
+            "access_value": "8080",
+            "backend_type": "dotnet",
+            "name": "x",
+            "dll_name": "App",
+            "internal_port": "abc",
+        },
     ],
 )
 def test_create_rejects_bad_input(client, stub_sites, fake_runner, payload):
@@ -150,8 +162,11 @@ def test_certbot_email_reaches_the_job_env(client, fake_runner, audit_log, monke
 
     monkeypatch.setattr(sites_feature, "read_info", lambda name: None)
     form = {
-        "access_kind": "domain", "access_value": "example.com", "backend_type": "static",
-        "auto_ssl": "true", "ssl_email": "ops@example.com",
+        "access_kind": "domain",
+        "access_value": "example.com",
+        "backend_type": "static",
+        "auto_ssl": "true",
+        "ssl_email": "ops@example.com",
     }
     client.post("/api/v1/sites/create", data=form)
     assert fake_runner.last["env"] == {"CERTBOT_EMAIL": "ops@example.com"}

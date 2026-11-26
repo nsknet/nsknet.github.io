@@ -55,6 +55,8 @@ defineExpose({ requestClose });
 </script>
 
 <template>
+  <!-- Backdrop click closes; the keyboard path is Esc via the dialog stack. -->
+  <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -->
   <div
     class="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-0 sm:p-6 bg-c-overlay backdrop-blur-[2px] animate-fade"
     @mousedown.self="requestClose"
@@ -78,7 +80,7 @@ defineExpose({ requestClose });
           :class="['w-9 h-9 shrink-0 rounded-[10px] grid place-items-center', ICON_TONE[tone]]"
           aria-hidden="true"
         >
-          <LIcon :name="icon" is="width:18px;height:18px" />
+          <LIcon is="width:18px;height:18px" :name="icon" />
         </div>
         <div class="min-w-0 flex-1">
           <h2 :id="titleId" class="m-0 text-base font-semibold tracking-[-0.01em] leading-snug">
@@ -95,7 +97,7 @@ defineExpose({ requestClose });
           aria-label="Close"
           @click="requestClose"
         >
-          <LIcon name="x" is="width:16px;height:16px" />
+          <LIcon is="width:16px;height:16px" name="x" />
         </button>
       </header>
 

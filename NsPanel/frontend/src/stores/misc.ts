@@ -51,7 +51,6 @@ export const useFirewallStore = defineStore('firewall', () => {
   };
 });
 
-
 export const useProcessesStore = defineStore('processes', () => {
   /** The search term; filtering happens server-side. */
   const query = ref('');

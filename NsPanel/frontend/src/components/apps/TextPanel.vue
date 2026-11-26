@@ -45,7 +45,9 @@ function download(): void {
     <div class="flex flex-wrap items-center gap-1.5">
       <slot name="toolbar" />
       <div class="ml-auto flex flex-wrap items-center gap-1.5">
-        <label class="inline-flex items-center gap-1.5 h-8 px-2 text-xs-var text-c-tx2 cursor-pointer select-none">
+        <label
+          class="inline-flex items-center gap-1.5 h-8 px-2 text-xs-var text-c-tx2 cursor-pointer select-none"
+        >
           <input v-model="wordWrap" type="checkbox" class="w-4 h-4 accent-c-accent" />
           Wrap
         </label>
@@ -53,7 +55,9 @@ function download(): void {
           <LIcon name="refresh-cw" /> Refresh
         </Btn>
         <Btn sm :disabled="!text" @click="copyText(text, label)"><LIcon name="copy" /> Copy</Btn>
-        <Btn v-if="downloadName" sm :disabled="!text" @click="download"><LIcon name="download" /> Download</Btn>
+        <Btn v-if="downloadName" sm :disabled="!text" @click="download"
+          ><LIcon name="download" /> Download</Btn
+        >
       </div>
     </div>
 
@@ -76,6 +80,6 @@ function download(): void {
       :aria-busy="loading || undefined"
       class="term m-0 rounded-theme min-h-[200px] max-h-[60vh] overflow-auto"
       :style="{ whiteSpace: wordWrap ? 'pre-wrap' : 'pre', wordBreak: wordWrap ? 'break-all' : 'normal' }"
-    >{{ text || '(empty)' }}</pre>
+      >{{ text || '(empty)' }}</pre>
   </div>
 </template>

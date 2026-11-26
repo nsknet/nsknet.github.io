@@ -131,8 +131,14 @@ const showSkeleton = computed(() => props.loading && !props.rows.length);
             >
               {{ column.label }}
               <LIcon
-                :name="sortBy === column.key ? (direction === 'asc' ? 'chevron-up' : 'chevron-down') : 'chevron-down'"
                 :is="`width:12px;height:12px;opacity:${sortBy === column.key ? 1 : 0.35}`"
+                :name="
+                  sortBy === column.key
+                    ? direction === 'asc'
+                      ? 'chevron-up'
+                      : 'chevron-down'
+                    : 'chevron-down'
+                "
               />
             </button>
             <span v-else :class="column.srOnlyLabel ? 'sr-only' : ''">{{ column.label }}</span>
@@ -172,7 +178,9 @@ const showSkeleton = computed(() => props.loading && !props.rows.length);
                 :to="rowTo(row)"
                 class="text-inherit no-underline hover:underline underline-offset-2 focus-visible:underline"
               >
-                <slot :name="`cell-${column.key}`" :row="row" :value="row[column.key]">{{ row[column.key] }}</slot>
+                <slot :name="`cell-${column.key}`" :row="row" :value="row[column.key]">{{
+                  row[column.key]
+                }}</slot>
               </RouterLink>
               <slot v-else :name="`cell-${column.key}`" :row="row" :value="row[column.key]">{{
                 row[column.key] ?? '—'

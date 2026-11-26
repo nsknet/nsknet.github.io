@@ -60,7 +60,11 @@ export const useSitesStore = defineStore('sites', () => {
     const owners: PortOwner[] = [];
     for (const site of sites.data.value) {
       if (site.accessKind === 'port' && /^\d+$/.test(site.accessValue)) {
-        owners.push({ port: Number(site.accessValue), owner: site.name, role: `public port of site ${site.name}` });
+        owners.push({
+          port: Number(site.accessValue),
+          owner: site.name,
+          role: `public port of site ${site.name}`,
+        });
       }
       const internal = Number(site.internalPort);
       if (Number.isFinite(internal) && internal > 0) {

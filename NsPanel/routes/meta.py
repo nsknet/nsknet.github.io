@@ -3,6 +3,7 @@
 /healthz is what systemd-side probes and the restart wait poll: it answers
 without a session and reveals nothing beyond "up" and the running commit.
 """
+
 from typing import Any
 
 from fastapi import APIRouter, Depends

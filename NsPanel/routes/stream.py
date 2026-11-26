@@ -1,4 +1,5 @@
 """SSE endpoint for live command output: GET /stream/{job_id}."""
+
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 

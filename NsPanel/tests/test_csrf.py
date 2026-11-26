@@ -1,4 +1,5 @@
 """CSRF guard: a session alone must not be enough to change state."""
+
 from conftest import signed_in
 
 

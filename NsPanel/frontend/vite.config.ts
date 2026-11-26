@@ -24,6 +24,8 @@ function git(args: string): string {
 
 // The last commit that touched frontend/: the backend compares it with its own
 // view of the same thing to tell when static/dist is older than the source.
+// It goes only into version.json, never into the JS, so CI can rebuild and
+// byte-compare the bundle (see .github/workflows/ci.yml).
 const frontendCommit = git('log -1 --format=%H -- .');
 
 /** Writes static/dist/version.json next to the bundle. */
@@ -46,7 +48,6 @@ export default defineConfig({
   plugins: [vue(), tailwindcss(), versionFile()],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
-    __FRONTEND_COMMIT__: JSON.stringify(frontendCommit),
   },
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
@@ -55,6 +56,9 @@ export default defineConfig({
     outDir: '../static/dist',
     emptyOutDir: true,
     rollupOptions: {
+      // One JS file on purpose: an update deletes the old hashed files, so a tab
+      // left open across it would 404 on the next lazily loaded chunk. The whole
+      // app is ~135 kB gzipped and served over a LAN, so splitting buys little.
       output: { inlineDynamicImports: true },
     },
   },

@@ -37,7 +37,8 @@ const TOOL_PASSWORD_MIN = 8;
 
 function initialValue(param: InstallParam): string | boolean {
   if (param.type === 'checkbox') return param.default === true || param.default === 'true';
-  if (param.default !== undefined && param.default !== null && param.default !== '') return String(param.default);
+  if (param.default !== undefined && param.default !== null && param.default !== '')
+    return String(param.default);
   if (param.type === 'select' && param.options?.length) return param.options[0].value;
   return '';
 }
@@ -80,7 +81,9 @@ function paramError(param: InstallParam): string {
   if (param.type === 'checkbox') return '';
   const text = String(value ?? '').trim();
   if (param.type === 'select') {
-    return param.options?.some((option) => option.value === text) ? '' : `Choose a ${param.label.toLowerCase()}.`;
+    return param.options?.some((option) => option.value === text)
+      ? ''
+      : `Choose a ${param.label.toLowerCase()}.`;
   }
   if (param.type === 'number') {
     if (!text || Number.isNaN(Number(text))) return `${param.label} must be a number.`;
@@ -89,7 +92,7 @@ function paramError(param: InstallParam): string {
     if (param.max !== undefined && n > param.max) return `${param.label} must be at most ${param.max}.`;
     return '';
   }
-  // eslint-disable-next-line no-control-regex
+
   if (/[\x00-\x1f]/.test(text)) return `${param.label} contains invalid characters.`;
   return text.length > 256 ? `${param.label} is too long (256 characters at most).` : '';
 }
@@ -152,11 +155,11 @@ async function submit(): Promise<void> {
     <form :id="formId" ref="formEl" class="flex flex-col gap-4" novalidate @submit.prevent="submit">
       <Field
         v-if="needsPassword"
+        v-slot="f"
         :label="isPasswordMode ? 'New password' : 'Admin / database password'"
         :error="shown('password', passwordError)"
         help="Generated for you. It is saved in the tool's credentials file — copy it now if you need it elsewhere."
         required
-        v-slot="f"
       >
         <PasswordField
           :id="f.id"
@@ -180,17 +183,21 @@ async function submit(): Promise<void> {
             />
             <span class="text-sm-var text-c-tx">{{ param.label }}</span>
           </label>
-          <p v-if="param.help" :id="`${formId}-${param.name}-help`" class="m-0 pl-[26px] text-xs-var text-c-tx3">
+          <p
+            v-if="param.help"
+            :id="`${formId}-${param.name}-help`"
+            class="m-0 pl-[26px] text-xs-var text-c-tx3"
+          >
             {{ param.help }}
           </p>
         </div>
 
         <Field
           v-else
+          v-slot="f"
           :label="param.label"
           :help="param.help"
           :error="shown(param.name, paramError(param))"
-          v-slot="f"
         >
           <select
             v-if="param.type === 'select'"
@@ -225,7 +232,7 @@ async function submit(): Promise<void> {
       <div v-if="ports.length">
         <SubnetPicker v-model="selected" :allow-public="allowPublic" :legend="portsLabel" />
         <p v-if="!allowPublic" class="m-0 mt-1.5 flex items-start gap-1.5 text-xs-var text-c-tx2">
-          <LIcon name="info" is="width:13px;height:13px;margin-top:2px;flex-shrink:0" />
+          <LIcon is="width:13px;height:13px;margin-top:2px;flex-shrink:0" name="info" />
           {{ tool.name }} has no login of its own, so it is offered to private networks only.
         </p>
         <p v-if="submitted && subnetError" class="m-0 mt-1.5 text-xs-var text-c-danger" role="alert">

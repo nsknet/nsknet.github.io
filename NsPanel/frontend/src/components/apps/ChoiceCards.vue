@@ -23,7 +23,9 @@ const name = useId();
 
 <template>
   <fieldset class="m-0 p-0 border-0 min-w-0">
-    <legend :class="['p-0 mb-1.5 text-sm-var font-medium text-c-tx', hideLegend ? 'sr-only' : '']">{{ legend }}</legend>
+    <legend :class="['p-0 mb-1.5 text-sm-var font-medium text-c-tx', hideLegend ? 'sr-only' : '']">
+      {{ legend }}
+    </legend>
     <div :class="['grid gap-2', grid]">
       <label
         v-for="option in options"
@@ -39,15 +41,15 @@ const name = useId();
         <input v-model="model" type="radio" :name="name" :value="option.value" class="sr-only" />
         <span class="flex items-center gap-2 text-sm-var font-medium text-c-tx">
           <LIcon
+            :is="`width:15px;height:15px;flex-shrink:0;color:var(${model === option.value ? '--accent' : '--text-2'})`"
             v-if="option.icon"
             :name="option.icon"
-            :is="`width:15px;height:15px;flex-shrink:0;color:var(${model === option.value ? '--accent' : '--text-2'})`"
           />
           {{ option.label }}
           <LIcon
+            is="width:15px;height:15px;margin-left:auto;color:var(--accent)"
             v-if="model === option.value"
             name="circle-check"
-            is="width:15px;height:15px;margin-left:auto;color:var(--accent)"
           />
         </span>
         <span v-if="option.hint" class="text-xs-var text-c-tx2">{{ option.hint }}</span>

@@ -95,10 +95,7 @@ function readOverlay(): Overlay | null {
 function writeOverlay(overlay: Overlay | null): void {
   try {
     if (overlay?.jobId) {
-      sessionStorage.setItem(
-        OVERLAY_KEY,
-        JSON.stringify({ jobId: overlay.jobId, title: overlay.title }),
-      );
+      sessionStorage.setItem(OVERLAY_KEY, JSON.stringify({ jobId: overlay.jobId, title: overlay.title }));
     } else {
       sessionStorage.removeItem(OVERLAY_KEY);
     }
@@ -213,12 +210,7 @@ export const useUiStore = defineStore('ui', () => {
     };
   }
 
-  function confirmThen(
-    title: string,
-    body: string,
-    onYes: () => void,
-    options: ConfirmOptions = {},
-  ): void {
+  function confirmThen(title: string, body: string, onYes: () => void, options: ConfirmOptions = {}): void {
     confirm.value = { title, body, onYes, ...options };
   }
 

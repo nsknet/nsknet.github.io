@@ -1,4 +1,5 @@
 """Dashboard API: one call for the overview screen."""
+
 from typing import Any
 
 from fastapi import APIRouter

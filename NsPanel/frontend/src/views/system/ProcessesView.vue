@@ -156,7 +156,9 @@ const killing = ref<Process | null>(null);
       <div class="flex items-center gap-2">
         <label for="proc-every" class="text-sm-var text-c-tx2 whitespace-nowrap">Auto-refresh</label>
         <select id="proc-every" v-model="every" class="input h-9 w-auto">
-          <option v-for="option in INTERVALS" :key="option" :value="option">{{ INTERVAL_LABEL[option] }}</option>
+          <option v-for="option in INTERVALS" :key="option" :value="option">
+            {{ INTERVAL_LABEL[option] }}
+          </option>
         </select>
       </div>
       <Btn :loading="manualRefreshing" @click="refresh"><LIcon name="refresh-cw" /> Refresh</Btn>
@@ -164,7 +166,13 @@ const killing = ref<Process | null>(null);
 
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
       <MetricCard label="Listed" icon="list" :value="summary.count" sub="processes" :loading="!loaded" />
-      <MetricCard label="Threads" icon="git-merge" :value="summary.threads" sub="in listed processes" :loading="!loaded" />
+      <MetricCard
+        label="Threads"
+        icon="git-merge"
+        :value="summary.threads"
+        sub="in listed processes"
+        :loading="!loaded"
+      />
       <MetricCard
         label="Resident memory"
         icon="memory-stick"
@@ -172,14 +180,20 @@ const killing = ref<Process | null>(null);
         :sub="host.ram.total ? `of ${gb(host.ram.total)} RAM` : 'in listed processes'"
         :loading="!loaded"
       />
-      <MetricCard label="Busy" icon="activity" :value="summary.busy" sub="using more than 1% CPU" :loading="!loaded" />
+      <MetricCard
+        label="Busy"
+        icon="activity"
+        :value="summary.busy"
+        sub="using more than 1% CPU"
+        :loading="!loaded"
+      />
     </div>
 
     <form class="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1" role="search" @submit.prevent>
       <label for="proc-search" class="sr-only">Search processes</label>
       <div class="relative w-full max-w-md">
         <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-c-tx3">
-          <LIcon name="search" is="width:14px;height:14px" />
+          <LIcon is="width:14px;height:14px" name="search" />
         </span>
         <input
           id="proc-search"
@@ -222,7 +236,7 @@ const killing = ref<Process | null>(null);
           <div class="min-w-[200px] max-w-[440px] whitespace-normal">
             <div class="flex items-center gap-1.5">
               <span v-if="row.protected" class="inline-flex text-c-warn shrink-0" title="Protected process">
-                <LIcon name="lock" is="width:12px;height:12px" />
+                <LIcon is="width:12px;height:12px" name="lock" />
               </span>
               <span class="font-medium truncate">{{ row.name }}</span>
               <span class="md:hidden text-xs-var text-c-tx2">· {{ row.user }}</span>
@@ -258,12 +272,16 @@ const killing = ref<Process | null>(null);
           <span class="tabular-nums">{{ row.threads }}</span>
         </template>
         <template #cell-ram_gb="{ row }">
-          <span :class="['tabular-nums rounded-md px-1.5 py-0.5 whitespace-nowrap', HEAT_CLASS[ramHeat(row)]]">
+          <span
+            :class="['tabular-nums rounded-md px-1.5 py-0.5 whitespace-nowrap', HEAT_CLASS[ramHeat(row)]]"
+          >
             {{ gb(row.ram_gb) }}
           </span>
         </template>
         <template #cell-cpu_percent="{ row }">
-          <span :class="['tabular-nums rounded-md px-1.5 py-0.5 whitespace-nowrap', HEAT_CLASS[cpuHeat(row)]]">
+          <span
+            :class="['tabular-nums rounded-md px-1.5 py-0.5 whitespace-nowrap', HEAT_CLASS[cpuHeat(row)]]"
+          >
             {{ row.cpu_percent.toFixed(1) }}%
           </span>
         </template>

@@ -12,7 +12,7 @@ withDefaults(defineProps<{ title: string; icon?: string; subtitle?: string; leve
 <template>
   <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-3 px-4 border-b border-c-border">
     <div class="min-w-0 flex items-center gap-2">
-      <LIcon v-if="icon" :name="icon" is="width:15px;height:15px;color:var(--text-2);flex-shrink:0" />
+      <LIcon is="width:15px;height:15px;color:var(--text-2);flex-shrink:0" v-if="icon" :name="icon" />
       <component :is="`h${level}`" class="m-0 text-sm-var font-semibold tracking-[-0.01em] truncate">
         {{ title }}
       </component>

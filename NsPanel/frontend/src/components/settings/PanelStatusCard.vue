@@ -51,7 +51,7 @@ const items = computed<KeyValueItem[]>(() => [
                 :aria-label="`Copy ${url}`"
                 @click="copyText(url, 'URL')"
               >
-                <LIcon name="copy" is="width:13px;height:13px" />
+                <LIcon is="width:13px;height:13px" name="copy" />
               </button>
             </li>
           </ul>
@@ -59,7 +59,7 @@ const items = computed<KeyValueItem[]>(() => [
         </template>
         <template #value-protocol>
           <Badge :tone="status.tls ? 'ok' : 'warn'">
-            <LIcon :name="status.tls ? 'lock' : 'lock-open'" is="width:12px;height:12px" />
+            <LIcon is="width:12px;height:12px" :name="status.tls ? 'lock' : 'lock-open'" />
             {{ status.tls ? 'HTTPS (self-signed)' : 'HTTP — unencrypted' }}
           </Badge>
         </template>
@@ -67,7 +67,14 @@ const items = computed<KeyValueItem[]>(() => [
     </div>
     <div class="flex flex-wrap gap-2 px-4 py-3 border-t border-c-border">
       <Btn sm :disabled="disabled" @click="emit('restart')"><LIcon name="rotate-cw" /> Restart</Btn>
-      <Btn v-if="!status.is_self" sm variant="danger" class="ml-auto" :disabled="disabled" @click="emit('uninstall')">
+      <Btn
+        v-if="!status.is_self"
+        sm
+        variant="danger"
+        class="ml-auto"
+        :disabled="disabled"
+        @click="emit('uninstall')"
+      >
         <LIcon name="trash-2" /> Uninstall
       </Btn>
       <p v-else class="m-0 ml-auto self-center text-xs-var text-c-tx3">

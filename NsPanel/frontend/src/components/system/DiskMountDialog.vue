@@ -23,7 +23,22 @@ const touched = ref(false);
 const submitted = ref(false);
 const pending = ref(false);
 
-const RESERVED = ['/', '/boot', '/etc', '/usr', '/var', '/bin', '/sbin', '/lib', '/proc', '/sys', '/dev', '/run', '/root', '/tmp'];
+const RESERVED = [
+  '/',
+  '/boot',
+  '/etc',
+  '/usr',
+  '/var',
+  '/bin',
+  '/sbin',
+  '/lib',
+  '/proc',
+  '/sys',
+  '/dev',
+  '/run',
+  '/root',
+  '/tmp',
+];
 
 const error = computed(() => {
   const value = mountpoint.value.trim().replace(/\/+$/, '');
@@ -83,12 +98,17 @@ async function submit(): Promise<void> {
       </Field>
       <div class="flex flex-col gap-1">
         <label class="flex items-center gap-2 text-sm-var text-c-tx cursor-pointer">
-          <input v-model="persist" type="checkbox" class="w-4 h-4 accent-c-accent" aria-describedby="disk-mount-persist" />
+          <input
+            v-model="persist"
+            type="checkbox"
+            class="w-4 h-4 accent-c-accent"
+            aria-describedby="disk-mount-persist"
+          />
           Mount again at boot (<span class="mono">/etc/fstab</span>)
         </label>
         <p id="disk-mount-persist" class="m-0 pl-6 text-xs-var text-c-tx2">
-          Adds a UUID entry with <span class="mono">nofail</span>. <span class="mono">/etc/fstab</span> is backed up
-          first, checked after the edit, and restored if the check fails.
+          Adds a UUID entry with <span class="mono">nofail</span>. <span class="mono">/etc/fstab</span> is
+          backed up first, checked after the edit, and restored if the check fails.
         </p>
       </div>
     </form>

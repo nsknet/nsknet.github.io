@@ -1,2 +1,6 @@
 # Shell scripts must keep LF endings — bash on Linux cannot parse CRLF.
 *.sh text eol=lf
+
+# The committed bundle must rebuild byte-for-byte on any OS (CI compares it), so
+# the frontend sources keep LF even in a Windows checkout.
+NsPanel/frontend/** text=auto eol=lf

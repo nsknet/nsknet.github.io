@@ -50,7 +50,9 @@ async function submit(): Promise<void> {
     @close="emit('close')"
   >
     <form id="kill-process" class="flex flex-col gap-3" novalidate @submit.prevent="submit">
-      <p class="m-0 mono text-xs-var text-c-tx2 break-all max-h-24 overflow-y-auto bg-c-elev border border-c-border rounded-theme p-2">
+      <p
+        class="m-0 mono text-xs-var text-c-tx2 break-all max-h-24 overflow-y-auto bg-c-elev border border-c-border rounded-theme p-2"
+      >
         {{ process.arguments }}
       </p>
       <fieldset class="m-0 p-0 border-0 min-w-0">
@@ -61,7 +63,9 @@ async function submit(): Promise<void> {
             :key="option.value"
             :class="[
               'flex items-start gap-2.5 px-3 py-2.5 rounded-theme border cursor-pointer',
-              signal === option.value ? 'border-c-danger bg-c-dngsoft' : 'border-c-border bg-c-elev hover:bg-c-hover',
+              signal === option.value
+                ? 'border-c-danger bg-c-dngsoft'
+                : 'border-c-border bg-c-elev hover:bg-c-hover',
             ]"
           >
             <input

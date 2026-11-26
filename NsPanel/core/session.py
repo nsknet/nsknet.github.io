@@ -4,6 +4,7 @@ Sessions live in memory: a restart signs everyone out, which is fine for a
 single-admin panel and means there is no session store to protect on disk.
 The browser only holds a random 32-byte token in an HttpOnly cookie.
 """
+
 import secrets
 import threading
 import time

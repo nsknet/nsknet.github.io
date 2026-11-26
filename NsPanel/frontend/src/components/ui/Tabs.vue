@@ -3,7 +3,6 @@
  *  active panel is the default slot, receiving the current tab key. */
 import { useId } from 'vue';
 
-
 import LIcon from './LIcon.vue';
 import type { TabItem } from './types';
 
@@ -17,8 +16,7 @@ function onKeydown(event: KeyboardEvent, index: number): void {
   if (!delta && event.key !== 'Home' && event.key !== 'End') return;
   event.preventDefault();
   const count = props.items.length;
-  const next =
-    event.key === 'Home' ? 0 : event.key === 'End' ? count - 1 : (index + delta + count) % count;
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? count - 1 : (index + delta + count) % count;
   active.value = props.items[next].key;
   document.getElementById(`${base}-tab-${props.items[next].key}`)?.focus();
 }
@@ -43,14 +41,12 @@ function onKeydown(event: KeyboardEvent, index: number): void {
         :class="[
           'relative shrink-0 inline-flex items-center gap-1.5 h-10 px-3 text-sm-var font-medium whitespace-nowrap',
           'border-b-2 -mb-px transition-colors',
-          active === item.key
-            ? 'border-c-accent text-c-tx'
-            : 'border-transparent text-c-tx2 hover:text-c-tx',
+          active === item.key ? 'border-c-accent text-c-tx' : 'border-transparent text-c-tx2 hover:text-c-tx',
         ]"
         @click="active = item.key"
         @keydown="onKeydown($event, index)"
       >
-        <LIcon v-if="item.icon" :name="item.icon" is="width:15px;height:15px" />
+        <LIcon is="width:15px;height:15px" v-if="item.icon" :name="item.icon" />
         {{ item.label }}
         <span
           v-if="item.badge !== undefined && item.badge !== ''"

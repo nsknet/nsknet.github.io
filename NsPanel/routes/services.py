@@ -1,4 +1,5 @@
 """Services API: panel-managed systemd units, including Cloudflare tunnels."""
+
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Form, HTTPException
@@ -237,24 +238,10 @@ def service_tunnel_delete(name: ResourceName, api_token: Annotated[str, Form()])
 
 # --- Lifecycle: one systemctl verb each ---------------------------------------
 
-_SIMPLE_ACTIONS = {
-    "start": ("Start", "Starting"),
-    "stop": ("Stop", "Stopping"),
-    "restart": ("Restart", "Restarting"),
-    "disable": ("Disable", "Disabling"),
-}
-
 
 def _simple_action(name: str, verb: str) -> JobResponse:
     _require_exists(name)
-    label_verb, title_verb = _SIMPLE_ACTIONS[verb]
-    return jobs.launch(
-        ["systemctl", verb, name],
-        label=f"{label_verb} {name}",
-        title=f"{title_verb} '{name}'",
-        audit_action=f"service.{verb}",
-        audit_detail=f"name={name}",
-    )
+    return jobs.launch_systemctl(verb, name, audit_prefix="service")
 
 
 @router.post("/{name}/start")

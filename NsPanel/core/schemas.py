@@ -9,6 +9,7 @@ Two shapes cover the whole API:
 Keeping these in one place means the frontend has exactly two envelopes to
 handle instead of the per-route dicts this module replaced.
 """
+
 from typing import Any
 
 from pydantic import BaseModel, Field

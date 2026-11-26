@@ -6,7 +6,13 @@ import { diffStats, lineDiff, withContext } from './lineDiff';
 describe('lineDiff', () => {
   it('marks unchanged, removed and added lines', () => {
     const lines = lineDiff('a\nb\nc\n', 'a\nB\nc\nd\n');
-    expect(lines.map((line) => `${line.op}:${line.text}`)).toEqual(['same:a', 'del:b', 'add:B', 'same:c', 'add:d']);
+    expect(lines.map((line) => `${line.op}:${line.text}`)).toEqual([
+      'same:a',
+      'del:b',
+      'add:B',
+      'same:c',
+      'add:d',
+    ]);
     expect(diffStats(lines)).toEqual({ added: 2, removed: 1 });
   });
 
@@ -37,15 +43,48 @@ describe('appRows', () => {
 
   it('does not list a .NET site unit twice', () => {
     const site = {
-      slug: 'api', name: 'api', type: 'dotnet', access: ':8080', accessKind: 'port', accessValue: '8080',
-      status: 'running', pid: 1, autostart: 'enabled', mem: 50, cpu: 1, modified: '', dll: 'Api.dll',
-      internalPort: 5000, env: 'Production', created: '', configPath: '', unitPath: '', webRoot: '', logDir: '',
+      slug: 'api',
+      name: 'api',
+      type: 'dotnet',
+      access: ':8080',
+      accessKind: 'port',
+      accessValue: '8080',
+      status: 'running',
+      pid: 1,
+      autostart: 'enabled',
+      mem: 50,
+      cpu: 1,
+      modified: '',
+      dll: 'Api.dll',
+      internalPort: 5000,
+      env: 'Production',
+      created: '',
+      configPath: '',
+      unitPath: '',
+      webRoot: '',
+      logDir: '',
       proxyTarget: null,
     };
     const service = {
-      name: 'api', desc: '', status: 'active', autostart: 'enabled', mem: 50, cpu: 1, pid: 1, modified: '',
-      cmd: '', path: '', content: '', workingDir: null, user: null, restart: null, restartSec: null,
-      syslogId: null, envVars: [], tunnel: null, isTunnel: false,
+      name: 'api',
+      desc: '',
+      status: 'active',
+      autostart: 'enabled',
+      mem: 50,
+      cpu: 1,
+      pid: 1,
+      modified: '',
+      cmd: '',
+      path: '',
+      content: '',
+      workingDir: null,
+      user: null,
+      restart: null,
+      restartSec: null,
+      syslogId: null,
+      envVars: [],
+      tunnel: null,
+      isTunnel: false,
     };
     const rows = buildApps([site], [service, { ...service, name: 'worker', status: 'inactive' }]);
     expect(rows.map((row) => row.key)).toEqual(['site:api', 'service:worker']);

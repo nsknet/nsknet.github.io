@@ -32,7 +32,9 @@ const submitted = ref(false);
 const touched = reactive({ current: false, next: false, repeat: false });
 
 const dirty = computed(() => !!(current.value || next.value || repeat.value));
-watch([dirty, pending], () => emit('state', { dirty: dirty.value, pending: pending.value }), { immediate: true });
+watch([dirty, pending], () => emit('state', { dirty: dirty.value, pending: pending.value }), {
+  immediate: true,
+});
 
 const currentError = computed(() => required(current.value, 'Your current password'));
 const nextError = computed(() =>
@@ -44,10 +46,13 @@ const nextError = computed(() =>
   ),
 );
 const repeatError = computed(() =>
-  repeat.value !== next.value ? 'The passwords do not match.' : required(repeat.value, 'The repeated password'),
+  repeat.value !== next.value
+    ? 'The passwords do not match.'
+    : required(repeat.value, 'The repeated password'),
 );
 
-const shown = (key: keyof typeof touched, message: string) => (submitted.value || touched[key] ? message : '');
+const shown = (key: keyof typeof touched, message: string) =>
+  submitted.value || touched[key] ? message : '';
 
 function reset(): void {
   current.value = '';
@@ -77,7 +82,7 @@ async function submit(): Promise<void> {
 
 <template>
   <form :id="formId" class="flex flex-col gap-4" novalidate @submit.prevent="submit">
-    <Field label="Current password" :error="shown('current', currentError)" required v-slot="f">
+    <Field v-slot="f" label="Current password" :error="shown('current', currentError)" required>
       <PasswordField
         :id="f.id"
         v-model="current"
@@ -88,11 +93,11 @@ async function submit(): Promise<void> {
       />
     </Field>
     <Field
+      v-slot="f"
       label="New password"
       :help="`At least ${PASSWORD_MIN} characters. It applies to every NsPanel on this host.`"
       :error="shown('next', nextError)"
       required
-      v-slot="f"
     >
       <PasswordField
         :id="f.id"
@@ -104,7 +109,12 @@ async function submit(): Promise<void> {
         @focusout="touched.next = true"
       />
     </Field>
-    <Field label="Repeat the new password" :error="shown('repeat', repeat || submitted ? repeatError : '')" required v-slot="f">
+    <Field
+      v-slot="f"
+      label="Repeat the new password"
+      :error="shown('repeat', repeat || submitted ? repeatError : '')"
+      required
+    >
       <PasswordField
         :id="f.id"
         v-model="repeat"

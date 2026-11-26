@@ -35,7 +35,12 @@ const otherCommits = computed(() => {
 /** Pulled but not restarted: the process runs older code than the service has on disk. */
 const restartPending = computed(() => {
   const s = props.status;
-  return s.is_self && !!s.running_commit && !!s.installed_commit && s.running_commit.hash !== s.installed_commit.hash;
+  return (
+    s.is_self &&
+    !!s.running_commit &&
+    !!s.installed_commit &&
+    s.running_commit.hash !== s.installed_commit.hash
+  );
 });
 
 const CI_LABELS: Record<string, string> = {
@@ -49,7 +54,9 @@ const ciState = computed(() => update.value?.ci?.state ?? null);
 /** The server refuses a plain update while CI is red or running. */
 const ciBlocks = computed(() => ciState.value === 'failure' || ciState.value === 'pending');
 const ciTone = computed(() => (ciState.value === 'success' ? 'ok' : ciBlocks.value ? 'warn' : 'muted'));
-const ciIcon = computed(() => (ciState.value === 'success' ? 'circle-check' : ciBlocks.value ? 'triangle-alert' : 'info'));
+const ciIcon = computed(() =>
+  ciState.value === 'success' ? 'circle-check' : ciBlocks.value ? 'triangle-alert' : 'info',
+);
 
 const items = computed<KeyValueItem[]>(() => {
   const s = props.status;
@@ -118,8 +125,12 @@ onMounted(() => {
         </template>
         <template #value-previous>
           <span class="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
-            <span class="mono text-xs-var" :title="status.previous_commit?.hash">{{ status.previous_commit?.short }}</span>
-            <span class="text-c-tx2 text-xs-var min-w-0 break-words">{{ status.previous_commit?.subject }}</span>
+            <span class="mono text-xs-var" :title="status.previous_commit?.hash">{{
+              status.previous_commit?.short
+            }}</span>
+            <span class="text-c-tx2 text-xs-var min-w-0 break-words">{{
+              status.previous_commit?.subject
+            }}</span>
             <Btn v-if="status.can_rollback" sm :disabled="disabled" @click="emit('rollback')">
               <LIcon name="rotate-ccw" /> Roll back
             </Btn>
@@ -142,9 +153,15 @@ onMounted(() => {
       </Alert>
     </div>
 
-    <section class="px-4 pb-4 pt-3 border-t border-c-border flex flex-col gap-2.5" aria-labelledby="panel-updates-title">
+    <section
+      class="px-4 pb-4 pt-3 border-t border-c-border flex flex-col gap-2.5"
+      aria-labelledby="panel-updates-title"
+    >
       <div class="flex flex-wrap items-center gap-2">
-        <h3 id="panel-updates-title" class="m-0 text-xs-var font-semibold uppercase tracking-[0.06em] text-c-tx2">
+        <h3
+          id="panel-updates-title"
+          class="m-0 text-xs-var font-semibold uppercase tracking-[0.06em] text-c-tx2"
+        >
           Updates
         </h3>
         <span role="status" class="inline-flex">
@@ -163,7 +180,11 @@ onMounted(() => {
 
       <p v-if="update?.error" class="m-0 text-xs-var text-c-danger mono break-all">{{ update.error }}</p>
       <ul v-else-if="hasUpdate" class="m-0 p-0 list-none flex flex-col gap-1">
-        <li v-for="commit in update?.commits" :key="commit.hash" class="flex items-baseline gap-2 text-xs-var min-w-0">
+        <li
+          v-for="commit in update?.commits"
+          :key="commit.hash"
+          class="flex items-baseline gap-2 text-xs-var min-w-0"
+        >
           <span class="mono text-c-tx3 shrink-0">{{ commit.short }}</span>
           <span class="flex-1 min-w-0 truncate" :title="commit.subject">{{ commit.subject }}</span>
           <span class="hidden sm:inline text-c-tx3 tabular-nums shrink-0">{{ fmtDate(commit.date) }}</span>
@@ -172,13 +193,14 @@ onMounted(() => {
       <p v-else-if="update && !update.stale" class="m-0 text-xs-var text-c-tx2">
         Latest on {{ status.branch }}: <span class="mono">{{ update.remote_commit?.short ?? '—' }}</span>
         <template v-if="otherCommits">
-          · {{ otherCommits }} newer commit{{ otherCommits > 1 ? 's' : '' }} outside the panel, no update needed
+          · {{ otherCommits }} newer commit{{ otherCommits > 1 ? 's' : '' }} outside the panel, no update
+          needed
         </template>
       </p>
 
       <div v-if="hasUpdate" class="flex flex-wrap items-center gap-2 pt-1">
         <Badge v-if="ciState" :tone="ciTone">
-          <LIcon :name="ciIcon" is="width:12px;height:12px" />
+          <LIcon is="width:12px;height:12px" :name="ciIcon" />
           <a
             v-if="update?.ci?.url"
             :href="update.ci.url"

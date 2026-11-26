@@ -89,7 +89,10 @@ watch(
 );
 
 // The drawer closes when the route changes (a link inside it was used).
-watch(() => route.fullPath, () => (mobileNavOpen.value = false));
+watch(
+  () => route.fullPath,
+  () => (mobileNavOpen.value = false),
+);
 
 onMounted(() => {
   ui.applyTheme();
@@ -122,6 +125,8 @@ function reloadPage(): void {
 
     <!-- Mobile drawer -->
     <div v-if="mobileNavOpen" class="md:hidden fixed inset-0 z-[150]">
+      <!-- Backdrop is pointer-only by design; Esc and the drawer links close it from the keyboard. -->
+      <!-- eslint-disable-next-line vuejs-accessibility/click-events-have-key-events, vuejs-accessibility/no-static-element-interactions -->
       <div class="absolute inset-0 bg-c-overlay animate-fade" @click="mobileNavOpen = false"></div>
       <aside
         class="absolute inset-y-0 left-0 w-[260px] max-w-[85vw] bg-c-elev border-r border-c-border shadow-lg animate-slidein"
@@ -141,7 +146,7 @@ function reloadPage(): void {
           :aria-expanded="mobileNavOpen"
           @click="mobileNavOpen = true"
         >
-          <LIcon name="menu" is="width:18px;height:18px" />
+          <LIcon is="width:18px;height:18px" name="menu" />
         </button>
 
         <nav class="min-w-0 flex items-center gap-1.5 text-sm-var text-c-tx2" aria-label="Breadcrumb">
@@ -149,7 +154,10 @@ function reloadPage(): void {
             <li
               v-for="(crumb, index) in crumbs"
               :key="index"
-              :class="['flex items-center gap-1.5 min-w-0', index < crumbs.length - 1 ? 'hidden sm:flex' : '']"
+              :class="[
+                'flex items-center gap-1.5 min-w-0',
+                index < crumbs.length - 1 ? 'hidden sm:flex' : '',
+              ]"
             >
               <RouterLink
                 v-if="crumb.to && index < crumbs.length - 1"
@@ -176,7 +184,7 @@ function reloadPage(): void {
             title="The panel runs newer code than this page. Reload to get the current UI."
             @click="reloadPage"
           >
-            <LIcon name="refresh-cw" is="width:14px;height:14px" />
+            <LIcon is="width:14px;height:14px" name="refresh-cw" />
             <span class="hidden sm:inline">New version — reload</span>
           </button>
           <button
@@ -185,9 +193,10 @@ function reloadPage(): void {
             aria-label="Search and jump (command palette)"
             @click="paletteOpen = true"
           >
-            <LIcon name="search" is="width:14px;height:14px" />
+            <LIcon is="width:14px;height:14px" name="search" />
             <span>Search…</span>
-            <kbd class="ml-auto mono text-2xs-var px-1.5 py-0.5 rounded border border-c-border bg-c-subtle text-c-tx3"
+            <kbd
+              class="ml-auto mono text-2xs-var px-1.5 py-0.5 rounded border border-c-border bg-c-subtle text-c-tx3"
               >{{ isMac ? '⌘' : 'Ctrl' }} K</kbd
             >
           </button>
@@ -197,7 +206,7 @@ function reloadPage(): void {
             aria-label="Search and jump"
             @click="paletteOpen = true"
           >
-            <LIcon name="search" is="width:16px;height:16px" />
+            <LIcon is="width:16px;height:16px" name="search" />
           </button>
           <RouterLink
             v-if="runningJobs.length"
@@ -219,7 +228,9 @@ function reloadPage(): void {
             <span
               :class="[
                 'w-[7px] h-[7px] rounded-full shrink-0',
-                health.online.value ? 'bg-c-ok shadow-[0_0_0_3px_var(--ok-soft)]' : 'bg-c-danger shadow-[0_0_0_3px_var(--danger-soft)]',
+                health.online.value
+                  ? 'bg-c-ok shadow-[0_0_0_3px_var(--ok-soft)]'
+                  : 'bg-c-danger shadow-[0_0_0_3px_var(--danger-soft)]',
               ]"
               aria-hidden="true"
             ></span>
@@ -228,7 +239,11 @@ function reloadPage(): void {
         </div>
       </header>
 
-      <main id="main" class="content flex-1 overflow-y-auto py-[var(--pad-y)] px-[var(--pad-x)]" tabindex="-1">
+      <main
+        id="main"
+        class="content flex-1 overflow-y-auto py-[var(--pad-y)] px-[var(--pad-x)]"
+        tabindex="-1"
+      >
         <div class="mx-auto max-w-[1400px]">
           <RouterView v-slot="{ Component, route: viewRoute }">
             <Transition name="page" mode="out-in">
@@ -243,7 +258,10 @@ function reloadPage(): void {
   <LoginView v-else-if="auth.status === 'anonymous'" />
 
   <!-- Checking the session, loading the host, or the panel is unreachable. -->
-  <div v-else class="h-[100dvh] w-screen flex flex-col items-center justify-center bg-c-canvas text-c-tx select-none">
+  <div
+    v-else
+    class="h-[100dvh] w-screen flex flex-col items-center justify-center bg-c-canvas text-c-tx select-none"
+  >
     <div
       class="w-14 h-14 rounded-2xl brand-mark text-white flex items-center justify-center font-bold text-xl tracking-[-0.05em] shadow-lg ring-1 ring-inset ring-white/15 mb-5"
       aria-hidden="true"

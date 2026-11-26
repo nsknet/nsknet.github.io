@@ -139,7 +139,11 @@ function clearFilters(): void {
   <section>
     <PageHeader
       title="Tools"
-      :subtitle="loaded ? `${installedCount} of ${tools.length} installed — databases, runtimes and servers this host can run.` : 'Databases, runtimes and servers this host can run.'"
+      :subtitle="
+        loaded
+          ? `${installedCount} of ${tools.length} installed — databases, runtimes and servers this host can run.`
+          : 'Databases, runtimes and servers this host can run.'
+      "
     >
       <Btn :loading="refreshing" @click="refresh"><LIcon name="refresh-cw" /> Refresh</Btn>
     </PageHeader>
@@ -148,8 +152,8 @@ function clearFilters(): void {
       <label class="relative w-full sm:max-w-xs">
         <span class="sr-only">Search tools</span>
         <LIcon
-          name="search"
           is="position:absolute;left:10px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--text-3);width:14px;height:14px"
+          name="search"
         />
         <input
           v-model="search"
@@ -170,7 +174,11 @@ function clearFilters(): void {
     </Card>
 
     <Card v-else-if="!tools.length">
-      <EmptyState icon="package" title="No tool modules" hint="This panel build ships no installable tools." />
+      <EmptyState
+        icon="package"
+        title="No tool modules"
+        hint="This panel build ships no installable tools."
+      />
     </Card>
 
     <Card v-else-if="!filtered.length">

@@ -1,4 +1,5 @@
 """Guards that keep a click in the panel from taking the server down."""
+
 import json
 import os
 import subprocess

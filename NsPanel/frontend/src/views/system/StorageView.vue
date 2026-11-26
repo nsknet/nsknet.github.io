@@ -106,8 +106,8 @@ function reasonId(row: DiskRow): string {
             :style="{ paddingLeft: `${row.level * 18}px` }"
           >
             <LIcon
-              :name="row.level === 0 ? 'hard-drive' : 'box'"
               is="width:14px;height:14px;margin-top:3px;flex-shrink:0;color:var(--text-3)"
+              :name="row.level === 0 ? 'hard-drive' : 'box'"
             />
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-1.5">
@@ -117,10 +117,7 @@ function reasonId(row: DiskRow): string {
                 <Badge v-if="row.removable" tone="info">removable</Badge>
                 <Badge v-if="row.readonly" tone="neutral">read-only</Badge>
               </div>
-              <div
-                v-if="row.label || deviceSummary(row)"
-                class="text-xs-var text-c-tx2 mt-0.5 truncate"
-              >
+              <div v-if="row.label || deviceSummary(row)" class="text-xs-var text-c-tx2 mt-0.5 truncate">
                 <span v-if="row.label" class="mono">{{ row.label }}</span>
                 <span v-if="row.label && deviceSummary(row)"> · </span>{{ deviceSummary(row) }}
               </div>
@@ -130,7 +127,7 @@ function reasonId(row: DiskRow): string {
                 :id="reasonId(row)"
                 class="text-xs-var text-c-tx3 mt-0.5 flex items-center gap-1"
               >
-                <LIcon name="lock" is="width:11px;height:11px;flex-shrink:0" />
+                <LIcon is="width:11px;height:11px;flex-shrink:0" name="lock" />
                 <span>{{ formatBlock(row) }}</span>
               </div>
             </div>

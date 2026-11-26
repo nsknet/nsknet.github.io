@@ -1,4 +1,5 @@
 """Read endpoints the redesigned screens depend on."""
+
 from features import alerts
 from features import disks as disks_feature
 from features import system as system_feature
@@ -34,7 +35,10 @@ def test_firewall_install_allows_the_panel_port(client, fake_runner, audit_log):
 
 def test_disks_are_annotated_with_why_they_are_in_use():
     tree = {
-        "path": "/dev/sda", "type": "disk", "fstype": "", "mountpoint": "",
+        "path": "/dev/sda",
+        "type": "disk",
+        "fstype": "",
+        "mountpoint": "",
         "children": [
             {"path": "/dev/sda1", "type": "part", "fstype": "ext4", "mountpoint": "/", "children": []},
             {"path": "/dev/sda2", "type": "part", "fstype": "", "mountpoint": "", "children": []},

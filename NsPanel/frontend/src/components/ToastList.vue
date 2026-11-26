@@ -37,8 +37,8 @@ const COLOR: Record<ToastKind, string> = {
       class="pointer-events-auto flex items-start gap-2.5 sm:w-[360px] py-2.5 pl-3 pr-1.5 bg-c-card border border-c-border rounded-theme shadow-md text-sm-var animate-slidein"
     >
       <LIcon
-        :name="ICON[toast.k] ?? 'info'"
         :is="`width:16px;height:16px;flex-shrink:0;margin-top:2px;color:${COLOR[toast.k] ?? COLOR.info}`"
+        :name="ICON[toast.k] ?? 'info'"
       />
       <div class="flex-1 min-w-0">
         <div class="font-medium">
@@ -53,7 +53,7 @@ const COLOR: Record<ToastKind, string> = {
         aria-label="Dismiss notification"
         @click="ui.dismissToast(toast.id)"
       >
-        <LIcon name="x" is="width:14px;height:14px" />
+        <LIcon is="width:14px;height:14px" name="x" />
       </button>
     </div>
   </div>

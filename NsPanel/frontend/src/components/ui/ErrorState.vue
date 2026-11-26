@@ -13,7 +13,7 @@ const emit = defineEmits<{ retry: [] }>();
 <template>
   <div class="text-center py-8 px-6" role="alert">
     <div class="w-11 h-11 rounded-xl bg-c-dngsoft grid place-items-center mx-auto mb-3">
-      <LIcon name="cloud-off" is="width:20px;height:20px;color:var(--danger)" />
+      <LIcon is="width:20px;height:20px;color:var(--danger)" name="cloud-off" />
     </div>
     <div class="text-c-tx font-medium text-sm-var">{{ title }}</div>
     <div class="text-xs-var text-c-tx2 mt-1 max-w-md mx-auto break-words">{{ message }}</div>

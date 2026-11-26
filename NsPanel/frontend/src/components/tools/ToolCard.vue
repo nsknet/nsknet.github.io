@@ -17,13 +17,18 @@ const dim = computed(() => !props.tool.installed || ['stopped', 'inactive'].incl
 
 /** Installed: the ports it listens on; available: the ports an install opens. */
 const ports = computed(() =>
-  props.tool.installed ? props.tool.ports : props.tool.firewallPorts.length ? props.tool.firewallPorts.join(', ') : null,
+  props.tool.installed
+    ? props.tool.ports
+    : props.tool.firewallPorts.length
+      ? props.tool.firewallPorts.join(', ')
+      : null,
 );
 
 const facts = computed(() => {
   const rows: { key: string; label: string; value: string }[] = [];
   if (props.tool.installed) rows.push({ key: 'version', label: 'Version', value: props.tool.version ?? '—' });
-  if (ports.value) rows.push({ key: 'ports', label: props.tool.installed ? 'Ports' : 'Opens', value: ports.value });
+  if (ports.value)
+    rows.push({ key: 'ports', label: props.tool.installed ? 'Ports' : 'Opens', value: ports.value });
   for (const [label, value] of props.tool.diag ?? []) rows.push({ key: `diag-${label}`, label, value });
   return rows;
 });
@@ -42,7 +47,11 @@ const headingId = computed(() => `tool-${props.tool.id}-name`);
       <ToolLogo :logo="tool.logo" :name="tool.name" :color="tool.color" :dim="dim" />
       <div class="flex-1 min-w-0">
         <div class="flex items-start justify-between gap-2 min-w-0">
-          <h2 :id="headingId" class="m-0 text-base-var font-semibold tracking-[-0.01em] truncate" :title="tool.name">
+          <h2
+            :id="headingId"
+            class="m-0 text-base-var font-semibold tracking-[-0.01em] truncate"
+            :title="tool.name"
+          >
             {{ tool.name }}
           </h2>
           <StatusBadge v-if="tool.installed" :status="tool.state" />
@@ -63,14 +72,12 @@ const headingId = computed(() => `tool-${props.tool.id}-name`);
     </dl>
 
     <div v-if="!tool.installed && tool.requiresPassword" class="flex flex-wrap gap-1.5">
-      <Badge tone="neutral"><LIcon name="key-round" is="width:12px;height:12px" /> asks for a password</Badge>
+      <Badge tone="neutral"><LIcon is="width:12px;height:12px" name="key-round" /> asks for a password</Badge>
     </div>
 
     <div class="flex flex-wrap items-center gap-1.5 mt-auto pt-1">
       <template v-if="tool.installed">
-        <Btn sm :disabled="busy" @click="emit('reinstall')">
-          <LIcon name="rotate-cw" /> Re-install
-        </Btn>
+        <Btn sm :disabled="busy" @click="emit('reinstall')"> <LIcon name="rotate-cw" /> Re-install </Btn>
         <Btn v-if="tool.canChangePassword" sm :disabled="busy" @click="emit('password')">
           <LIcon name="key-round" /> Password
         </Btn>
