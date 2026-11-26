@@ -170,6 +170,8 @@ def test_unit_content_hides_inline_tunnel_tokens():
 
 def test_saving_a_redacted_unit_keeps_the_real_token(tmp_path, monkeypatch):
     monkeypatch.setattr(units, "SERVICES_DIR", tmp_path)
+    # This is about the token, not systemd-analyze (which may exist on the host).
+    monkeypatch.setattr(units, "_verify_unit", lambda name, content: None)
     original = "[Service]\nExecStart=/usr/bin/cloudflared tunnel run --token eyJreal\n"
     (tmp_path / "cf-demo.service").write_text(original)
     edited = units.redact(original).replace("[Service]", "[Service]\nNice=5")

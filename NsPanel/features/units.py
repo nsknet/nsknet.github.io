@@ -111,6 +111,18 @@ class UnitInvalid(ValueError):
     """`systemd-analyze verify` rejected an edited unit; the message is its output."""
 
 
+def _unit_problems(name: str, output: str) -> str | None:
+    """The lines of `systemd-analyze verify` output about this unit.
+
+    verify also loads the host's other units and reports their warnings (for
+    example a stock unit using a deprecated option); those are not the user's to
+    fix and must not block saving this one.
+    """
+    prefix = f"{name}.service"
+    own = [line for line in output.splitlines() if line.strip().startswith(prefix)]
+    return "\n".join(own) or None
+
+
 def _verify_unit(name: str, content: str) -> str | None:
     """systemd-analyze's complaints about `content`, or None when it is clean
     (or when systemd-analyze is unavailable, e.g. off-Linux)."""
@@ -121,14 +133,17 @@ def _verify_unit(name: str, content: str) -> str | None:
         candidate.write_text(content)
         try:
             result = subprocess.run(
-                ["systemd-analyze", "verify", str(candidate)], capture_output=True, text=True, timeout=20
+                ["systemd-analyze", "verify", "--man=no", str(candidate)],
+                capture_output=True,
+                text=True,
+                timeout=20,
             )
         except (OSError, subprocess.SubprocessError):
             return None
-        output = (result.stdout + result.stderr).replace(str(candidate), f"{name}.service").strip()
         if result.returncode == 0:
             return None
-        return output or f"systemd-analyze verify failed (exit {result.returncode})"
+        output = (result.stdout + result.stderr).replace(str(candidate), f"{name}.service")
+        return _unit_problems(name, output)
 
 
 def write_service_raw(name: str, content: str, *, verify: bool = True) -> None:
